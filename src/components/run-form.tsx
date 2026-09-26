@@ -3,15 +3,8 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { parseUserCount, parseUserNumber } from "@/lib/evaluate";
-import type { RuleInputs, RunDetails } from "@/lib/run-details";
+import type { CoreShell, RuleInputs, RunDetails } from "@/lib/run-details";
 
 type RunFormProps = {
   details: RunDetails;
@@ -31,12 +24,12 @@ export function RunForm({ details, rules, onDetails, onRules }: RunFormProps) {
 
   return (
     <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2">
-      <Card>
+      <Card className="@container">
         <CardHeader>
           <CardTitle>Initial run details</CardTitle>
           <CardDescription>Saved with this session, even if a check does not use them yet.</CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-3">
+        <CardContent className="grid grid-cols-1 gap-x-4 gap-y-3 @min-[28rem]:grid-cols-2">
           <TextField
             label="Ligand"
             value={details.ligand}
@@ -47,21 +40,10 @@ export function RunForm({ details, rules, onDetails, onRules }: RunFormProps) {
             value={details.beadType}
             onChange={(value) => setDetail("beadType", value)}
           />
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="core-shell">Core shell</Label>
-            <Select
-              value={details.coreShell === "" ? null : details.coreShell}
-              onValueChange={(value) => setDetail("coreShell", value === "yes" || value === "no" ? value : "")}
-            >
-              <SelectTrigger id="core-shell" className="h-10 w-full">
-                <SelectValue placeholder="Not set" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="yes">Yes</SelectItem>
-                <SelectItem value="no">No</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          <CoreShellField
+            value={details.coreShell}
+            onChange={(value) => setDetail("coreShell", value)}
+          />
           <TextField
             label="Pore size (Å)"
             value={details.poreSize}
@@ -195,6 +177,51 @@ export function RunForm({ details, rules, onDetails, onRules }: RunFormProps) {
   );
 }
 
+function CoreShellField({
+  value,
+  onChange,
+}: {
+  value: CoreShell;
+  onChange: (value: CoreShell) => void;
+}) {
+  const choices = [
+    { value: "yes", label: "Yes" },
+    { value: "no", label: "No" },
+  ] as const;
+
+  return (
+    <div className="flex min-w-0 flex-col gap-1.5">
+      <Label id="core-shell-label">Core shell</Label>
+      <div role="radiogroup" aria-labelledby="core-shell-label" className="grid grid-cols-2 gap-2">
+        {choices.map((choice) => {
+          const selected = value === choice.value;
+          return (
+            <label
+              key={choice.value}
+              className={
+                "flex h-10 min-w-0 cursor-pointer items-center justify-center gap-2 rounded-lg border px-3 text-sm " +
+                (selected
+                  ? "border-primary bg-accent font-medium text-foreground"
+                  : "border-input bg-background text-foreground")
+              }
+            >
+              <input
+                type="radio"
+                name="core-shell"
+                value={choice.value}
+                checked={selected}
+                onChange={() => onChange(choice.value)}
+                className="size-4 shrink-0 accent-[#0f6b56]"
+              />
+              {choice.label}
+            </label>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function TextField({
   label,
   value,
@@ -212,8 +239,10 @@ function TextField({
 }) {
   const id = label.toLowerCase().replace(/[^a-z0-9]+/g, "-");
   return (
-    <div className="flex flex-col gap-1.5">
-      <Label htmlFor={id}>{label}</Label>
+    <div className="flex min-w-0 flex-col gap-1.5">
+      <Label htmlFor={id} className="h-auto whitespace-normal leading-snug">
+        {label}
+      </Label>
       <Input
         id={id}
         value={value}

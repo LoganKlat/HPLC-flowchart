@@ -8,15 +8,14 @@ import { RunForm } from "@/components/run-form";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { evaluateRun, parseUserCount, parseUserNumber, type RuleNumbers } from "@/lib/evaluate";
-import { EXAMPLE_FILES } from "@/lib/examples";
 import { readLabFile, type LabFileRead } from "@/lib/lab-file";
 import { emptyRuleInputs, emptyRunDetails, type RuleInputs, type RunDetails } from "@/lib/run-details";
 
 const STAGES = [
-  { id: "retention", label: "Retention" },
-  { id: "selectivity", label: "Selectivity" },
-  { id: "efficiency", label: "Efficiency" },
-  { id: "gradient", label: "Gradient" },
+  { id: "retention", label: "Run 1" },
+  { id: "selectivity", label: "Run 2" },
+  { id: "efficiency", label: "Run 3" },
+  { id: "gradient", label: "Run 4" },
 ] as const;
 
 type StageId = (typeof STAGES)[number]["id"];
@@ -34,6 +33,7 @@ function emptyLoad(): StageLoad {
 
 export function HplcApp() {
   const [stage, setStage] = useState<StageId>("retention");
+  const [furthest, setFurthest] = useState(0);
   const [details, setDetails] = useState<RunDetails>(emptyRunDetails);
   const [rules, setRules] = useState<RuleInputs>(emptyRuleInputs);
   const [loads, setLoads] = useState<Record<StageId, StageLoad>>({
@@ -94,8 +94,12 @@ export function HplcApp() {
   function goNext() {
     const index = STAGES.findIndex((item) => item.id === stage);
     const next = STAGES[index + 1];
-    if (next) setStage(next.id);
+    if (!next) return;
+    setFurthest((current) => Math.max(current, index + 1));
+    setStage(next.id);
   }
+
+  const visibleStages = STAGES.slice(0, furthest + 1);
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 py-6 sm:px-6 sm:py-8">
@@ -111,15 +115,14 @@ export function HplcApp() {
       <Tabs
         value={stage}
         onValueChange={(value) => {
-          if (typeof value === "string" && STAGES.some((item) => item.id === value)) {
-            setStage(value as StageId);
-          }
+          const index = STAGES.findIndex((item) => item.id === value);
+          if (index >= 0 && index <= furthest) setStage(STAGES[index].id);
         }}
       >
         <div className="sticky top-0 z-20 -mx-4 mb-5 border-b border-border bg-background/95 px-4 backdrop-blur sm:-mx-6 sm:px-6">
           <div className="overflow-x-auto">
             <TabsList variant="line" className="h-11 w-max min-w-full justify-start gap-1 bg-transparent p-0">
-              {STAGES.map((item) => (
+              {visibleStages.map((item) => (
                 <TabsTrigger key={item.id} value={item.id} className="h-11 px-4 text-base">
                   {item.label}
                 </TabsTrigger>
@@ -138,7 +141,7 @@ export function HplcApp() {
             rules={rules}
             showRulesReminder={false}
             laterStage={false}
-            nextLabel="Selectivity"
+            nextLabel="Run 2"
             onBegin={beginRead}
             onBuffer={acceptBuffer}
             onProblem={acceptProblem}
@@ -155,7 +158,7 @@ export function HplcApp() {
             rules={rules}
             showRulesReminder
             laterStage={false}
-            nextLabel="Efficiency"
+            nextLabel="Run 3"
             onBegin={beginRead}
             onBuffer={acceptBuffer}
             onProblem={acceptProblem}
@@ -172,7 +175,7 @@ export function HplcApp() {
             rules={rules}
             showRulesReminder
             laterStage
-            nextLabel="Gradient"
+            nextLabel="Run 4"
             onBegin={beginRead}
             onBuffer={acceptBuffer}
             onProblem={acceptProblem}
@@ -250,7 +253,6 @@ function StageBody({
       ) : null}
       <FileDrop
         prompt={prompt}
-        examples={EXAMPLE_FILES}
         reading={load.status === "reading"}
         onBegin={(fileName) => onBegin(stageId, fileName)}
         onBuffer={(fileName, buffer) => void onBuffer(stageId, fileName, buffer)}
