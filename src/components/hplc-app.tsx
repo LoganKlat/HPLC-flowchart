@@ -432,7 +432,7 @@ function RunPane({
   return (
     <>
       {index === 0 && run.status === "empty" ? (
-        <StartHighBNote lastPeakTimeMin={checks.lastPeakTimeMin} />
+        <StartHighBNote />
       ) : null}
       {index === 0 ? (
         <RunForm details={details} rules={rules} onDetails={onDetails} onRules={onRules} />
