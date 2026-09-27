@@ -84,6 +84,7 @@ export function RunForm({ details, rules, onDetails, onRules }: RunFormProps) {
             value={details.percentB}
             onChange={(value) => setDetail("percentB", value)}
             inputMode="decimal"
+            hint="Saved on Run 1. Each later run keeps its own %B."
           />
           <TextField
             label="Flow rate (mL/min)"

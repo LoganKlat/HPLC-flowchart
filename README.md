@@ -1,10 +1,10 @@
 # HPLC run check
 
-This app reads a LabSolutions export and shows whether a composite sample meets the specs you type in.
+This app reads a LabSolutions export and shows whether a composite sample meets the rules you type in.
 
-Four stages sit across the top: Retention, Selectivity, Efficiency, and Gradient. Retention is the one to use first. The boxes that will say what to change on the machine are placeholders. Efficiency and Gradient are on the page so the path is ready. They do not suggest setting changes yet.
+Runs sit across the top as Run 1, Run 2, and so on. A run appears when you reach it. While retention is still the step, the page says what %B to run next. Each run keeps its own %B. The column details and the four rules stay shared. Later kinds of change are not built yet.
 
-Two real exports are included so the screen can be tried before another file is chosen: GR41-06 and GR41-07.
+Four real exports are included for the retention check: 70%, 60%, 50%, and 40% B.
 
 Work for Logan Klat.
 
@@ -15,7 +15,7 @@ Work for Logan Klat.
 3. Run `npm run dev`.
 4. Open [http://localhost:41731](http://localhost:41731).
 
-## Check the file reader
+## Check the file reader and the retention step
 
 ```bash
 npm test
