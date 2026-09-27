@@ -7,17 +7,22 @@ export function ChoiceSelect({
   onChange,
   options,
   placeholder,
+  placeholderInList = true,
 }: {
   id: string;
   value: string;
   onChange: (value: string) => void;
   options: readonly { value: string; label: string }[];
   placeholder: string;
+  /** When false, the empty prompt stays on the closed control and is not a listed choice. */
+  placeholderInList?: boolean;
 }) {
   const known = options.some((option) => option.value === value);
   return (
     <select id={id} className={choiceClass} value={value} onChange={(event) => onChange(event.target.value)}>
-      <option value="">{placeholder}</option>
+      <option value="" disabled={!placeholderInList} hidden={!placeholderInList}>
+        {placeholder}
+      </option>
       {!known && value.trim() ? <option value={value}>{value}</option> : null}
       {options.map((option) => (
         <option key={option.value} value={option.value}>

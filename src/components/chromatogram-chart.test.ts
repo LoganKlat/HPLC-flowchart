@@ -1,5 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { formatPeakTime, layoutPeakLabels } from "@/components/chromatogram-chart";
+import { axisTicks, formatAxisTick, formatPeakTime, layoutPeakLabels } from "@/components/chromatogram-chart";
+
+describe("axis ticks", () => {
+  it("numbers time on even steps such as 2, 4, 6, 8", () => {
+    const ticks = axisTicks(0, 19.5);
+    expect(ticks).toEqual([0, 2, 4, 6, 8, 10, 12, 14, 16, 18]);
+    expect(ticks.map(formatAxisTick).join(" ")).not.toMatch(/\d+\.\d{3,}/);
+  });
+
+  it("numbers mAU on a round step such as 200 or 500", () => {
+    const ticks = axisTicks(-180, 2200);
+    expect(ticks.length).toBeGreaterThan(4);
+    for (const tick of ticks) {
+      expect(tick % 100).toBe(0);
+      expect(formatAxisTick(tick)).not.toMatch(/\./);
+    }
+  });
+});
 
 describe("peak time labels", () => {
   it("shows the retention time only, to two decimals", () => {

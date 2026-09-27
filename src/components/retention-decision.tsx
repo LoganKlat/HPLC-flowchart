@@ -26,22 +26,16 @@ export function RetentionDecisionView({ decision }: { decision: RetentionDecisio
 
 export function StartHighBNote() {
   return (
-    <div className="flex flex-col gap-4" id="start-high-b">
-      <section
-        id="next-change"
-        className="scroll-mt-16 rounded-xl bg-[#e7f3ee] px-4 py-4 text-[#144237]"
-      >
-        <h2 className="font-heading text-base">Next change</h2>
-        <p className="mt-1 text-sm leading-relaxed">Start the first run around 90–100% B.</p>
-      </section>
-      <section className="rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10">
-        <h2 className="font-heading text-base">Why</h2>
-        <p className="mt-1 text-sm leading-relaxed text-foreground">
-          At that high %B the peaks will probably sit on top of each other, and the last peak will
-          come out early.
-        </p>
-      </section>
-    </div>
+    <section
+      id="start-high-b"
+      className="scroll-mt-16 rounded-xl bg-[#e7f3ee] px-4 py-4 text-[#144237]"
+    >
+      <h2 className="font-heading text-base">What we’re doing</h2>
+      <p className="mt-1 text-sm leading-relaxed">
+        We recommend a higher %B, around 90–100%, because that helps the calculations later, and
+        the peaks will probably sit on top of each other and the last peak will come out early.
+      </p>
+    </section>
   );
 }
 

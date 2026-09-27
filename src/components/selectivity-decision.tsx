@@ -76,7 +76,7 @@ export function SelectivityDecisionView({
               value={ligandChoices.includes(ligand) ? ligand : ""}
               onChange={(event) => onLigand(event.target.value)}
             >
-              <option value="">Choose a coating</option>
+              <option value="">select a ligand</option>
               {ligandChoices.map((name) => (
                 <option key={name} value={name}>
                   {name}

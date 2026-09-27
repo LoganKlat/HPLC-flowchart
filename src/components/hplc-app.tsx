@@ -241,13 +241,28 @@ export function HplcApp() {
         }}
       >
         <div id="run-tabs" className="sticky top-0 z-20 -mx-4 mb-5 bg-background/95 px-4 pt-3 backdrop-blur sm:-mx-6 sm:px-6">
-          <div className="overflow-x-auto border-b border-border">
-            <TabsList className="h-auto w-max min-w-full items-end justify-start gap-1 rounded-none bg-transparent p-0">
+          <div className="overflow-x-auto py-1">
+            <TabsList className="h-auto! w-max min-w-0 items-stretch justify-start gap-2 rounded-none bg-transparent p-0 group-data-horizontal/tabs:h-auto!">
               {syncedRuns.map((_, index) => (
                 <TabsTrigger
                   key={index}
                   value={String(index)}
-                  className="h-9! rounded-t-lg rounded-b-none border border-b-0 border-transparent bg-[#cfc6b6] px-4 text-sm font-medium text-[#6d675c] shadow-none! after:hidden! hover:text-foreground data-active:z-10 data-active:-mb-px data-active:h-11! data-active:border-border data-active:bg-background! data-active:font-semibold data-active:text-foreground data-active:shadow-none!"
+                  className="h-10! flex-none! rounded-md border border-solid px-4 text-sm shadow-none! transition-none! after:hidden!"
+                  style={
+                    index === shown
+                      ? {
+                          backgroundColor: "#cfe8df",
+                          borderColor: "#0f6b56",
+                          color: "#144237",
+                          fontWeight: 600,
+                        }
+                      : {
+                          backgroundColor: "var(--background)",
+                          borderColor: "var(--border)",
+                          color: "var(--foreground)",
+                          fontWeight: 500,
+                        }
+                  }
                 >
                   Run {index + 1}
                 </TabsTrigger>
@@ -614,7 +629,7 @@ function RunSummary({
           <ChoiceSelect
             id={`run-${index + 1}-ligand`}
             value={run.ligand}
-            placeholder="Choose a coating"
+            placeholder="select a ligand"
             options={LIGANDS.map((name) => ({ value: name, label: name }))}
             onChange={onLigand}
           />

@@ -26,7 +26,7 @@ export type PlacedPeakLabel = {
 
 export function ChromatogramChart({ points, yLabel, peakTimesMin = [] }: ChromatogramChartProps) {
   const width = 720;
-  const plotBottom = 44;
+  const plotBottom = 58;
   const plotLeft = 72;
   const plotRight = 18;
   const times = points.map((point) => point.timeMin);
@@ -81,23 +81,24 @@ export function ChromatogramChart({ points, yLabel, peakTimesMin = [] }: Chromat
     })
     .join(" ");
 
-  const xTicks = tickValues(minTime, maxTime, 5);
-  const yTicks = tickValues(minY, maxY, 4);
+  const xTicks = axisTicks(minTime, maxTime);
+  const yTicks = axisTicks(minY, maxY);
+  const axisY = height - plotBottom;
   const peakList = labels.map((label) => label.text).join(", ");
 
   return (
     <figure className="overflow-hidden rounded-xl bg-[#f7fbf8] ring-1 ring-foreground/10">
       <figcaption className="flex items-baseline justify-between gap-3 px-4 pt-3">
         <span className="font-heading text-base text-foreground">Chromatogram</span>
-        <span className="text-xs text-muted-foreground">Time in minutes</span>
+        <span className="text-xs text-muted-foreground">{yLabel}</span>
       </figcaption>
       <svg
         viewBox={`0 0 ${width} ${height}`}
         role="img"
         aria-label={
           peakList
-            ? `Chromatogram. Time in minutes across, ${yLabel} up and down. Peak times: ${peakList}.`
-            : `Chromatogram. Time in minutes across, ${yLabel} up and down.`
+            ? `Chromatogram. Time (min) across, ${yLabel} up and down. Peak times: ${peakList}.`
+            : `Chromatogram. Time (min) across, ${yLabel} up and down.`
         }
         className="h-auto w-full"
       >
@@ -111,28 +112,53 @@ export function ChromatogramChart({ points, yLabel, peakTimesMin = [] }: Chromat
               stroke="currentColor"
               className="text-foreground/10"
             />
+            <line
+              x1={plotLeft - 5}
+              x2={plotLeft}
+              y1={yOf(tick, plotTop)}
+              y2={yOf(tick, plotTop)}
+              stroke="currentColor"
+              className="text-foreground/50"
+            />
             <text
               x={plotLeft - 8}
               y={yOf(tick, plotTop)}
               textAnchor="end"
               dominantBaseline="middle"
-              className="fill-muted-foreground text-[11px]"
+              className="fill-muted-foreground text-[8px]"
             >
-              {formatTick(tick)}
+              {formatAxisTick(tick)}
             </text>
           </g>
         ))}
         {xTicks.map((tick) => (
-          <text
-            key={`x-${tick}`}
-            x={xOf(tick)}
-            y={height - 16}
-            textAnchor="middle"
-            className="fill-muted-foreground text-[11px]"
-          >
-            {formatTick(tick)}
-          </text>
+          <g key={`x-${tick}`}>
+            <line
+              x1={xOf(tick)}
+              x2={xOf(tick)}
+              y1={axisY}
+              y2={axisY + 5}
+              stroke="currentColor"
+              className="text-foreground/50"
+            />
+            <text
+              x={xOf(tick)}
+              y={axisY + 16}
+              textAnchor="middle"
+              className="fill-muted-foreground text-[8px]"
+            >
+              {formatAxisTick(tick)}
+            </text>
+          </g>
         ))}
+        <text
+          x={plotLeft + innerWidth / 2}
+          y={axisY + 34}
+          textAnchor="middle"
+          className="fill-foreground text-[11px]"
+        >
+          Time (min)
+        </text>
         <line
           x1={plotLeft}
           x2={plotLeft}
@@ -144,8 +170,8 @@ export function ChromatogramChart({ points, yLabel, peakTimesMin = [] }: Chromat
         <line
           x1={plotLeft}
           x2={width - plotRight}
-          y1={height - plotBottom}
-          y2={height - plotBottom}
+          y1={axisY}
+          y2={axisY}
           stroke="currentColor"
           className="text-foreground/30"
         />
@@ -275,14 +301,49 @@ function intensityAt(points: ChromatogramPoint[], timeMin: number): number {
   return best.intensity;
 }
 
-function tickValues(min: number, max: number, count: number): number[] {
-  const step = (max - min) / (count - 1);
-  return Array.from({ length: count }, (_, index) => min + step * index);
+/** Round tick positions inside the data range. The chromatogram line is unchanged. */
+export function axisTicks(min: number, max: number): number[] {
+  if (!Number.isFinite(min) || !Number.isFinite(max)) return [];
+  if (max < min) return axisTicks(max, min);
+  const span = max - min;
+  if (!(span > 0)) return [roundAxisValue(min)];
+  const step = niceStep(span);
+  const first = Math.ceil(min / step - 1e-9);
+  const last = Math.floor(max / step + 1e-9);
+  const ticks: number[] = [];
+  for (let index = first; index <= last; index++) {
+    const value = roundAxisValue(index * step);
+    if (value < min - step * 1e-6 || value > max + step * 1e-6) continue;
+    ticks.push(value);
+  }
+  return ticks;
 }
 
-function formatTick(value: number): string {
-  const abs = Math.abs(value);
-  if (abs >= 100) return value.toFixed(0);
-  if (abs >= 10) return value.toFixed(1);
-  return value.toFixed(2);
+export function formatAxisTick(value: number): string {
+  const rounded = roundAxisValue(value);
+  if (Math.abs(rounded - Math.round(rounded)) < 1e-6) return String(Math.round(rounded));
+  const tenths = Math.round(rounded * 10) / 10;
+  if (Math.abs(rounded - tenths) < 1e-6) return tenths.toFixed(1).replace(/\.0$/, "");
+  return rounded.toFixed(2);
+}
+
+function niceStep(span: number): number {
+  const power = 10 ** Math.floor(Math.log10(span));
+  const steps = [0.01, 0.1, 1, 10]
+    .flatMap((scale) => [1, 2, 5].map((base) => base * power * scale))
+    .filter((step) => step > 0)
+    .sort((a, b) => a - b);
+  const unique = [...new Set(steps)];
+  let chosen = unique[unique.length - 1];
+  for (const step of unique) {
+    const count = Math.floor(span / step + 1e-9) + 1;
+    if (count >= 6 && count <= 12) return step;
+    if (count >= 5) chosen = step;
+  }
+  return chosen;
+}
+
+function roundAxisValue(value: number): number {
+  const rounded = Math.round(value * 1e6) / 1e6;
+  return rounded === 0 ? 0 : rounded;
 }

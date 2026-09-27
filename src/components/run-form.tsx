@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { parseUserCount, parseUserNumber } from "@/lib/evaluate";
-import type { CoreShell, RuleInputs, RunDetails } from "@/lib/run-details";
+import type { RuleInputs, RunDetails } from "@/lib/run-details";
 import { LIGANDS, SOLVENTS } from "@/lib/selectivity";
 
 type RunFormProps = {
@@ -25,8 +25,8 @@ export function RunForm({ details, rules, onDetails, onRules }: RunFormProps) {
   }
 
   return (
-    <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2">
-      <Card className="@container">
+    <div id="setup-boxes" className="grid grid-cols-1 items-stretch gap-4 md:grid-cols-2">
+      <Card className="@container h-full">
         <CardHeader>
           <CardTitle>Initial run details</CardTitle>
           <CardDescription>Saved with this session, even if a check does not use them yet.</CardDescription>
@@ -35,7 +35,7 @@ export function RunForm({ details, rules, onDetails, onRules }: RunFormProps) {
           <ChoiceField
             label="Ligand"
             value={details.ligand}
-            placeholder="Choose a coating"
+            placeholder="select a ligand"
             options={LIGANDS.map((name) => ({ value: name, label: name }))}
             onChange={(value) => setDetail("ligand", value)}
           />
@@ -44,9 +44,18 @@ export function RunForm({ details, rules, onDetails, onRules }: RunFormProps) {
             value={details.beadType}
             onChange={(value) => setDetail("beadType", value)}
           />
-          <CoreShellField
+          <ChoiceField
+            label="Core shell"
             value={details.coreShell}
-            onChange={(value) => setDetail("coreShell", value)}
+            placeholder="select an option"
+            placeholderInList={false}
+            options={[
+              { value: "yes", label: "Yes" },
+              { value: "no", label: "No" },
+            ]}
+            onChange={(value) =>
+              setDetail("coreShell", value === "yes" || value === "no" ? value : "")
+            }
           />
           <TextField
             label="Pore size (Å)"
@@ -119,7 +128,7 @@ export function RunForm({ details, rules, onDetails, onRules }: RunFormProps) {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="h-full">
         <CardHeader>
           <CardTitle>Rules to meet</CardTitle>
           <CardDescription>Leave a box empty if you are not checking it yet.</CardDescription>
@@ -184,63 +193,20 @@ export function RunForm({ details, rules, onDetails, onRules }: RunFormProps) {
   );
 }
 
-function CoreShellField({
-  value,
-  onChange,
-}: {
-  value: CoreShell;
-  onChange: (value: CoreShell) => void;
-}) {
-  const choices = [
-    { value: "yes", label: "Yes" },
-    { value: "no", label: "No" },
-  ] as const;
-
-  return (
-    <div className="flex min-w-0 flex-col gap-1.5">
-      <Label id="core-shell-label">Core shell</Label>
-      <div role="radiogroup" aria-labelledby="core-shell-label" className="grid grid-cols-2 gap-2">
-        {choices.map((choice) => {
-          const selected = value === choice.value;
-          return (
-            <label
-              key={choice.value}
-              className={
-                "flex h-10 min-w-0 cursor-pointer items-center justify-center gap-2 rounded-lg border px-3 text-sm " +
-                (selected
-                  ? "border-primary bg-accent font-medium text-foreground"
-                  : "border-input bg-background text-foreground")
-              }
-            >
-              <input
-                type="radio"
-                name="core-shell"
-                value={choice.value}
-                checked={selected}
-                onChange={() => onChange(choice.value)}
-                className="size-4 shrink-0 accent-[#0f6b56]"
-              />
-              {choice.label}
-            </label>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 function ChoiceField({
   label,
   value,
   onChange,
   options,
   placeholder,
+  placeholderInList,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   options: readonly { value: string; label: string }[];
   placeholder: string;
+  placeholderInList?: boolean;
 }) {
   const id = label.toLowerCase().replace(/[^a-z0-9]+/g, "-");
   return (
@@ -248,7 +214,14 @@ function ChoiceField({
       <Label htmlFor={id} className="h-auto whitespace-normal leading-snug">
         {label}
       </Label>
-      <ChoiceSelect id={id} value={value} onChange={onChange} options={options} placeholder={placeholder} />
+      <ChoiceSelect
+        id={id}
+        value={value}
+        onChange={onChange}
+        options={options}
+        placeholder={placeholder}
+        placeholderInList={placeholderInList}
+      />
     </div>
   );
 }
