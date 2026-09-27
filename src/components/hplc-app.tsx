@@ -3,6 +3,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { ChoiceSelect } from "@/components/choice-select";
 import { FileDrop } from "@/components/file-drop";
+import { LeaveSelectivityAsk, LeaveSelectivityDone } from "@/components/leave-selectivity";
 import { LaterChangeNote, RetentionDecisionView, StartHighBNote } from "@/components/retention-decision";
 import { ResultsPanel } from "@/components/results-panel";
 import { RunForm } from "@/components/run-form";
@@ -18,6 +19,7 @@ import { emptyRuleInputs, emptyRunDetails, type RuleInputs, type RunDetails } fr
 import {
   LIGANDS,
   SOLVENTS,
+  efficiencyAsk,
   findSolvent,
   planHistory,
   solventById,
@@ -70,9 +72,11 @@ export function HplcApp() {
   const [details, setDetails] = useState<RunDetails>(emptyRunDetails);
   const [rules, setRules] = useState<RuleInputs>(emptyRuleInputs);
   const [runs, setRuns] = useState<RunState[]>([emptyRun()]);
+  const [declinedThrough, setDeclinedThrough] = useState<number | null>(null);
+  const [leftSelectivity, setLeftSelectivity] = useState(false);
 
   const checks = useMemo(() => toRuleNumbers(rules), [rules]);
-  const syncedRuns = syncNextRun(runs, details, checks);
+  const syncedRuns = syncNextRun(runs, details, checks, leftSelectivity);
   if (syncedRuns !== runs) {
     setRuns(syncedRuns);
   }
@@ -274,6 +278,10 @@ export function HplcApp() {
               onProblem={acceptProblem}
               onRemove={removeFile}
               onOpen={(next) => setActive(next)}
+              declinedThrough={declinedThrough}
+              leftSelectivity={leftSelectivity}
+              onDecline={(multiple) => setDeclinedThrough(multiple)}
+              onLeave={() => setLeftSelectivity(true)}
             />
           </TabsContent>
         ))}
@@ -369,6 +377,10 @@ function RunPane({
   onProblem,
   onRemove,
   onOpen,
+  declinedThrough,
+  leftSelectivity,
+  onDecline,
+  onLeave,
 }: {
   index: number;
   run: RunState;
@@ -389,6 +401,10 @@ function RunPane({
   onProblem: (index: number, fileName: string, message: string) => void;
   onRemove: (index: number) => void;
   onOpen: (index: number) => void;
+  declinedThrough: number | null;
+  leftSelectivity: boolean;
+  onDecline: (multiple: number) => void;
+  onLeave: () => void;
 }) {
   if (run.afterRetention) {
     const prior = index > 0 ? explainRun(runs, index - 1, details, checks) : null;
@@ -399,6 +415,19 @@ function RunPane({
   const rows = run.read ? evaluateRun(run.read, checks) : null;
   const next = runs[index + 1];
   const selectivity = explanation?.kind === "selectivity" ? explanation.plan : null;
+  const ask =
+    !leftSelectivity && run.status === "ready" && run.read
+      ? efficiencyAsk({
+          peakCount: run.read.peakCount,
+          foundResolution: run.read.minResolutionExcludingFirst,
+          requiredPeaks: checks.requiredPeaks,
+          minResolution: checks.minResolution,
+          declinedThrough,
+        })
+      : null;
+  const ifNo =
+    selectivity?.nextChange ??
+    (explanation?.kind === "retention" ? explanation.decision.nextChange : "");
 
   return (
     <>
@@ -438,17 +467,30 @@ function RunPane({
               </Button>
             </div>
             <ResultsPanel fileName={run.fileName} read={run.read} rows={rows} />
-            {explanation?.kind === "retention" ? <RetentionDecisionView decision={explanation.decision} /> : null}
-            {selectivity ? (
-              <SelectivityDecisionView
-                plan={selectivity}
-                solventId={findSolvent(next?.solvent ?? "")?.id ?? selectivity.recommendedSolventId ?? ""}
-                ligand={next?.ligand || selectivity.recommendedLigand || ""}
-                onSolvent={onChooseSolvent}
-                onLigand={onChooseLigand}
+            {leftSelectivity ? (
+              <LeaveSelectivityDone duringRetention={explanation?.kind === "retention"} />
+            ) : ask ? (
+              <LeaveSelectivityAsk
+                ask={ask}
+                ifNo={ifNo}
+                onYes={onLeave}
+                onNo={() => onDecline(ask.multiple)}
               />
-            ) : null}
-            {next ? (
+            ) : (
+              <>
+                {explanation?.kind === "retention" ? <RetentionDecisionView decision={explanation.decision} /> : null}
+                {selectivity ? (
+                  <SelectivityDecisionView
+                    plan={selectivity}
+                    solventId={findSolvent(next?.solvent ?? "")?.id ?? selectivity.recommendedSolventId ?? ""}
+                    ligand={next?.ligand || selectivity.recommendedLigand || ""}
+                    onSolvent={onChooseSolvent}
+                    onLigand={onChooseLigand}
+                  />
+                ) : null}
+              </>
+            )}
+            {next && !ask && !leftSelectivity ? (
               <div className="mt-auto flex flex-col gap-2">
                 <Button
                   type="button"
@@ -616,8 +658,20 @@ function explainRun(
   return { kind: "retention", decision: decideRetention(segment.map(toSample), checks) };
 }
 
-function syncNextRun(runs: RunState[], details: RunDetails, checks: RuleNumbers): RunState[] {
+function syncNextRun(
+  runs: RunState[],
+  details: RunDetails,
+  checks: RuleNumbers,
+  leftSelectivity: boolean,
+): RunState[] {
   const count = readyPrefix(runs);
+  if (leftSelectivity) {
+    const next = runs[count];
+    if (next && next.status === "empty" && !runWasEdited(next) && runs.length === count + 1) {
+      return runs.slice(0, count);
+    }
+    return runs;
+  }
   if (count === 0) return runs;
   const ready = runs.slice(0, count);
   const history = planHistory(

@@ -121,10 +121,18 @@ export type HistoryPlan =
   | { phase: "selectivity"; segmentStart: number; plan: SelectivityPlan };
 
 export type HappyCheck = {
-  happy: boolean;
   enoughPeaks: boolean;
   missingResolutionRule: boolean;
-  cutoff: number | null;
+};
+
+/** Highest multiple first is the one we ask about. A run asks only at that one. */
+export const RESOLUTION_MULTIPLES = [0.4, 0.55, 0.7, 0.85, 1] as const;
+
+export type EfficiencyAsk = {
+  multiple: number;
+  measured: number;
+  spec: number;
+  question: string;
 };
 
 export function findSolvent(value: string): Solvent | null {
@@ -223,18 +231,54 @@ export function recommendLigand(tried: string[]): string | null {
 }
 
 export function assessHappy(
-  run: { peakCount: number | null; minResolutionExcludingFirst: number | null },
+  run: { peakCount: number | null },
   rules: { requiredPeaks: number | null; minResolution: number | null },
 ): HappyCheck {
   const enoughPeaks =
     rules.requiredPeaks != null && run.peakCount != null && run.peakCount >= rules.requiredPeaks;
   if (rules.minResolution == null) {
-    return { happy: false, enoughPeaks, missingResolutionRule: true, cutoff: null };
+    return { enoughPeaks, missingResolutionRule: true };
   }
-  const cutoff = 0.7 * rules.minResolution;
-  const resolution = run.minResolutionExcludingFirst;
-  const resolved = resolution != null && Number.isFinite(resolution) && resolution > cutoff;
-  return { happy: enoughPeaks && resolved, enoughPeaks, missingResolutionRule: false, cutoff };
+  return { enoughPeaks, missingResolutionRule: false };
+}
+
+export function efficiencyAsk(input: {
+  peakCount: number | null;
+  foundResolution: number | null;
+  requiredPeaks: number | null;
+  minResolution: number | null;
+  declinedThrough: number | null;
+}): EfficiencyAsk | null {
+  if (input.minResolution == null || !(input.minResolution > 0)) return null;
+  if (input.requiredPeaks == null || input.peakCount == null || input.peakCount < input.requiredPeaks) return null;
+  const measured = resolutionForDecision(input.peakCount, input.foundResolution, input.requiredPeaks);
+  if (measured == null || !Number.isFinite(measured)) return null;
+  const multiple = highestMultiple(measured, input.minResolution);
+  if (multiple == null) return null;
+  if (input.declinedThrough != null && multiple <= input.declinedThrough + 1e-9) return null;
+  return {
+    multiple,
+    measured,
+    spec: input.minResolution,
+    question: efficiencyQuestion(multiple, measured, input.minResolution),
+  };
+}
+
+export function efficiencyQuestion(multiple: number, measured: number, spec: number): string {
+  return `Consider whether efficiency and gradient can still bring the resolution up to the spec. The minimum resolution is ${formatResolution(measured)}, which is at least ${formatMultiple(multiple)} times the ${formatResolution(spec)} you set. Move on to efficiency and be done with selectivity?`;
+}
+
+function highestMultiple(measured: number, spec: number): number | null {
+  let reached: number | null = null;
+  for (const multiple of RESOLUTION_MULTIPLES) {
+    if (measured + 1e-9 >= multiple * spec) reached = multiple;
+  }
+  return reached;
+}
+
+function formatMultiple(value: number): string {
+  if (value === 1) return "1";
+  return value === 0.55 || value === 0.85 ? value.toFixed(2) : value.toFixed(1);
 }
 
 export function adjustedPercentB(input: {
@@ -327,10 +371,6 @@ function walkSelectivity(args: {
     };
   }
 
-  if (assessHappy(args.carry, args.setup).happy) {
-    return { kind: "plan", plan: finishedPlan(args.carry, args.carryRunNumber, args.setup) };
-  }
-
   let offset = 0;
   let baseline = args.carry;
   let baselineNumber = args.carryRunNumber;
@@ -374,9 +414,6 @@ function walkSelectivity(args: {
       baseline = solventRun;
       baselineNumber = args.firstLaterRunNumber + offset - 1;
       solventName = solventRun.solvent || solventName;
-      if (assessHappy(baseline, args.setup).happy) {
-        return { kind: "plan", plan: finishedPlan(baseline, baselineNumber, args.setup) };
-      }
       cycle = 1;
       continue;
     }
@@ -421,17 +458,11 @@ function walkTemperature(args: {
   }
 
   const step1 = args.pending[0];
-  if (assessHappy(step1, args.setup).happy) {
-    return { type: "plan", plan: finishedPlan(step1, args.baseNumber, args.setup) };
-  }
   if (args.pending.length === 1) {
     return { type: "plan", plan: planAdjust(args, step1, args.baseNumber, savedCelsius(step1, 40), solvent, ligand) };
   }
 
   const step2 = args.pending[1];
-  if (assessHappy(step2, args.setup).happy) {
-    return { type: "plan", plan: finishedPlan(step2, args.baseNumber + 1, args.setup) };
-  }
   const better = hotRunHelped(args.baseline, step2, args.setup.requiredPeaks);
   if (!better.ok) {
     return { type: "advance", consumed: 2 };
@@ -445,17 +476,10 @@ function walkTemperature(args: {
   }
 
   const step3 = args.pending[2];
-  if (assessHappy(step3, args.setup).happy) {
-    return { type: "plan", plan: finishedPlan(step3, args.baseNumber + 2, args.setup) };
-  }
   if (args.pending.length === 3) {
     return { type: "plan", plan: planAdjust(args, step3, args.baseNumber + 2, savedCelsius(step3, 60), solvent, ligand) };
   }
 
-  const step4 = args.pending[3];
-  if (assessHappy(step4, args.setup).happy) {
-    return { type: "plan", plan: finishedPlan(step4, args.baseNumber + 3, args.setup) };
-  }
   return { type: "advance", consumed: 4 };
 }
 
@@ -681,24 +705,6 @@ function ligandPlan(args: {
   };
 }
 
-function finishedPlan(run: SelectivityRun, runNumber: number, setup: SelectivitySetup): SelectivityPlan {
-  const percent = run.percentB == null ? "the saved" : `${formatPercentB(run.percentB)}%`;
-  return {
-    status: "finished",
-    step: "finished",
-    nextChange: `Selectivity is finished. Carry forward Run ${runNumber} at ${percent} B.`,
-    why: checksSentence(run, runNumber, setup),
-    prefill: null,
-    nomograph: null,
-    showSolventChoices: false,
-    showLigandChoices: false,
-    recommendedSolventId: null,
-    recommendedLigand: null,
-    anchorPercentB: run.percentB,
-    oldSolvent: run.solvent,
-  };
-}
-
 function blockedPlan(nextChange: string, why: string): SelectivityPlan {
   return {
     status: "blocked",
@@ -718,12 +724,7 @@ function blockedPlan(nextChange: string, why: string): SelectivityPlan {
 
 function checksSentence(run: SelectivityRun, runNumber: number, setup: SelectivitySetup): string {
   const check = assessHappy(run, setup);
-  const peakPart = peakSentence(run, setup, check);
-  const resolutionPart = resolutionSentence(run, setup, check);
-  const ending = check.happy
-    ? `Run ${runNumber} meets both checks, so selectivity is finished.`
-    : `Run ${runNumber} does not meet both checks, so selectivity is not finished.`;
-  return `${peakPart} ${resolutionPart} ${ending}`;
+  return `${peakSentence(run, setup, check)} ${resolutionSentence(run, setup, check)} Run ${runNumber} does not end selectivity on its own.`;
 }
 
 function peakSentence(run: SelectivityRun, setup: SelectivitySetup, check: HappyCheck): string {
@@ -743,24 +744,16 @@ function resolutionSentence(run: SelectivityRun, setup: SelectivitySetup, check:
   ) {
     return "It has fewer peaks than you asked for, so its minimum resolution is 0. Missing peaks are overlaps.";
   }
-  if (check.missingResolutionRule || setup.minResolution == null || check.cutoff == null) {
+  if (check.missingResolutionRule || setup.minResolution == null) {
     return "You did not type a minimum resolution, so resolution cannot be judged and the run is not treated as finished.";
   }
-  const cutoff = formatResolution(check.cutoff);
-  const asked = formatResolution(setup.minResolution);
   const decision = resolutionForDecision(
     run.peakCount,
     run.minResolutionExcludingFirst,
     setup.requiredPeaks,
   );
-  if (decision == null) {
-    return `Its minimum resolution is missing. It needs to be above ${cutoff} (70% of the ${asked} you set).`;
-  }
-  const measured = formatResolution(decision);
-  if (decision > check.cutoff) {
-    return `Its minimum resolution is ${measured}, above ${cutoff} (70% of the ${asked} you set).`;
-  }
-  return `Its minimum resolution is ${measured}. It needs to be above ${cutoff} (70% of the ${asked} you set).`;
+  if (decision == null) return "Its minimum resolution is missing.";
+  return `Its minimum resolution is ${formatResolution(decision)}.`;
 }
 
 function solventLead(args: {

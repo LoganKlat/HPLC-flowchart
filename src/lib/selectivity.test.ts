@@ -7,6 +7,8 @@ import { carryForwardIndex } from "@/lib/retention";
 import {
   adjustedPercentB,
   assessHappy,
+  efficiencyAsk,
+  efficiencyQuestion,
   findSolvent,
   formatMatchedPercent,
   planHistory,
@@ -96,15 +98,66 @@ function percents(percent: number): string[] | undefined {
 }
 
 describe("selectivity checks", () => {
-  it("is finished only when peaks are enough and resolution is above 70% of the typed minimum", () => {
-    expect(assessHappy({ peakCount: 6, minResolutionExcludingFirst: 0.71 }, { requiredPeaks: 6, minResolution: 1 }).happy).toBe(true);
-    expect(assessHappy({ peakCount: 6, minResolutionExcludingFirst: 0.7 }, { requiredPeaks: 6, minResolution: 1 }).happy).toBe(false);
-    expect(assessHappy({ peakCount: 5, minResolutionExcludingFirst: 0.9 }, { requiredPeaks: 6, minResolution: 1 }).happy).toBe(false);
+  it("asks at 0.55 after a decline at 0.4, and jumps straight to 0.7", () => {
+    const base = { peakCount: 8, requiredPeaks: 8, minResolution: 1 };
+    const at04 = efficiencyAsk({ ...base, foundResolution: 0.4, declinedThrough: null });
+    expect(at04?.multiple).toBe(0.4);
+    expect(at04?.question).toBe(efficiencyQuestion(0.4, 0.4, 1));
+
+    const at055 = efficiencyAsk({ ...base, foundResolution: 0.55, declinedThrough: 0.4 });
+    expect(at055?.multiple).toBe(0.55);
+    expect(at055?.question).toContain("at least 0.55 times");
+
+    const still04 = efficiencyAsk({ ...base, foundResolution: 0.45, declinedThrough: 0.4 });
+    expect(still04).toBeNull();
+
+    const jump = efficiencyAsk({ ...base, foundResolution: 0.8, declinedThrough: null });
+    expect(jump?.multiple).toBe(0.7);
+    expect(jump?.question).toContain("at least 0.7 times");
+    expect(jump?.question).not.toContain("0.4 times");
+    expect(jump?.question).not.toContain("0.55 times");
   });
 
-  it("does not treat a run as finished when the resolution minimum is blank", () => {
-    const check = assessHappy({ peakCount: 8, minResolutionExcludingFirst: 2 }, { requiredPeaks: 8, minResolution: null });
-    expect(check.happy).toBe(false);
+  it("counts a resolution that lands exactly on a multiple", () => {
+    expect(efficiencyAsk({
+      peakCount: 6,
+      foundResolution: 0.7,
+      requiredPeaks: 6,
+      minResolution: 1,
+      declinedThrough: null,
+    })?.multiple).toBe(0.7);
+    expect(efficiencyAsk({
+      peakCount: 6,
+      foundResolution: 1,
+      requiredPeaks: 6,
+      minResolution: 1,
+      declinedThrough: 0.85,
+    })?.multiple).toBe(1);
+    expect(efficiencyAsk({
+      peakCount: 6,
+      foundResolution: 2,
+      requiredPeaks: 6,
+      minResolution: 1,
+      declinedThrough: 1,
+    })).toBeNull();
+  });
+
+  it("does not ask when peaks are short or the resolution spec is blank", () => {
+    expect(efficiencyAsk({
+      peakCount: 5,
+      foundResolution: 0.9,
+      requiredPeaks: 6,
+      minResolution: 1,
+      declinedThrough: null,
+    })).toBeNull();
+    expect(efficiencyAsk({
+      peakCount: 8,
+      foundResolution: 2,
+      requiredPeaks: 8,
+      minResolution: null,
+      declinedThrough: null,
+    })).toBeNull();
+    const check = assessHappy({ peakCount: 8 }, { requiredPeaks: 8, minResolution: null });
     expect(check.missingResolutionRule).toBe(true);
   });
 
@@ -146,15 +199,16 @@ describe("selectivity plan", () => {
     expect(history.plan.why.toLowerCase()).not.toContain("guess");
   });
 
-  it("finishes immediately when the carried-forward run already meets both checks", () => {
+  it("does not leave selectivity on its own when resolution is past 0.7 times the spec", () => {
     const history = planHistory(
       [run({ peakCount: 8, minResolutionExcludingFirst: 0.8, lastPeakTimeMin: 10 })],
       setup,
     );
     expect(history.phase).toBe("selectivity");
     if (history.phase !== "selectivity") return;
-    expect(history.plan.status).toBe("finished");
-    expect(history.plan.prefill).toBeNull();
+    expect(history.plan.status).not.toBe("finished");
+    expect(history.plan.step).toBe("temp-40");
+    expect(history.plan.nextChange).toContain("40°C");
   });
 
   it("says the resolution rule is missing instead of finishing", () => {
