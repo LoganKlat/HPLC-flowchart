@@ -1,7 +1,7 @@
 "use client";
 
-import { useId, useRef, useState } from "react";
-import { Button } from "@/components/ui/button";
+import { useId, useState } from "react";
+import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 type FileDropProps = {
@@ -14,7 +14,6 @@ type FileDropProps = {
 
 export function FileDrop({ prompt, reading, onBegin, onBuffer, onProblem }: FileDropProps) {
   const inputId = useId();
-  const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
 
   async function takeFile(file: File | undefined) {
@@ -42,9 +41,14 @@ export function FileDrop({ prompt, reading, onBegin, onBuffer, onProblem }: File
         }}
         onDragOver={(event) => {
           event.preventDefault();
+          event.dataTransfer.dropEffect = "copy";
           setDragging(true);
         }}
-        onDragLeave={() => setDragging(false)}
+        onDragLeave={(event) => {
+          const next = event.relatedTarget;
+          if (next instanceof Node && event.currentTarget.contains(next)) return;
+          setDragging(false);
+        }}
         onDrop={(event) => {
           event.preventDefault();
           setDragging(false);
@@ -59,26 +63,27 @@ export function FileDrop({ prompt, reading, onBegin, onBuffer, onProblem }: File
         <p className="max-w-md text-sm text-muted-foreground">
           LabSolutions export (.csv or .txt). Drag it here, or choose it from your computer.
         </p>
-        <Button
-          type="button"
-          variant="outline"
-          className="h-10 px-4"
-          disabled={reading}
-          onClick={() => inputRef.current?.click()}
+        <div
+          className={cn(
+            buttonVariants({ variant: "outline" }),
+            "relative h-10 px-4",
+            reading && "pointer-events-none opacity-50",
+          )}
         >
-          Choose a file
-        </Button>
-        <input
-          id={inputId}
-          ref={inputRef}
-          type="file"
-          accept=".csv,.txt,text/csv,text/plain"
-          className="sr-only"
-          onChange={(event) => {
-            void takeFile(event.target.files?.[0]);
-            event.target.value = "";
-          }}
-        />
+          <span className="pointer-events-none">Choose a file</span>
+          <input
+            id={inputId}
+            type="file"
+            accept=".csv,.txt,text/csv,text/plain"
+            aria-label="Choose a file"
+            disabled={reading}
+            className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
+            onChange={(event) => {
+              void takeFile(event.target.files?.[0]);
+              event.target.value = "";
+            }}
+          />
+        </div>
       </div>
     </div>
   );
