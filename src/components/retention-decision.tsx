@@ -31,10 +31,21 @@ export function StartHighBNote() {
       className="scroll-mt-16 rounded-xl bg-[#e7f3ee] px-4 py-4 text-[#144237]"
     >
       <h2 className="font-heading text-base">What we’re doing</h2>
-      <p className="mt-1 text-sm leading-relaxed">
-        We recommend a higher %B, around 90–100%, because that helps the calculations later, and
-        the peaks will probably sit on top of each other and the last peak will come out early.
-      </p>
+      <div className="mt-1 flex flex-col gap-2 text-sm leading-relaxed">
+        <p>
+          Retention comes first. It finds a %B where you have enough peaks and the last peak comes
+          out by the time you set.
+        </p>
+        <p>
+          Selectivity is next. It changes temperature, then solvent, then the column coating, to
+          pull the peaks apart.
+        </p>
+        <p>
+          Efficiency is after that. It makes the peaks narrower. Gradient is last. It changes %B
+          while the run is going. Those two are not built yet.
+        </p>
+        <p>Start around 90–100% B. A higher %B lets the decision engine work better.</p>
+      </div>
     </section>
   );
 }
