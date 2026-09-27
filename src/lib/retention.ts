@@ -136,7 +136,7 @@ export function decideRetention(
       prior.nextPercentB != null &&
       nearly(current.percentB, prior.nextPercentB)
     ) {
-      return finishedCalculated(current, complete, prior.nextPercentB);
+      return finishedCalculated(samples, complete, prior.nextPercentB);
     }
   }
 
@@ -217,30 +217,125 @@ export function formatPercentB(value: number): string {
 }
 
 function finishedCalculated(
-  current: RetentionSample,
+  samples: RetentionSample[],
   rules: CompleteRules,
   target: number,
 ): RetentionDecision {
+  const current = samples[samples.length - 1];
   const percent = formatPercentB(current.percentB!);
-  let why = `This chromatogram was run at ${percent}% B, the calculated %B (${formatPercentB(target)}% B) for a last peak at ${formatMinutes(rules.lastPeakTimeMin)} min. Retention is finished.`;
+  const chosen = chooseCarryRun(samples, rules);
+  const parts = [
+    `This chromatogram was run at ${percent}% B, the calculated %B (${formatPercentB(target)}% B) for a last peak at ${formatMinutes(rules.lastPeakTimeMin)} min.`,
+  ];
+
+  if (current.lastPeakTimeMin != null && isPast(current.lastPeakTimeMin, rules.lastPeakTimeMin)) {
+    parts.push(
+      `Its last peak is at ${formatMinutes(current.lastPeakTimeMin)} min, past the ${formatMinutes(rules.lastPeakTimeMin)} min you set. That time is the latest the last peak may come out, so this run is not the one to carry forward.`,
+    );
+  }
+
+  if (!chosen) {
+    parts.push(
+      "Every uploaded run has a last peak past that time, so there is no run to carry forward. Retention is finished. The next kind of change is not built yet.",
+    );
+    return {
+      status: "finished",
+      reason: "finished-calculated",
+      move: null,
+      nextPercentB: null,
+      nextChange:
+        "Retention is finished. The next kind of change is not built yet. No uploaded run is within the last-peak time you set.",
+      why: parts.join(" "),
+      fit: null,
+    };
+  }
+
+  const chosenLabel = `Run ${chosen.index + 1} at ${formatPercentB(chosen.sample.percentB!)}% B`;
+  const resolution = carryResolution(chosen.sample, rules.requiredPeaks);
+  const resolutionText =
+    resolution == null
+      ? "it has no usable minimum resolution"
+      : `its minimum resolution is ${formatResolution(resolution)}, the best among the runs still within that time`;
+
+  if (chosen.index === samples.length - 1) {
+    parts.push(
+      `Its last peak is at ${formatMinutes(current.lastPeakTimeMin!)} min, at or before ${formatMinutes(rules.lastPeakTimeMin)} min, and ${resolutionText}. This is the run to carry forward.`,
+    );
+  } else {
+    if (current.lastPeakTimeMin != null && !isPast(current.lastPeakTimeMin, rules.lastPeakTimeMin)) {
+      parts.push(
+        `Its last peak is at ${formatMinutes(current.lastPeakTimeMin)} min, at or before ${formatMinutes(rules.lastPeakTimeMin)} min, so the time alone does not rule it out.`,
+      );
+    }
+    parts.push(
+      `${chosenLabel} is the run to carry forward. Its last peak is at ${formatMinutes(chosen.sample.lastPeakTimeMin!)} min, still within ${formatMinutes(rules.lastPeakTimeMin)} min, and ${resolutionText}.`,
+    );
+  }
+
   if (current.peakCount != null && current.peakCount < rules.requiredPeaks) {
-    why += ` It is finished even though this file has ${formatCount(current.peakCount)} peaks, still under the ${formatCount(rules.requiredPeaks)} you asked for.`;
+    parts.push(
+      `This file has ${formatCount(current.peakCount)} peaks, still under the ${formatCount(rules.requiredPeaks)} you asked for.`,
+    );
   }
-  if (
-    current.maxBackPressurePsi != null &&
-    !pressureIsUnder(current.maxBackPressurePsi, rules.maxBackPressurePsi)
-  ) {
-    why += ` The highest back-pressure is ${formatDecimal(current.maxBackPressurePsi, 1)} psi, already at or above the ${formatDecimal(rules.maxBackPressurePsi, 1)} psi you set.`;
-  }
+  parts.push("Retention is finished. The next kind of change is not built yet.");
+
+  const nextChange =
+    chosen.index === samples.length - 1
+      ? `Retention is finished. The next kind of change is not built yet. Carry forward this run, ${chosenLabel}.`
+      : `Retention is finished. The next kind of change is not built yet. Carry forward ${chosenLabel}, not this ${percent}% B run.`;
+
   return {
     status: "finished",
     reason: "finished-calculated",
     move: null,
     nextPercentB: null,
-    nextChange: "Retention is finished.",
-    why,
+    nextChange,
+    why: parts.join(" "),
     fit: null,
   };
+}
+
+function chooseCarryRun(
+  samples: RetentionSample[],
+  rules: CompleteRules,
+): { index: number; sample: RetentionSample } | null {
+  const eligible = samples
+    .map((sample, index) => ({ sample, index }))
+    .filter(
+      (item) =>
+        item.sample.lastPeakTimeMin != null &&
+        item.sample.percentB != null &&
+        !isPast(item.sample.lastPeakTimeMin, rules.lastPeakTimeMin),
+    );
+  if (eligible.length === 0) return null;
+
+  const scored = eligible.filter((item) => carryResolution(item.sample, rules.requiredPeaks) != null);
+  const pool = scored.length > 0 ? scored : eligible;
+  pool.sort((a, b) => {
+    const aScore = carryResolution(a.sample, rules.requiredPeaks);
+    const bScore = carryResolution(b.sample, rules.requiredPeaks);
+    if (aScore != null && bScore != null && aScore !== bScore) return bScore - aScore;
+    if (aScore != null && bScore == null) return -1;
+    if (aScore == null && bScore != null) return 1;
+    const aRaw = a.sample.minResolutionExcludingFirst;
+    const bRaw = b.sample.minResolutionExcludingFirst;
+    if (aRaw != null && bRaw != null && aRaw !== bRaw) return bRaw - aRaw;
+    return b.index - a.index;
+  });
+  return pool[0];
+}
+
+/** Same rule as the results table: too few peaks means the resolution is not usable. */
+function carryResolution(sample: RetentionSample, requiredPeaks: number): number | null {
+  if (sample.peakCount == null || sample.peakCount < requiredPeaks) return null;
+  const resolution = sample.minResolutionExcludingFirst;
+  if (resolution == null || !Number.isFinite(resolution)) return null;
+  return resolution;
+}
+
+function isPast(measured: number, spec: number): boolean {
+  if (nearly(measured, spec)) return false;
+  return measured > spec;
 }
 
 function dropPoints(

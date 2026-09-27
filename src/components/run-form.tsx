@@ -139,7 +139,7 @@ export function RunForm({ details, rules, onDetails, onRules }: RunFormProps) {
             hint={
               rules.lastPeakTimeMin.trim() && parseUserNumber(rules.lastPeakTimeMin) == null
                 ? "Use a number."
-                : "Met when the last peak comes out at or after this many minutes. Longer is fine."
+                : "Met when the last peak comes out at or before this many minutes. Later than that is not met."
             }
             invalid={
               rules.lastPeakTimeMin.trim() !== "" && parseUserNumber(rules.lastPeakTimeMin) == null

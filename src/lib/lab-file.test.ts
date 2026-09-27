@@ -119,12 +119,20 @@ describe("real LabSolutions exports", () => {
 
     const enough = evaluateRun(read, {
       requiredPeaks: 6,
-      lastPeakTimeMin: 2,
+      lastPeakTimeMin: 3,
       minResolution: 0.5,
       maxBackPressurePsi: 2000,
     });
     expect(enough.find((row) => row.id === "peaks")?.status).toBe("met");
     expect(enough.find((row) => row.id === "last-peak")?.status).toBe("met");
+    expect(enough.find((row) => row.id === "last-peak")?.rule).toBe("at or before 3.000 min");
+    const late = evaluateRun(read, {
+      requiredPeaks: 6,
+      lastPeakTimeMin: 2,
+      minResolution: 0.5,
+      maxBackPressurePsi: 2000,
+    });
+    expect(late.find((row) => row.id === "last-peak")?.status).toBe("not-met");
     expect(enough.find((row) => row.id === "resolution")?.status).toBe("met");
     expect(enough.find((row) => row.id === "resolution")?.measured).toBe("0.625");
     expect(enough.find((row) => row.id === "back-pressure")?.status).toBe("met");

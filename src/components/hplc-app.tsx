@@ -307,7 +307,8 @@ function RunPane({
   onOpen: (index: number) => void;
 }) {
   if (run.afterRetention) {
-    return <LaterChangeNote />;
+    const prior = index > 0 ? decisionFor(runs, index - 1, retentionRules) : null;
+    return <LaterChangeNote decision={prior} />;
   }
 
   const decision = decisionFor(runs, index, retentionRules);
@@ -356,7 +357,8 @@ function RunPane({
                 </Button>
                 <p className="text-center text-xs text-muted-foreground">
                   {next.afterRetention
-                    ? "Retention is finished. The next kind of change is not built yet."
+                    ? (decision?.nextChange ??
+                      "Retention is finished. The next kind of change is not built yet.")
                     : `Run ${index + 2} opens with ${next.percentB ? `${next.percentB}% B` : "the %B"} filled in.`}
                 </p>
               </div>
@@ -416,7 +418,7 @@ function RunSummary({
   const ruleLine = [
     rules.requiredPeaks.trim() ? `${rules.requiredPeaks.trim()} peaks` : "peak count not set",
     rules.lastPeakTimeMin.trim()
-      ? `last peak at or after ${rules.lastPeakTimeMin.trim()} min`
+      ? `last peak at or before ${rules.lastPeakTimeMin.trim()} min`
       : "last peak time not set",
     rules.minResolution.trim()
       ? `resolution at least ${rules.minResolution.trim()}`

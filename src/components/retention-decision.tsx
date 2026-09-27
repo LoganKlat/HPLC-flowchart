@@ -61,7 +61,7 @@ function trimNumber(value: number): string {
   return Number.isInteger(value) ? String(value) : String(value);
 }
 
-export function LaterChangeNote() {
+export function LaterChangeNote({ decision }: { decision: RetentionDecision | null }) {
   return (
     <div className="flex flex-col gap-4">
       <section
@@ -69,14 +69,23 @@ export function LaterChangeNote() {
         className="scroll-mt-16 rounded-xl bg-[#e7f3ee] px-4 py-4 text-[#144237]"
       >
         <h2 className="font-heading text-base">Next change</h2>
-        <p className="mt-1 text-sm leading-relaxed">The next kind of change is not built yet.</p>
+        <p className="mt-1 text-sm leading-relaxed">
+          {decision?.nextChange ??
+            "Retention is finished. The next kind of change is not built yet."}
+        </p>
       </section>
       <section className="rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10">
         <h2 className="font-heading text-base">Why</h2>
-        <p className="mt-1 text-sm leading-relaxed text-foreground">
-          Retention is finished. This run is here so the next kind of change has a place to go.
-          That change is not built yet.
-        </p>
+        <div className="mt-1 flex flex-col gap-2 text-sm leading-relaxed text-foreground">
+          {(
+            decision?.why ??
+            "Retention is finished. The next kind of change is not built yet."
+          )
+            .split("\n\n")
+            .map((paragraph, index) => (
+              <p key={index}>{paragraph}</p>
+            ))}
+        </div>
       </section>
     </div>
   );

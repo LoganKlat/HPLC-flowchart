@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { evaluateRun } from "@/lib/evaluate";
 import { readLabFile, type LabFileRead } from "@/lib/lab-file";
 import {
   decideRetention,
@@ -652,6 +653,91 @@ describe("first-peak time outliers", () => {
     expect(decision.why.toLowerCase()).toContain("fewer than two");
     expect(decision.why).toContain("1.296");
     expect(decision.why).toContain("1.101");
+  });
+});
+
+describe("which run to carry forward after the calculated %B", () => {
+  const rules: RetentionRules = {
+    requiredPeaks: 7,
+    lastPeakTimeMin: 15,
+    minResolution: 1.4,
+    maxBackPressurePsi: 4000,
+  };
+  const seriesFiles = [
+    { percentB: 90, name: "GR41-04-90.csv" },
+    { percentB: 70, name: "GR41-06-70-good.csv" },
+    { percentB: 60, name: "GR41-07-60-good.csv" },
+    { percentB: 50, name: "GR41-08-50-good.csv" },
+    { percentB: 40, name: "GR41-09-40-good.csv" },
+  ] as const;
+  const series = seriesFiles.map((file) =>
+    sampleFromRead(file.percentB, readLabFile(readFileSync(path.join(fixtureDir, file.name)))),
+  );
+  const read40 = readLabFile(readFileSync(path.join(fixtureDir, "GR41-09-40-good.csv")));
+  const read37 = readLabFile(readFileSync(path.join(fixtureDir, "GR41-10-37.csv")));
+
+  it("uses the real 37% and 40% times, and carries forward the 40% run", () => {
+    expect(read37.lastPeakTimeMin).toBeCloseTo(1.602, 3);
+    expect(read37.minResolutionExcludingFirst).toBeCloseTo(0, 3);
+    expect(read40.lastPeakTimeMin).toBeCloseTo(11.593, 3);
+    expect(read40.minResolutionExcludingFirst).toBeCloseTo(0.324, 3);
+    expect(read40.lastPeakTimeMin!).toBeLessThanOrEqual(15);
+    expect(read40.minResolutionExcludingFirst!).toBeGreaterThan(read37.minResolutionExcludingFirst!);
+
+    const check = {
+      requiredPeaks: 7,
+      lastPeakTimeMin: 15,
+      minResolution: 1.4,
+      maxBackPressurePsi: 4000,
+    };
+    const onTime = evaluateRun(read37, check);
+    expect(onTime.find((row) => row.id === "last-peak")?.status).toBe("met");
+    expect(onTime.find((row) => row.id === "last-peak")?.rule).toBe("at or before 15.000 min");
+
+    const past = evaluateRun({ ...read37, lastPeakTimeMin: 18.258 }, check);
+    expect(past.find((row) => row.id === "last-peak")?.measured).toBe("18.258 min");
+    expect(past.find((row) => row.id === "last-peak")?.status).toBe("not-met");
+
+    const calculated = decideRetention(series, rules);
+    expect(calculated.move).toBe("calculated");
+    expect(calculated.nextPercentB).not.toBeNull();
+    const followed = decideRetention(
+      [...series, sampleFromRead(calculated.nextPercentB!, read37)],
+      rules,
+    );
+    expect(followed.reason).toBe("finished-calculated");
+    expect(followed.why).toContain("1.602");
+    expect(followed.why).toContain("Run 5 at 40% B");
+    expect(followed.why).toContain("11.593");
+    expect(followed.why).toContain("0.324");
+    expect(followed.why).toContain("within");
+    expect(followed.nextChange).toContain("Carry forward Run 5 at 40% B");
+    expect(followed.nextChange).toContain("not built yet");
+    expect(followed.nextChange).not.toContain("Carry forward this run");
+  });
+
+  it("does not carry forward a calculated run whose last peak is past the time", () => {
+    const calculated = decideRetention(series, rules);
+    const followed = decideRetention(
+      [
+        ...series,
+        {
+          ...sampleFromRead(calculated.nextPercentB!, read37),
+          lastPeakTimeMin: 18.258,
+          peakCount: 7,
+          minResolutionExcludingFirst: 2,
+        },
+      ],
+      rules,
+    );
+    expect(followed.reason).toBe("finished-calculated");
+    expect(followed.why).toContain("18.258");
+    expect(followed.why.toLowerCase()).toContain("past");
+    expect(followed.why).toContain("Run 5 at 40% B");
+    expect(followed.why).toContain("0.324");
+    expect(followed.nextChange).toContain(
+      `Carry forward Run 5 at 40% B, not this ${calculated.nextPercentB}% B run`,
+    );
   });
 });
 

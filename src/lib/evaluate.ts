@@ -96,18 +96,23 @@ export function evaluateRun(read: LabFileRead, rules: RuleNumbers): ResultRow[] 
       label: "Last peak time",
       measured:
         read.lastPeakTimeMin == null ? "not in the file" : `${formatDecimal(read.lastPeakTimeMin, 3)} min`,
-      rule: rules.lastPeakTimeMin == null ? "not set" : `${formatDecimal(rules.lastPeakTimeMin, 3)} min`,
+      rule:
+        rules.lastPeakTimeMin == null
+          ? "not set"
+          : `at or before ${formatDecimal(rules.lastPeakTimeMin, 3)} min`,
       status: judge(
         rules.lastPeakTimeMin,
         read.lastPeakTimeMin,
         read.lastPeakTimeMin != null &&
           rules.lastPeakTimeMin != null &&
-          read.lastPeakTimeMin >= rules.lastPeakTimeMin,
+          read.lastPeakTimeMin <= rules.lastPeakTimeMin,
       ),
       note:
         read.lastPeakTimeMin == null
           ? "The peak table has no retention times in the R.Time column."
-          : null,
+          : rules.lastPeakTimeMin != null && read.lastPeakTimeMin > rules.lastPeakTimeMin
+            ? "Later than the time you set. That time is the latest the last peak may come out."
+            : null,
     },
     {
       id: "back-pressure",
