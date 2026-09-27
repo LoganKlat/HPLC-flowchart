@@ -6,7 +6,6 @@ import { LaterChangeNote, RetentionDecisionView } from "@/components/retention-d
 import { ResultsPanel } from "@/components/results-panel";
 import { RunForm } from "@/components/run-form";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -112,6 +111,20 @@ export function HplcApp() {
     patchRun(index, { status: "error", fileName, read: null, message });
   }
 
+  function removeFile(index: number) {
+    setActive((current) => Math.min(current, index));
+    setRuns((current) => {
+      const next = current.slice(0, index + 1);
+      const run = next[index];
+      next[index] = {
+        ...emptyRun(),
+        percentB: run.percentB,
+        percentEdited: run.percentEdited,
+      };
+      return next;
+    });
+  }
+
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 py-6 sm:px-6 sm:py-8">
       <header className="mb-5">
@@ -158,6 +171,7 @@ export function HplcApp() {
               onBegin={beginRead}
               onBuffer={acceptBuffer}
               onProblem={acceptProblem}
+              onRemove={removeFile}
               onOpen={(next) => setActive(next)}
             />
           </TabsContent>
@@ -185,6 +199,7 @@ function RunPane({
   onBegin,
   onBuffer,
   onProblem,
+  onRemove,
   onOpen,
 }: {
   index: number;
@@ -204,6 +219,7 @@ function RunPane({
   onBegin: (index: number, fileName: string) => void;
   onBuffer: (index: number, fileName: string, buffer: ArrayBuffer) => void;
   onProblem: (index: number, fileName: string, message: string) => void;
+  onRemove: (index: number) => void;
   onOpen: (index: number) => void;
 }) {
   if (run.afterRetention) {
@@ -219,29 +235,7 @@ function RunPane({
       {index === 0 ? (
         <RunForm details={details} rules={rules} onDetails={onDetails} onRules={onRules} />
       ) : (
-        <>
-          <ColumnReminder details={details} />
-          <RulesReminder rules={rules} />
-          <Card>
-            <CardHeader>
-              <CardTitle>%B for this run</CardTitle>
-              <CardDescription>
-                Filled in from the last recommendation. Change it if this chromatogram was run at a
-                different %B.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="max-w-xs">
-              <Label htmlFor={`run-${index + 1}-percent-b`}>%B</Label>
-              <Input
-                id={`run-${index + 1}-percent-b`}
-                value={run.percentB}
-                inputMode="decimal"
-                className="mt-1.5 h-10"
-                onChange={(event) => onPercent(event.target.value)}
-              />
-            </CardContent>
-          </Card>
-        </>
+        <RunSummary index={index} rules={rules} percentB={run.percentB} onPercent={onPercent} />
       )}
 
       <section
@@ -252,6 +246,16 @@ function RunPane({
       >
         {run.status === "ready" && run.read && rows && run.fileName ? (
           <>
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                className="h-10 px-4"
+                onClick={() => onRemove(index)}
+              >
+                Remove file
+              </Button>
+            </div>
             <ResultsPanel fileName={run.fileName} read={run.read} rows={rows} />
             {decision ? <RetentionDecisionView decision={decision} /> : null}
             {next ? (
@@ -311,27 +315,18 @@ function RunPane({
   );
 }
 
-function ColumnReminder({ details }: { details: RunDetails }) {
-  const bits = [
-    details.ligand.trim() && `Ligand ${details.ligand.trim()}`,
-    details.lengthMm.trim() && details.diameterMm.trim()
-      ? `${details.lengthMm.trim()} × ${details.diameterMm.trim()} mm`
-      : "",
-    details.particleSize.trim() && `${details.particleSize.trim()} µm`,
-    details.solvent.trim(),
-    details.flowRate.trim() && `${details.flowRate.trim()} mL/min`,
-  ].filter((bit): bit is string => Boolean(bit));
-
-  return (
-    <p className="rounded-xl bg-card px-4 py-3 text-sm ring-1 ring-foreground/10">
-      Column and the other starting details stay with every run. Change them on Run 1.
-      {bits.length > 0 ? ` ${bits.join(" · ")}.` : ""}
-    </p>
-  );
-}
-
-function RulesReminder({ rules }: { rules: RuleInputs }) {
-  const bits = [
+function RunSummary({
+  index,
+  rules,
+  percentB,
+  onPercent,
+}: {
+  index: number;
+  rules: RuleInputs;
+  percentB: string;
+  onPercent: (value: string) => void;
+}) {
+  const ruleLine = [
     rules.requiredPeaks.trim() ? `${rules.requiredPeaks.trim()} peaks` : "peak count not set",
     rules.lastPeakTimeMin.trim()
       ? `last peak at or after ${rules.lastPeakTimeMin.trim()} min`
@@ -342,13 +337,28 @@ function RulesReminder({ rules }: { rules: RuleInputs }) {
     rules.maxBackPressurePsi.trim()
       ? `back-pressure at or below ${rules.maxBackPressurePsi.trim()} psi`
       : "back-pressure not set",
-  ];
+  ].join(" · ");
 
   return (
-    <p className="rounded-xl bg-card px-4 py-3 text-sm ring-1 ring-foreground/10">
-      <span className="font-medium">Rules set on Run 1. </span>
-      {bits.join(" · ")}
-    </p>
+    <section id="run-context" className="rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10">
+      <p className="text-sm text-muted-foreground">Starting details stay on Run 1.</p>
+      <p className="mt-1 text-sm leading-snug text-foreground">
+        <span className="font-medium">Rules. </span>
+        {ruleLine}
+      </p>
+      <div className="mt-3 flex items-center gap-3">
+        <Label htmlFor={`run-${index + 1}-percent-b`} className="shrink-0">
+          %B
+        </Label>
+        <Input
+          id={`run-${index + 1}-percent-b`}
+          value={percentB}
+          inputMode="decimal"
+          className="h-10 w-28"
+          onChange={(event) => onPercent(event.target.value)}
+        />
+      </div>
+    </section>
   );
 }
 
