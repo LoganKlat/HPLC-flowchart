@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { ChoiceSelect } from "@/components/choice-select";
 import { FileDrop } from "@/components/file-drop";
 import { LeaveSelectivityAsk, LeaveSelectivityDone } from "@/components/leave-selectivity";
@@ -63,7 +63,28 @@ function emptyRun(): RunState {
   };
 }
 
-const sections = [{ id: "decision-engine", label: "Decision engine" }] as const;
+const sections = [
+  { id: "decision-engine", label: "Decision engine" },
+  { id: "about", label: "About" },
+] as const;
+
+function runTabStyle(selected: boolean, hovered: boolean): CSSProperties {
+  if (selected && hovered) {
+    return { backgroundColor: "#a9d4c4", borderColor: "#0a5644", color: "#144237", fontWeight: 600 };
+  }
+  if (selected) {
+    return { backgroundColor: "#cfe8df", borderColor: "#0f6b56", color: "#144237", fontWeight: 600 };
+  }
+  if (hovered) {
+    return { backgroundColor: "#efe6c4", borderColor: "#b0893e", color: "#3d3416", fontWeight: 600 };
+  }
+  return {
+    backgroundColor: "var(--background)",
+    borderColor: "var(--border)",
+    color: "var(--foreground)",
+    fontWeight: 500,
+  };
+}
 
 export function HplcApp() {
   const [active, setActive] = useState(0);
@@ -74,6 +95,7 @@ export function HplcApp() {
   const [runs, setRuns] = useState<RunState[]>([emptyRun()]);
   const [declinedThrough, setDeclinedThrough] = useState<number | null>(null);
   const [leftSelectivity, setLeftSelectivity] = useState(false);
+  const [hoveredRun, setHoveredRun] = useState<number | null>(null);
 
   const checks = useMemo(() => toRuleNumbers(rules), [rules]);
   const syncedRuns = syncNextRun(runs, details, checks, leftSelectivity);
@@ -218,6 +240,16 @@ export function HplcApp() {
         }}
       />
       <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 py-6 sm:px-6 sm:py-8">
+      {section === "about" ? (
+        <div className="md:hidden">
+          <Button type="button" variant="outline" className="h-10 px-3" onClick={() => setNavOpen(true)}>
+            Sections
+          </Button>
+        </div>
+      ) : null}
+
+      {section === "decision-engine" ? (
+      <>
       <header className="mb-5">
         <div className="mb-3 md:hidden">
           <Button type="button" variant="outline" className="h-10 px-3" onClick={() => setNavOpen(true)}>
@@ -231,8 +263,6 @@ export function HplcApp() {
           the step, the page says what to change next.
         </p>
       </header>
-
-      {section === "decision-engine" ? (
       <Tabs
         value={String(shown)}
         onValueChange={(value) => {
@@ -248,21 +278,9 @@ export function HplcApp() {
                   key={index}
                   value={String(index)}
                   className="h-10! flex-none! rounded-md border border-solid px-4 text-sm shadow-none! transition-none! after:hidden!"
-                  style={
-                    index === shown
-                      ? {
-                          backgroundColor: "#cfe8df",
-                          borderColor: "#0f6b56",
-                          color: "#144237",
-                          fontWeight: 600,
-                        }
-                      : {
-                          backgroundColor: "var(--background)",
-                          borderColor: "var(--border)",
-                          color: "var(--foreground)",
-                          fontWeight: 500,
-                        }
-                  }
+                  style={runTabStyle(index === shown, hoveredRun === index)}
+                  onMouseEnter={() => setHoveredRun(index)}
+                  onMouseLeave={() => setHoveredRun((current) => (current === index ? null : current))}
                 >
                   Run {index + 1}
                 </TabsTrigger>
@@ -301,14 +319,32 @@ export function HplcApp() {
           </TabsContent>
         ))}
       </Tabs>
-      ) : null}
-
       <footer className="mt-10 border-t border-border pt-4 text-xs text-muted-foreground">
         Work for Logan Klat.
       </footer>
+      </>
+      ) : null}
       </div>
     </div>
   );
+}
+
+function sectionTabStyle(selected: boolean, hovered: boolean): CSSProperties {
+  if (selected && hovered) {
+    return { backgroundColor: "#b7d8cb", borderColor: "#0f6b56", color: "#144237", fontWeight: 600 };
+  }
+  if (selected) {
+    return { backgroundColor: "#e7f3ee", borderColor: "#c5ddd2", color: "#144237", fontWeight: 600 };
+  }
+  if (hovered) {
+    return { backgroundColor: "#efe6c4", borderColor: "#b0893e", color: "#3d3416", fontWeight: 600 };
+  }
+  return {
+    backgroundColor: "var(--background)",
+    borderColor: "transparent",
+    color: "var(--foreground)",
+    fontWeight: 500,
+  };
 }
 
 function AppSidebar({
@@ -322,6 +358,7 @@ function AppSidebar({
   onClose: () => void;
   onSelect: (id: (typeof sections)[number]["id"]) => void;
 }) {
+  const [hovered, setHovered] = useState<string | null>(null);
   const nav = (
     <nav aria-label="Sections" className="flex flex-col gap-1">
       <p className="px-3 pb-2 text-xs tracking-[0.14em] text-muted-foreground uppercase">Sections</p>
@@ -332,10 +369,10 @@ function AppSidebar({
             key={item.id}
             type="button"
             aria-current={selected ? "page" : undefined}
-            className={
-              "rounded-lg px-3 py-2 text-left text-sm font-medium " +
-              (selected ? "bg-[#e7f3ee] text-[#144237]" : "text-foreground hover:bg-muted")
-            }
+            className="rounded-lg border border-solid px-3 py-2 text-left text-sm transition-none"
+            style={sectionTabStyle(selected, hovered === item.id)}
+            onMouseEnter={() => setHovered(item.id)}
+            onMouseLeave={() => setHovered((current) => (current === item.id ? null : current))}
             onClick={() => onSelect(item.id)}
           >
             {item.label}
