@@ -50,7 +50,8 @@ describe("stand-in lab file", () => {
   it("calls resolution NA when the file has fewer peaks than required", () => {
     const rows = evaluateRun(read, { ...noRules, requiredPeaks: 5, minResolution: 1.5 });
     const resolution = rows.find((row) => row.id === "resolution");
-    expect(resolution?.measured).toBe("NA");
+    expect(resolution?.measured).toBe("0.000");
+    expect(resolution?.note).toBe("Missing peaks are overlaps, so the minimum resolution is 0.");
     expect(resolution?.status).toBe("not-met");
   });
 
@@ -101,7 +102,10 @@ describe("real LabSolutions exports", () => {
     expect(read.chromatogramMissingMessage).toBeNull();
 
     const short = evaluateRun(read, { ...noRules, requiredPeaks: 7, minResolution: 1 });
-    expect(short.find((row) => row.id === "resolution")?.measured).toBe("NA");
+    expect(short.find((row) => row.id === "resolution")?.measured).toBe("0.000");
+    expect(short.find((row) => row.id === "resolution")?.note).toBe(
+      "Missing peaks are overlaps, so the minimum resolution is 0.",
+    );
     expect(short.find((row) => row.id === "resolution")?.status).toBe("not-met");
   });
 

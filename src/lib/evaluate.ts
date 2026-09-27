@@ -18,22 +18,39 @@ export type ResultRow = {
   note: string | null;
 };
 
+/**
+ * Minimum resolution used for decisions and the results table.
+ * A peak count below the number asked for means a peak was missed. That miss is
+ * an overlap, so the minimum is 0 rather than the smallest Resolution among the
+ * peaks that were integrated.
+ */
+export function resolutionForDecision(
+  peakCount: number | null,
+  foundMinResolution: number | null,
+  requiredPeaks: number | null,
+): number | null {
+  if (requiredPeaks != null && peakCount != null && peakCount < requiredPeaks) return 0;
+  if (foundMinResolution == null || !Number.isFinite(foundMinResolution)) return null;
+  return foundMinResolution;
+}
+
 export function evaluateRun(read: LabFileRead, rules: RuleNumbers): ResultRow[] {
   const peaksShort =
     rules.requiredPeaks != null &&
     read.peakCount != null &&
     read.peakCount < rules.requiredPeaks;
+  const decisionResolution = resolutionForDecision(
+    read.peakCount,
+    read.minResolutionExcludingFirst,
+    rules.requiredPeaks,
+  );
 
-  const resolutionMeasured = peaksShort
-    ? "NA"
-    : read.minResolutionExcludingFirst == null
-      ? "not in the file"
-      : formatDecimal(read.minResolutionExcludingFirst, 3);
+  const resolutionMeasured =
+    decisionResolution == null ? "not in the file" : formatDecimal(decisionResolution, 3);
 
   let resolutionNote: string | null = null;
   if (peaksShort) {
-    resolutionNote =
-      "The file has fewer peaks than you asked for. Missing peaks are treated as overlaps that were not integrated.";
+    resolutionNote = "Missing peaks are overlaps, so the minimum resolution is 0.";
   } else if (!read.resolutionColumnFound) {
     resolutionNote = "The peak table is missing the Resolution column.";
   } else if (read.peakCount != null && read.minResolutionExcludingFirst == null) {
@@ -41,10 +58,9 @@ export function evaluateRun(read: LabFileRead, rules: RuleNumbers): ResultRow[] 
   }
 
   const resolutionMet =
-    !peaksShort &&
-    read.minResolutionExcludingFirst != null &&
+    decisionResolution != null &&
     rules.minResolution != null &&
-    read.minResolutionExcludingFirst >= rules.minResolution;
+    decisionResolution >= rules.minResolution;
 
   const pressureMeasured =
     read.maxBackPressurePsi == null ? "not in the file" : `${formatDecimal(read.maxBackPressurePsi, 1)} psi`;

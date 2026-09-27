@@ -1,4 +1,4 @@
-import { formatDecimal } from "@/lib/evaluate";
+import { formatDecimal, resolutionForDecision } from "@/lib/evaluate";
 
 /**
  * Retention step: choose the next %B, or say retention is finished.
@@ -323,28 +323,28 @@ function chooseCarryRun(
     );
   if (eligible.length === 0) return null;
 
-  const scored = eligible.filter((item) => carryResolution(item.sample, rules.requiredPeaks) != null);
-  const pool = scored.length > 0 ? scored : eligible;
+  const pool = eligible;
   pool.sort((a, b) => {
+    const aMeets = meetsPeakCount(a.sample, rules.requiredPeaks);
+    const bMeets = meetsPeakCount(b.sample, rules.requiredPeaks);
+    if (aMeets !== bMeets) return aMeets ? -1 : 1;
     const aScore = carryResolution(a.sample, rules.requiredPeaks);
     const bScore = carryResolution(b.sample, rules.requiredPeaks);
     if (aScore != null && bScore != null && aScore !== bScore) return bScore - aScore;
     if (aScore != null && bScore == null) return -1;
     if (aScore == null && bScore != null) return 1;
-    const aRaw = a.sample.minResolutionExcludingFirst;
-    const bRaw = b.sample.minResolutionExcludingFirst;
-    if (aRaw != null && bRaw != null && aRaw !== bRaw) return bRaw - aRaw;
     return b.index - a.index;
   });
   return pool[0];
 }
 
-/** Same rule as the results table: too few peaks means the resolution is not usable. */
+function meetsPeakCount(sample: RetentionSample, requiredPeaks: number): boolean {
+  return sample.peakCount != null && sample.peakCount >= requiredPeaks;
+}
+
+/** Same rule as the results table: too few peaks means the minimum resolution is 0. */
 function carryResolution(sample: RetentionSample, requiredPeaks: number): number | null {
-  if (sample.peakCount == null || sample.peakCount < requiredPeaks) return null;
-  const resolution = sample.minResolutionExcludingFirst;
-  if (resolution == null || !Number.isFinite(resolution)) return null;
-  return resolution;
+  return resolutionForDecision(sample.peakCount, sample.minResolutionExcludingFirst, requiredPeaks);
 }
 
 function isPast(measured: number, spec: number): boolean {
@@ -712,7 +712,7 @@ function separationVerdict(
   const count = sample.peakCount;
   const peaksOk = count != null && count >= spec.requiredPeaks;
   const askedResolution = spec.minResolution != null;
-  const resolution = sample.minResolutionExcludingFirst;
+  const resolution = resolutionForDecision(count, sample.minResolutionExcludingFirst, spec.requiredPeaks);
   const resolutionOk =
     !askedResolution ||
     (resolution != null && Number.isFinite(resolution) && resolution >= spec.minResolution!);
@@ -925,10 +925,7 @@ function resolutionIncreased(samples: RetentionSample[], requiredPeaks: number):
 }
 
 function usableResolution(sample: RetentionSample, requiredPeaks: number): number | null {
-  if (sample.peakCount == null || sample.peakCount < requiredPeaks) return null;
-  const resolution = sample.minResolutionExcludingFirst;
-  if (resolution == null || !Number.isFinite(resolution)) return null;
-  return resolution;
+  return resolutionForDecision(sample.peakCount, sample.minResolutionExcludingFirst, requiredPeaks);
 }
 
 function blankRules(rules: RetentionRules): string[] {

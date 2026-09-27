@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { evaluateRun } from "@/lib/evaluate";
 import { readLabFile, type LabFileRead } from "@/lib/lab-file";
 import {
+  carryForwardIndex,
   decideRetention,
   roundTargetPercent,
   type RetentionRules,
@@ -714,6 +715,27 @@ describe("which run to carry forward after the calculated %B", () => {
     expect(followed.nextChange).toContain("Carry forward Run 5 at 40% B");
     expect(followed.nextChange).toContain("not built yet");
     expect(followed.nextChange).not.toContain("Carry forward this run");
+  });
+
+  it("does not let a short run with a high found resolution beat a run that has enough peaks", () => {
+    const index = carryForwardIndex(
+      [
+        sample({
+          percentB: 40,
+          peakCount: 7,
+          lastPeakTimeMin: 10,
+          minResolutionExcludingFirst: null,
+        }),
+        sample({
+          percentB: 38,
+          peakCount: 6,
+          lastPeakTimeMin: 10,
+          minResolutionExcludingFirst: 2.3,
+        }),
+      ],
+      rules,
+    );
+    expect(index).toBe(0);
   });
 
   it("does not carry forward a calculated run whose last peak is past the time", () => {

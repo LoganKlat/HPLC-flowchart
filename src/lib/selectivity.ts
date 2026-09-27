@@ -1,3 +1,4 @@
+import { resolutionForDecision } from "@/lib/evaluate";
 import { carryForwardIndex, decideRetention, formatPercentB, roundTargetPercent, type RetentionRules, type RetentionSample } from "@/lib/retention";
 
 /**
@@ -374,8 +375,8 @@ function walkTemperature(args: {
   if (assessHappy(step2, args.setup).happy) {
     return { type: "plan", plan: finishedPlan(step2, args.baseNumber + 1, args.setup) };
   }
-  const better = improved(args.baseline, [step1, step2]);
-  if (!better.peaks && !better.resolution) {
+  const better = hotRunHelped(args.baseline, step2, args.setup.requiredPeaks);
+  if (!better.ok) {
     return { type: "advance", consumed: 2 };
   }
   if (args.pending.length === 2) {
@@ -508,7 +509,7 @@ function plan60(
   percentB: number,
   solvent: string,
   ligand: string,
-  better: { peaks: boolean; resolution: boolean },
+  better: { peaks: boolean; resolution: boolean; ok: boolean },
   heated: SelectivityRun[],
 ): SelectivityPlan {
   const percent = formatPercentB(percentB);
@@ -523,7 +524,7 @@ function plan60(
     nextChange: `Run the next chromatogram at 60°C, at ${percent}% B.`,
     why: [
       `${what} at 40°C compared with Run ${args.baselineNumber}, the run from before the temperature change.`,
-      compareSentence(args.baseline, args.baselineNumber, heated),
+      compareSentence(args.baseline, args.baselineNumber, heated, args.setup.requiredPeaks),
       `The next run stays at ${percent}% B and the column temperature goes to 60°C.`,
     ].join(" "),
     prefill: { percentB: percent, temperature: "60", solvent, ligand },
@@ -584,9 +585,7 @@ function solventPlan(args: {
       ? `Go back to ${args.ambient.celsius}°C and change the solvent to ${recommended.name} at ${percentText}% B.`
       : `Go back to ${args.ambient.celsius}°C and change the solvent. Pick the new solvent from the list.`,
     why: [
-      args.skipped60
-        ? `The 40°C runs did not raise the peak count or the minimum resolution compared with Run ${args.anchorNumber}. 60°C is skipped. ${compareSentence(args.anchor, args.anchorNumber, args.heated)}`
-        : "The runs at 40°C and 60°C still do not meet both checks, so the solvent is changed.",
+      solventLead(args),
       formula + cap,
       args.ambient.sentence,
     ].join(" "),
@@ -698,53 +697,103 @@ function peakSentence(run: SelectivityRun, setup: SelectivitySetup, check: Happy
 }
 
 function resolutionSentence(run: SelectivityRun, setup: SelectivitySetup, check: HappyCheck): string {
+  if (
+    setup.requiredPeaks != null &&
+    run.peakCount != null &&
+    run.peakCount < setup.requiredPeaks
+  ) {
+    return "It has fewer peaks than you asked for, so its minimum resolution is 0. Missing peaks are overlaps.";
+  }
   if (check.missingResolutionRule || setup.minResolution == null || check.cutoff == null) {
     return "You did not type a minimum resolution, so resolution cannot be judged and the run is not treated as finished.";
   }
   const cutoff = formatResolution(check.cutoff);
   const asked = formatResolution(setup.minResolution);
-  if (run.minResolutionExcludingFirst == null) {
+  const decision = resolutionForDecision(
+    run.peakCount,
+    run.minResolutionExcludingFirst,
+    setup.requiredPeaks,
+  );
+  if (decision == null) {
     return `Its minimum resolution is missing. It needs to be above ${cutoff} (70% of the ${asked} you set).`;
   }
-  const measured = formatResolution(run.minResolutionExcludingFirst);
-  if (run.minResolutionExcludingFirst > check.cutoff) {
+  const measured = formatResolution(decision);
+  if (decision > check.cutoff) {
     return `Its minimum resolution is ${measured}, above ${cutoff} (70% of the ${asked} you set).`;
   }
   return `Its minimum resolution is ${measured}. It needs to be above ${cutoff} (70% of the ${asked} you set).`;
 }
 
-function compareSentence(baseline: SelectivityRun, baselineNumber: number, heated: SelectivityRun[]): string {
-  const before = measurementPhrase(baseline);
-  const after = heated.map((run) => measurementPhrase(run)).join("; ");
+function solventLead(args: {
+  anchor: SelectivityRun;
+  anchorNumber: number;
+  setup: SelectivitySetup;
+  skipped60: boolean;
+  heated: SelectivityRun[];
+}): string {
+  if (!args.skipped60) {
+    return "The runs at 40°C and 60°C still do not meet both checks, so the solvent is changed.";
+  }
+  const hot = args.heated[args.heated.length - 1];
+  const short =
+    hot != null &&
+    args.setup.requiredPeaks != null &&
+    hot.peakCount != null &&
+    hot.peakCount < args.setup.requiredPeaks;
+  const fewerThanBefore =
+    hot != null &&
+    args.anchor.peakCount != null &&
+    hot.peakCount != null &&
+    hot.peakCount < args.anchor.peakCount;
+  const compared = compareSentence(args.anchor, args.anchorNumber, args.heated, args.setup.requiredPeaks);
+  if (short) {
+    return `The 40°C run is worse because it has fewer peaks, so its minimum resolution is 0. The next step is a new solvent. ${compared}`;
+  }
+  if (fewerThanBefore) {
+    return `The 40°C run is worse because it has fewer peaks than Run ${args.anchorNumber}. 60°C is skipped. The next step is a new solvent. ${compared}`;
+  }
+  return `The 40°C runs did not raise the peak count or the minimum resolution compared with Run ${args.anchorNumber}. 60°C is skipped. ${compareSentence(args.anchor, args.anchorNumber, args.heated, args.setup.requiredPeaks)}`;
+}
+
+function compareSentence(
+  baseline: SelectivityRun,
+  baselineNumber: number,
+  heated: SelectivityRun[],
+  requiredPeaks: number | null,
+): string {
+  const before = measurementPhrase(baseline, requiredPeaks);
+  const after = heated.map((run) => measurementPhrase(run, requiredPeaks)).join("; ");
   return `Run ${baselineNumber} had ${before}. The 40°C runs had ${after}.`;
 }
 
-function measurementPhrase(run: SelectivityRun): string {
+function measurementPhrase(run: SelectivityRun, requiredPeaks: number | null): string {
   const peaks = run.peakCount == null ? "no peak count" : `${formatCount(run.peakCount)} peaks`;
-  const resolution =
-    run.minResolutionExcludingFirst == null
-      ? "no minimum resolution"
-      : `minimum resolution ${formatResolution(run.minResolutionExcludingFirst)}`;
-  return `${peaks}, ${resolution}`;
+  const resolution = resolutionForDecision(run.peakCount, run.minResolutionExcludingFirst, requiredPeaks);
+  const resolutionText =
+    resolution == null ? "no minimum resolution" : `minimum resolution ${formatResolution(resolution)}`;
+  return `${peaks}, ${resolutionText}`;
 }
 
-function improved(
+/** 60°C only if the lower-%B 40°C run actually helped versus the run from before the heat. */
+function hotRunHelped(
   baseline: SelectivityRun,
-  heated: SelectivityRun[],
-): { peaks: boolean; resolution: boolean } {
-  let peaks = false;
-  let resolution = false;
-  for (const run of heated) {
-    if (baseline.peakCount != null && run.peakCount != null && run.peakCount > baseline.peakCount) peaks = true;
-    if (
-      baseline.minResolutionExcludingFirst != null &&
-      run.minResolutionExcludingFirst != null &&
-      run.minResolutionExcludingFirst > baseline.minResolutionExcludingFirst
-    ) {
-      resolution = true;
-    }
-  }
-  return { peaks, resolution };
+  hot: SelectivityRun,
+  requiredPeaks: number | null,
+): { ok: boolean; peaks: boolean; resolution: boolean } {
+  const dropped =
+    baseline.peakCount != null && hot.peakCount != null && hot.peakCount < baseline.peakCount;
+  const short = requiredPeaks != null && hot.peakCount != null && hot.peakCount < requiredPeaks;
+  const peaksUp =
+    baseline.peakCount != null && hot.peakCount != null && hot.peakCount > baseline.peakCount;
+  const baseRes = resolutionForDecision(
+    baseline.peakCount,
+    baseline.minResolutionExcludingFirst,
+    requiredPeaks,
+  );
+  const hotRes = resolutionForDecision(hot.peakCount, hot.minResolutionExcludingFirst, requiredPeaks);
+  const resolutionUp = baseRes != null && hotRes != null && hotRes > baseRes;
+  const ok = !dropped && !short && (peaksUp || resolutionUp);
+  return { ok, peaks: ok && peaksUp, resolution: ok && resolutionUp };
 }
 
 type Ambient = { celsius: number; assumed: boolean; sentence: string };

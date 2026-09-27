@@ -1,4 +1,9 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { evaluateRun, resolutionForDecision } from "@/lib/evaluate";
+import { readLabFile } from "@/lib/lab-file";
+import { carryForwardIndex } from "@/lib/retention";
 import {
   SOLVENTS,
   adjustedPercentB,
@@ -257,6 +262,98 @@ describe("selectivity plan", () => {
     expect(history.plan.nextChange).toContain("100% B");
     expect(history.plan.why).toContain("C18");
     expect(recommendLigand(["C18", "C8"])).toBe("C4");
+  });
+
+  it("treats the 38% 40°C file as worse than the ambient 40% file and changes solvent", () => {
+    const dir = path.join(process.cwd(), "fixtures/selectivity");
+    const ambient = readLabFile(readFileSync(path.join(dir, "GR41-09-40-ambient.csv")));
+    const hot = readLabFile(readFileSync(path.join(dir, "GR41-15-38-40C.csv")));
+    expect(ambient.peakCount).toBe(7);
+    expect(ambient.minResolutionExcludingFirst).toBeCloseTo(0.324, 3);
+    expect(hot.peakCount).toBe(6);
+    expect(hot.minResolutionExcludingFirst).toBeCloseTo(2.312, 3);
+    expect(resolutionForDecision(ambient.peakCount, ambient.minResolutionExcludingFirst, 7)).toBeCloseTo(0.324, 3);
+    expect(resolutionForDecision(hot.peakCount, hot.minResolutionExcludingFirst, 7)).toBe(0);
+
+    const hotRow = evaluateRun(hot, {
+      requiredPeaks: 7,
+      lastPeakTimeMin: 15,
+      minResolution: 1,
+      maxBackPressurePsi: 4000,
+    }).find((row) => row.id === "resolution");
+    expect(hotRow?.measured).toBe("0.000");
+    expect(hotRow?.note).toBe("Missing peaks are overlaps, so the minimum resolution is 0.");
+
+    const carryRules = {
+      requiredPeaks: 7,
+      lastPeakTimeMin: 15,
+      minResolution: 1,
+      maxBackPressurePsi: 4000,
+    };
+    const carried = carryForwardIndex(
+      [
+        {
+          percentB: 38,
+          peakCount: hot.peakCount,
+          lastPeakTimeMin: hot.lastPeakTimeMin,
+          firstPeakTimeMin: hot.firstPeakTimeMin,
+          minResolutionExcludingFirst: hot.minResolutionExcludingFirst,
+          maxBackPressurePsi: hot.maxBackPressurePsi,
+        },
+        {
+          percentB: 40,
+          peakCount: ambient.peakCount,
+          lastPeakTimeMin: ambient.lastPeakTimeMin,
+          firstPeakTimeMin: ambient.firstPeakTimeMin,
+          minResolutionExcludingFirst: ambient.minResolutionExcludingFirst,
+          maxBackPressurePsi: ambient.maxBackPressurePsi,
+        },
+      ],
+      carryRules,
+    );
+    expect(carried).toBe(1);
+
+    const rules: SelectivitySetup = {
+      requiredPeaks: 7,
+      lastPeakTimeMin: ambient.lastPeakTimeMin,
+      minResolution: 1,
+      maxBackPressurePsi: 4000,
+      ambientTemperatureC: 25,
+      originalSolvent: "Acetonitrile",
+      originalLigand: "C18",
+    };
+    const fromFile = (
+      read: typeof ambient,
+      percentB: number,
+      temperatureC: number,
+    ): SelectivityRun => ({
+      percentB,
+      temperatureC,
+      solvent: "Acetonitrile",
+      ligand: "C18",
+      peakCount: read.peakCount,
+      lastPeakTimeMin: read.lastPeakTimeMin,
+      firstPeakTimeMin: read.firstPeakTimeMin,
+      minResolutionExcludingFirst: read.minResolutionExcludingFirst,
+      maxBackPressurePsi: read.maxBackPressurePsi,
+    });
+    const history = planHistory(
+      [
+        fromFile(ambient, 40, 25),
+        fromFile(hot, 40, 40),
+        fromFile(hot, 38, 40),
+      ],
+      rules,
+    );
+    expect(history.phase).toBe("selectivity");
+    if (history.phase !== "selectivity") return;
+    expect(history.plan.step).toBe("solvent");
+    expect(history.plan.step).not.toBe("temp-60");
+    expect(history.plan.nextChange.toLowerCase()).not.toContain("60°c");
+    expect(history.plan.why).toContain("worse because it has fewer peaks");
+    expect(history.plan.why).toContain("minimum resolution is 0");
+    expect(history.plan.why).toContain("new solvent");
+    expect(history.plan.why).not.toContain("2.312");
   });
 
   it("uses 25°C when Run 1 has no temperature", () => {
