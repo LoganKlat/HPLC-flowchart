@@ -85,6 +85,8 @@ describe("retention %B along the four lab files", () => {
     expect(decision.fit!.rows.map((row) => row.runNumber)).toEqual([2, 3, 4]);
     expect(decision.fit!.excluded.map((row) => row.percentB)).toEqual([70]);
     expect(decision.why.toLowerCase()).toContain("left out once");
+    expect(decision.why.toLowerCase()).toContain("overlapping");
+    expect(decision.why).toContain("still under the 8 you asked for");
 
     const k60 = (2.779 - 1.088) / 1.088;
     const k50 = (4.918 - 1.084) / 1.084;
@@ -334,6 +336,156 @@ describe("retention rule edges", () => {
     expect(decision.move).toBe("calculated");
     expect(decision.fit!.excluded.map((row) => row.runNumber)).toEqual([1, 3]);
     expect(decision.fit!.rows.map((row) => row.runNumber)).toEqual([2, 4]);
+    expect(decision.why).toContain("Run 1 at 40% B is the first run");
+    expect(decision.why).toContain("Run 3 at 60% B has the highest %B");
+    expect(decision.why.toLowerCase()).toContain("overlapping");
+  });
+
+  it("keeps the first run in the fit when it meets the peak count and resolution", () => {
+    const rules: RetentionRules = {
+      requiredPeaks: 6,
+      minResolution: 1.2,
+      lastPeakTimeMin: 10,
+      maxBackPressurePsi: 500,
+    };
+    const decision = decideRetention(
+      [
+        sample({
+          percentB: 70,
+          peakCount: 6,
+          minResolutionExcludingFirst: 1.5,
+          lastPeakTimeMin: 2.2,
+          firstPeakTimeMin: 1,
+        }),
+        sample({
+          percentB: 60,
+          peakCount: 6,
+          minResolutionExcludingFirst: 1.4,
+          lastPeakTimeMin: 3.5,
+          firstPeakTimeMin: 1,
+        }),
+        sample({
+          percentB: 50,
+          peakCount: 6,
+          minResolutionExcludingFirst: 1.6,
+          lastPeakTimeMin: 5,
+          firstPeakTimeMin: 1,
+        }),
+        sample({
+          percentB: 40,
+          peakCount: 7,
+          minResolutionExcludingFirst: 1.8,
+          lastPeakTimeMin: 9,
+          firstPeakTimeMin: 1,
+        }),
+      ],
+      rules,
+    );
+    expect(decision.move).toBe("calculated");
+    expect(decision.fit!.excluded).toEqual([]);
+    expect(decision.fit!.rows.map((row) => row.percentB)).toEqual([70, 60, 50, 40]);
+    expect(decision.why).toContain("checked once");
+    expect(decision.why.toLowerCase()).toContain("kept");
+    expect(decision.why).toContain("enough peaks");
+    expect(decision.why).toContain("1.500");
+    expect(decision.why).toContain("1.200");
+  });
+
+  it("leaves the first run out when the peak count is still short", () => {
+    const rules: RetentionRules = {
+      requiredPeaks: 6,
+      minResolution: 1.2,
+      lastPeakTimeMin: 10,
+      maxBackPressurePsi: 500,
+    };
+    const decision = decideRetention(
+      [
+        sample({
+          percentB: 70,
+          peakCount: 4,
+          minResolutionExcludingFirst: 0.8,
+          lastPeakTimeMin: 2.2,
+          firstPeakTimeMin: 1,
+        }),
+        sample({
+          percentB: 60,
+          peakCount: 6,
+          minResolutionExcludingFirst: 1.4,
+          lastPeakTimeMin: 3.5,
+          firstPeakTimeMin: 1,
+        }),
+        sample({
+          percentB: 50,
+          peakCount: 6,
+          minResolutionExcludingFirst: 1.6,
+          lastPeakTimeMin: 5,
+          firstPeakTimeMin: 1,
+        }),
+        sample({
+          percentB: 40,
+          peakCount: 7,
+          minResolutionExcludingFirst: 1.8,
+          lastPeakTimeMin: 9,
+          firstPeakTimeMin: 1,
+        }),
+      ],
+      rules,
+    );
+    expect(decision.move).toBe("calculated");
+    expect(decision.fit!.excluded.map((row) => row.runNumber)).toEqual([1]);
+    expect(decision.fit!.rows.map((row) => row.percentB)).toEqual([60, 50, 40]);
+    expect(decision.why.toLowerCase()).toContain("left out");
+    expect(decision.why.toLowerCase()).toContain("overlapping");
+    expect(decision.why).toContain("left out once");
+  });
+
+  it("keeps a separated first run and leaves out a different highest %B run that is still overlapping", () => {
+    const rules: RetentionRules = {
+      requiredPeaks: 6,
+      minResolution: 1.2,
+      lastPeakTimeMin: 10,
+      maxBackPressurePsi: 500,
+    };
+    const decision = decideRetention(
+      [
+        sample({
+          percentB: 40,
+          peakCount: 6,
+          minResolutionExcludingFirst: 1.5,
+          lastPeakTimeMin: 8,
+          firstPeakTimeMin: 1,
+        }),
+        sample({
+          percentB: 50,
+          peakCount: 6,
+          minResolutionExcludingFirst: 1.4,
+          lastPeakTimeMin: 6,
+          firstPeakTimeMin: 1,
+        }),
+        sample({
+          percentB: 70,
+          peakCount: 3,
+          minResolutionExcludingFirst: 0.4,
+          lastPeakTimeMin: 3,
+          firstPeakTimeMin: 1,
+        }),
+        sample({
+          percentB: 55,
+          peakCount: 6,
+          minResolutionExcludingFirst: 1.6,
+          lastPeakTimeMin: 7,
+          firstPeakTimeMin: 1,
+        }),
+      ],
+      rules,
+    );
+    expect(decision.move).toBe("calculated");
+    expect(decision.fit!.excluded.map((row) => row.runNumber)).toEqual([3]);
+    expect(decision.fit!.rows.map((row) => row.runNumber)).toEqual([1, 2, 4]);
+    expect(decision.why).toContain("Run 1 at 40% B is the first run");
+    expect(decision.why.toLowerCase()).toContain("kept");
+    expect(decision.why).toContain("Run 3 at 70% B has the highest %B");
+    expect(decision.why.toLowerCase()).toContain("overlapping");
   });
 
   it("holds a calculated %B inside 0 to 100 and says so", () => {

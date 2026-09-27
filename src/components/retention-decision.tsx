@@ -24,6 +24,43 @@ export function RetentionDecisionView({ decision }: { decision: RetentionDecisio
   );
 }
 
+export function StartHighBNote({ lastPeakTimeMin }: { lastPeakTimeMin: number | null }) {
+  const under =
+    lastPeakTimeMin == null
+      ? "66% of the last-peak time you type"
+      : `66% of the ${trimNumber(lastPeakTimeMin)} min you typed`;
+  const full =
+    lastPeakTimeMin == null
+      ? "the full time you type"
+      : `the full ${trimNumber(lastPeakTimeMin)} min you typed`;
+
+  return (
+    <div className="flex flex-col gap-4" id="start-high-b">
+      <section
+        id="next-change"
+        className="scroll-mt-16 rounded-xl bg-[#e7f3ee] px-4 py-4 text-[#144237]"
+      >
+        <h2 className="font-heading text-base">Next change</h2>
+        <p className="mt-1 text-sm leading-relaxed">
+          Start the first run at a high %B, from 90% to 100% B.
+        </p>
+      </section>
+      <section className="rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10">
+        <h2 className="font-heading text-base">Why</h2>
+        <p className="mt-1 text-sm leading-relaxed text-foreground">
+          At that high %B the peaks will probably sit on top of each other, and the last peak will
+          come out early. Then %B is lowered by 10 points while the last peak is still under {under}.
+          After that, the page calculates the %B that should land the last peak on {full}.
+        </p>
+      </section>
+    </div>
+  );
+}
+
+function trimNumber(value: number): string {
+  return Number.isInteger(value) ? String(value) : String(value);
+}
+
 export function LaterChangeNote() {
   return (
     <div className="flex flex-col gap-4">

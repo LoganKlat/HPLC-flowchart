@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { FileDrop } from "@/components/file-drop";
-import { LaterChangeNote, RetentionDecisionView } from "@/components/retention-decision";
+import { LaterChangeNote, RetentionDecisionView, StartHighBNote } from "@/components/retention-decision";
 import { ResultsPanel } from "@/components/results-panel";
 import { RunForm } from "@/components/run-form";
 import { Button } from "@/components/ui/button";
@@ -36,8 +36,12 @@ function emptyRun(): RunState {
   };
 }
 
+const sections = [{ id: "decision-engine", label: "Decision engine" }] as const;
+
 export function HplcApp() {
   const [active, setActive] = useState(0);
+  const [section, setSection] = useState<(typeof sections)[number]["id"]>("decision-engine");
+  const [navOpen, setNavOpen] = useState(false);
   const [details, setDetails] = useState<RunDetails>(emptyRunDetails);
   const [rules, setRules] = useState<RuleInputs>(emptyRuleInputs);
   const [runs, setRuns] = useState<RunState[]>([emptyRun()]);
@@ -48,6 +52,7 @@ export function HplcApp() {
       requiredPeaks: checks.requiredPeaks,
       lastPeakTimeMin: checks.lastPeakTimeMin,
       maxBackPressurePsi: checks.maxBackPressurePsi,
+      minResolution: checks.minResolution,
     }),
     [checks],
   );
@@ -126,8 +131,23 @@ export function HplcApp() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 py-6 sm:px-6 sm:py-8">
+    <div className="flex min-h-dvh flex-1 flex-col md:flex-row">
+      <AppSidebar
+        open={navOpen}
+        section={section}
+        onClose={() => setNavOpen(false)}
+        onSelect={(id) => {
+          setSection(id);
+          setNavOpen(false);
+        }}
+      />
+      <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 py-6 sm:px-6 sm:py-8">
       <header className="mb-5">
+        <div className="mb-3 md:hidden">
+          <Button type="button" variant="outline" className="h-10 px-3" onClick={() => setNavOpen(true)}>
+            Sections
+          </Button>
+        </div>
         <p className="text-xs tracking-[0.16em] text-[#0f6b56] uppercase">Composite sample</p>
         <h1 className="mt-1 font-heading text-3xl text-foreground sm:text-4xl">HPLC run check</h1>
         <p className="mt-2 max-w-2xl text-base text-muted-foreground">
@@ -136,6 +156,7 @@ export function HplcApp() {
         </p>
       </header>
 
+      {section === "decision-engine" ? (
       <Tabs
         value={String(shown)}
         onValueChange={(value) => {
@@ -177,11 +198,74 @@ export function HplcApp() {
           </TabsContent>
         ))}
       </Tabs>
+      ) : null}
 
       <footer className="mt-10 border-t border-border pt-4 text-xs text-muted-foreground">
         Work for Logan Klat.
       </footer>
+      </div>
     </div>
+  );
+}
+
+function AppSidebar({
+  open,
+  section,
+  onClose,
+  onSelect,
+}: {
+  open: boolean;
+  section: (typeof sections)[number]["id"];
+  onClose: () => void;
+  onSelect: (id: (typeof sections)[number]["id"]) => void;
+}) {
+  const nav = (
+    <nav aria-label="Sections" className="flex flex-col gap-1">
+      <p className="px-3 pb-2 text-xs tracking-[0.14em] text-muted-foreground uppercase">Sections</p>
+      {sections.map((item) => {
+        const selected = item.id === section;
+        return (
+          <button
+            key={item.id}
+            type="button"
+            aria-current={selected ? "page" : undefined}
+            className={
+              "rounded-lg px-3 py-2 text-left text-sm font-medium " +
+              (selected ? "bg-[#e7f3ee] text-[#144237]" : "text-foreground hover:bg-muted")
+            }
+            onClick={() => onSelect(item.id)}
+          >
+            {item.label}
+          </button>
+        );
+      })}
+    </nav>
+  );
+
+  return (
+    <>
+      <aside className="hidden w-60 shrink-0 border-r border-border bg-card md:block">
+        <div className="sticky top-0 px-3 py-6">{nav}</div>
+      </aside>
+      {open ? (
+        <div className="fixed inset-0 z-40 md:hidden">
+          <button
+            type="button"
+            aria-label="Close sections"
+            className="absolute inset-0 bg-black/40"
+            onClick={onClose}
+          />
+          <aside className="relative z-10 flex h-full w-72 max-w-[85vw] flex-col border-r border-border bg-card px-3 py-4 shadow-lg">
+            <div className="mb-4 flex justify-end">
+              <Button type="button" variant="outline" className="h-9 px-3" onClick={onClose}>
+                Close
+              </Button>
+            </div>
+            {nav}
+          </aside>
+        </div>
+      ) : null}
+    </>
   );
 }
 
@@ -232,6 +316,9 @@ function RunPane({
 
   return (
     <>
+      {index === 0 && run.status === "empty" ? (
+        <StartHighBNote lastPeakTimeMin={checks.lastPeakTimeMin} />
+      ) : null}
       {index === 0 ? (
         <RunForm details={details} rules={rules} onDetails={onDetails} onRules={onRules} />
       ) : (

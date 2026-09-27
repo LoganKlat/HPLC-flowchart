@@ -2,7 +2,9 @@ import { formatDecimal } from "@/lib/evaluate";
 
 /**
  * Retention step: choose the next %B, or say retention is finished.
- * Resolution on the results table is separate. The typed resolution rule is not used here.
+ * The typed minimum resolution does not finish this step. It is used only to
+ * decide whether the first run, or the highest-%B run, can be left out of the
+ * line once there are more than three chromatograms.
  */
 
 export type RetentionSample = {
@@ -18,6 +20,8 @@ export type RetentionRules = {
   requiredPeaks: number | null;
   lastPeakTimeMin: number | null;
   maxBackPressurePsi: number | null;
+  /** Blank means good separation is peak count only. */
+  minResolution?: number | null;
 };
 
 export type RetentionFitRow = {
@@ -77,6 +81,12 @@ type CompleteRules = {
   requiredPeaks: number;
   lastPeakTimeMin: number;
   maxBackPressurePsi: number;
+  minResolution: number | null;
+};
+
+type SeparationSpec = {
+  requiredPeaks: number | null;
+  minResolution: number | null;
 };
 
 export function decideRetention(
@@ -100,7 +110,12 @@ export function decideRetention(
       missingRules.join(" "),
     );
   }
-  const complete = rules as CompleteRules;
+  const complete: CompleteRules = {
+    requiredPeaks: rules.requiredPeaks!,
+    lastPeakTimeMin: rules.lastPeakTimeMin!,
+    maxBackPressurePsi: rules.maxBackPressurePsi!,
+    minResolution: rules.minResolution ?? null,
+  };
 
   if (current.percentB == null) {
     return blocked(
@@ -290,7 +305,8 @@ function calculatePercentB(samples: RetentionSample[], rules: CompleteRules): Re
     return dropPoints(samples, rules, 5, "drop-5");
   }
 
-  const picked = selectForLine(samples);
+  const spec = separationSpecFrom(rules);
+  const picked = selectForLine(samples, spec);
   const rows: RetentionFitRow[] = [];
   const skipped: string[] = [];
   for (const item of picked.kept) {
@@ -384,7 +400,9 @@ function calculatePercentB(samples: RetentionSample[], rules: CompleteRules): Re
     nextChange += " The calculated value was below 0, so it is held at 0.";
   }
 
-  const why = [...intro, exclusionSentence(samples, fit), calculationSentence(fit)].join("\n\n");
+  const why = [...intro, fitMembershipSentence(samples, fit, spec), calculationSentence(fit)].join(
+    "\n\n",
+  );
 
   return {
     status: "recommend",
@@ -448,26 +466,40 @@ function resolutionStopWhy(samples: RetentionSample[], rules: CompleteRules): st
   return `${peakText} Minimum resolution is ${formatResolution(currentResolution)}, which is not higher than ${formatResolution(previousResolution)} on the previous run.`;
 }
 
-function exclusionSentence(samples: RetentionSample[], fit: RetentionFit): string {
+function fitMembershipSentence(
+  samples: RetentionSample[],
+  fit: RetentionFit,
+  spec: SeparationSpec,
+): string {
   const used = fit.rows
     .map((row) => `Run ${row.runNumber} at ${formatPercentB(row.percentB)}% B`)
     .join(", ");
   if (samples.length <= 3) {
-    const howMany = samples.length === 2 ? "Both chromatograms are used" : "All three chromatograms are used";
+    const howMany =
+      samples.length === 2 ? "Both chromatograms are used" : "All three chromatograms are used";
     return `${howMany}. ${used}.`;
   }
-  if (fit.excluded.length === 1) {
-    const item = fit.excluded[0];
-    const percent = item.percentB == null ? "" : ` at ${formatPercentB(item.percentB)}% B`;
-    return `There are ${formatCount(samples.length)} chromatograms, so the first run and the run with the highest %B are left out. Those are the same run (Run ${item.runNumber}${percent}), so it is left out once. The calculation uses ${used}.`;
+
+  const highest = highestPercentIndex(samples);
+  const parts = [`There are ${formatCount(samples.length)} chromatograms.`];
+  if (highest === 0) {
+    const verdict = separationVerdict(samples[0], spec);
+    let line = `${runLabel(0, samples[0])} is the first run and also the highest %B, so that run is checked once. ${verdict.sentence}`;
+    if (!verdict.keep) line += " It is left out once.";
+    parts.push(line);
+  } else {
+    const first = separationVerdict(samples[0], spec);
+    parts.push(`${runLabel(0, samples[0])} is the first run. ${first.sentence}`);
+    const high = separationVerdict(samples[highest], spec);
+    parts.push(`${runLabel(highest, samples[highest])} has the highest %B. ${high.sentence}`);
   }
-  const leftOut = fit.excluded
-    .map((item) => {
-      const percent = item.percentB == null ? "" : ` at ${formatPercentB(item.percentB)}% B`;
-      return `Run ${item.runNumber}${percent} (${item.reason})`;
-    })
-    .join("; ");
-  return `There are ${formatCount(samples.length)} chromatograms, so the first run and the run with the highest %B are left out: ${leftOut}. The calculation uses ${used}.`;
+  parts.push(`The calculation uses ${used}.`);
+  return parts.join(" ");
+}
+
+function runLabel(index: number, sample: RetentionSample): string {
+  const percent = sample.percentB == null ? "" : ` at ${formatPercentB(sample.percentB)}% B`;
+  return `Run ${index + 1}${percent}`;
 }
 
 function calculationSentence(fit: RetentionFit): string {
@@ -495,48 +527,108 @@ type IndexedSample = {
   sample: RetentionSample;
 };
 
-function selectForLine(samples: RetentionSample[]): {
-  kept: IndexedSample[];
-  excluded: RetentionExclusion[];
-} {
-  const indexed = samples.map((sample, index) => ({ runNumber: index + 1, sample }));
-  if (samples.length <= 3) return { kept: indexed, excluded: [] };
+function separationSpecFrom(rules: {
+  requiredPeaks: number | null;
+  minResolution?: number | null;
+}): SeparationSpec {
+  return {
+    requiredPeaks: rules.requiredPeaks,
+    minResolution: rules.minResolution ?? null,
+  };
+}
 
+function highestPercentIndex(samples: RetentionSample[]): number {
   let highest = 0;
   for (let i = 1; i < samples.length; i++) {
     const percent = samples[i].percentB;
     const best = samples[highest].percentB;
     if (percent != null && (best == null || percent > best)) highest = i;
   }
+  return highest;
+}
+
+function separationVerdict(
+  sample: RetentionSample,
+  spec: SeparationSpec,
+): { keep: boolean; sentence: string } {
+  if (spec.requiredPeaks == null) {
+    return {
+      keep: true,
+      sentence:
+        "It is kept because the number of peaks to separate is blank, so it is not left out for how well the peaks are split.",
+    };
+  }
+
+  const count = sample.peakCount;
+  const peaksOk = count != null && count >= spec.requiredPeaks;
+  const askedResolution = spec.minResolution != null;
+  const resolution = sample.minResolutionExcludingFirst;
+  const resolutionOk =
+    !askedResolution ||
+    (resolution != null && Number.isFinite(resolution) && resolution >= spec.minResolution!);
+
+  if (peaksOk && resolutionOk) {
+    if (askedResolution) {
+      return {
+        keep: true,
+        sentence: `It is kept because it has enough peaks (${formatCount(count!)} of the ${formatCount(spec.requiredPeaks)} you asked for) and the smallest resolution after the first peak (${formatResolution(resolution!)}) meets the ${formatResolution(spec.minResolution!)} you set.`,
+      };
+    }
+    return {
+      keep: true,
+      sentence: `It is kept because it has enough peaks (${formatCount(count!)} of the ${formatCount(spec.requiredPeaks)} you asked for). No minimum resolution was set.`,
+    };
+  }
+
+  const problems: string[] = [];
+  if (!peaksOk) {
+    problems.push(
+      count == null
+        ? `the peak count is missing, still short of the ${formatCount(spec.requiredPeaks)} you asked for, so the peaks are still overlapping`
+        : `it has ${formatCount(count)} peaks, still under the ${formatCount(spec.requiredPeaks)} you asked for, so the peaks are still overlapping`,
+    );
+  }
+  if (askedResolution && !resolutionOk) {
+    problems.push(
+      resolution == null || !Number.isFinite(resolution)
+        ? `there is no resolution after the first peak to compare with the ${formatResolution(spec.minResolution!)} you set`
+        : `the smallest resolution after the first peak is ${formatResolution(resolution)}, under the ${formatResolution(spec.minResolution!)} you set`,
+    );
+  }
+  return {
+    keep: false,
+    sentence: `It is left out because ${problems.join(", and ")}.`,
+  };
+}
+
+function selectForLine(
+  samples: RetentionSample[],
+  spec: SeparationSpec,
+): {
+  kept: IndexedSample[];
+  excluded: RetentionExclusion[];
+} {
+  const indexed = samples.map((sample, index) => ({ runNumber: index + 1, sample }));
+  if (samples.length <= 3) return { kept: indexed, excluded: [] };
+
+  const highest = highestPercentIndex(samples);
+  const dropIndexes = new Set<number>();
+  for (const index of [0, highest]) {
+    if (!separationVerdict(samples[index], spec).keep) dropIndexes.add(index);
+  }
 
   const excluded: RetentionExclusion[] = [];
   const kept: IndexedSample[] = [];
   indexed.forEach((item, index) => {
-    if (index === 0 && index === highest) {
-      excluded.push({
-        runNumber: item.runNumber,
-        percentB: item.sample.percentB,
-        reason: "It is the first run and the highest %B, so it is left out once.",
-      });
+    if (!dropIndexes.has(index)) {
+      kept.push(item);
       return;
     }
-    if (index === 0) {
-      excluded.push({
-        runNumber: item.runNumber,
-        percentB: item.sample.percentB,
-        reason: "It is the first run.",
-      });
-      return;
-    }
-    if (index === highest) {
-      excluded.push({
-        runNumber: item.runNumber,
-        percentB: item.sample.percentB,
-        reason: "It has the highest %B.",
-      });
-      return;
-    }
-    kept.push(item);
+    excluded.push({
+      runNumber: item.runNumber,
+      percentB: item.sample.percentB,
+      reason: separationVerdict(item.sample, spec).sentence,
+    });
   });
   return { kept, excluded };
 }
