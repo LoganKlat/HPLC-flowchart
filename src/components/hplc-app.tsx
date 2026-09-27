@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ArrowRight } from "lucide-react";
 import { FileDrop } from "@/components/file-drop";
 import { LaterChangeNote, RetentionDecisionView } from "@/components/retention-decision";
 import { ResultsPanel } from "@/components/results-panel";
@@ -245,59 +244,69 @@ function RunPane({
         </>
       )}
 
-      <FileDrop
-        prompt={
-          index === 0
-            ? "Drop in the lab file from the first run."
-            : "Drop in the lab file from the run at this %B."
+      <section
+        className={
+          "flex min-h-[28rem] flex-col gap-4 rounded-xl border-2 bg-card p-4 sm:p-5 " +
+          (run.status === "ready" ? "border-solid border-border" : "border-dashed border-border")
         }
-        reading={run.status === "reading"}
-        onBegin={(fileName) => onBegin(index, fileName)}
-        onBuffer={(fileName, buffer) => void onBuffer(index, fileName, buffer)}
-        onProblem={(fileName, message) => onProblem(index, fileName, message)}
-      />
-
-      <div aria-live="polite" className="flex flex-col gap-4">
-        {run.status === "empty" ? (
-          <p className="text-sm text-muted-foreground">
-            {run.percentB.trim()
-              ? `This run is set to ${run.percentB}% B. Change it if the file you upload was run at a different %B.`
-              : "No file yet. Drop in the lab file to see the chromatogram and the next %B."}
-          </p>
-        ) : null}
-        {run.status === "reading" ? (
-          <p className="text-sm text-foreground" role="status">
-            Reading the file…
-          </p>
-        ) : null}
-        {run.status === "error" && run.message ? (
-          <div
-            className="rounded-xl bg-orange-50 px-4 py-3 text-sm text-orange-950 ring-1 ring-orange-200"
-            role="alert"
-          >
-            {run.fileName ? <span className="mb-1 block font-medium">{run.fileName}</span> : null}
-            {run.message}
-          </div>
-        ) : null}
-        {decision ? <RetentionDecisionView decision={decision} /> : null}
+      >
         {run.status === "ready" && run.read && rows && run.fileName ? (
-          <ResultsPanel fileName={run.fileName} read={run.read} rows={rows} />
-        ) : null}
-      </div>
-
-      {next ? (
-        <div>
-          <Button type="button" className="h-10 px-4" onClick={() => onOpen(index + 1)}>
-            Open Run {index + 2}
-            <ArrowRight />
-          </Button>
-          <p className="mt-2 text-xs text-muted-foreground">
-            {next.afterRetention
-              ? "Retention is finished. The next kind of change is not built yet."
-              : `Run ${index + 2} opens with ${next.percentB ? `${next.percentB}% B` : "the %B"} filled in.`}
-          </p>
-        </div>
-      ) : null}
+          <>
+            <ResultsPanel fileName={run.fileName} read={run.read} rows={rows} />
+            {decision ? <RetentionDecisionView decision={decision} /> : null}
+            {next ? (
+              <div className="mt-auto flex flex-col gap-2">
+                <Button
+                  type="button"
+                  className="h-16 w-full text-lg font-semibold tracking-wide"
+                  onClick={() => onOpen(index + 1)}
+                >
+                  NEXT RUN
+                </Button>
+                <p className="text-center text-xs text-muted-foreground">
+                  {next.afterRetention
+                    ? "Retention is finished. The next kind of change is not built yet."
+                    : `Run ${index + 2} opens with ${next.percentB ? `${next.percentB}% B` : "the %B"} filled in.`}
+                </p>
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <div aria-live="polite" className="flex flex-1 flex-col gap-4">
+            <FileDrop
+              prompt={
+                index === 0
+                  ? "Drop in the lab file from the first run."
+                  : "Drop in the lab file from the run at this %B."
+              }
+              reading={run.status === "reading"}
+              onBegin={(fileName) => onBegin(index, fileName)}
+              onBuffer={(fileName, buffer) => void onBuffer(index, fileName, buffer)}
+              onProblem={(fileName, message) => onProblem(index, fileName, message)}
+            />
+            {run.status === "empty" && run.percentB.trim() ? (
+              <p className="text-center text-sm text-muted-foreground">
+                This run is set to {run.percentB}% B. Change it if the file you upload was run at a
+                different %B.
+              </p>
+            ) : null}
+            {run.status === "reading" ? (
+              <p className="text-center text-sm text-foreground" role="status">
+                Reading the file…
+              </p>
+            ) : null}
+            {run.status === "error" && run.message ? (
+              <div
+                className="rounded-xl bg-orange-50 px-4 py-3 text-sm text-orange-950 ring-1 ring-orange-200"
+                role="alert"
+              >
+                {run.fileName ? <span className="mb-1 block font-medium">{run.fileName}</span> : null}
+                {run.message}
+              </div>
+            ) : null}
+          </div>
+        )}
+      </section>
     </>
   );
 }

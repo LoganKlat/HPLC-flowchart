@@ -155,7 +155,7 @@ export function decideRetention(
     );
   }
 
-  const line = 0.8 * complete.lastPeakTimeMin;
+  const line = retentionLine(complete.lastPeakTimeMin);
   if (isBelow(current.lastPeakTimeMin!, line)) {
     return dropPoints(samples, complete, 10, "drop-10");
   }
@@ -249,15 +249,15 @@ function dropPoints(
       ? `Lower %B by 5 percentage points. Run the next chromatogram at ${to}% B. Another run is needed before the %B that hits the last-peak time can be calculated.${clampNote}`
       : `Lower %B by 10 percentage points. Run the next chromatogram at ${to}% B.${clampNote}`;
 
-  const line = 0.8 * rules.lastPeakTimeMin;
+  const line = retentionLine(rules.lastPeakTimeMin);
   const whyParts = situationSentences(samples, rules);
   if (reason === "drop-10") {
     whyParts.push(
-      `The last peak is at ${formatMinutes(current.lastPeakTimeMin!)} min, under ${formatMinutes(line)} min (80% of the ${formatMinutes(rules.lastPeakTimeMin)} min you set). ${from}% B minus 10 percentage points is ${to}% B.`,
+      `The last peak is at ${formatMinutes(current.lastPeakTimeMin!)} min, under ${formatMinutes(line)} min (${retentionPercent()} of the ${formatMinutes(rules.lastPeakTimeMin)} min you set). ${from}% B minus 10 percentage points is ${to}% B.`,
     );
   } else {
     whyParts.push(
-      `The last peak is at ${formatMinutes(current.lastPeakTimeMin!)} min, which is not under ${formatMinutes(line)} min (80% of the ${formatMinutes(rules.lastPeakTimeMin)} min you set). This is the only chromatogram so far, so the %B that would hit ${formatMinutes(rules.lastPeakTimeMin)} min is not calculated. ${from}% B minus 5 percentage points is ${to}% B. Another run is needed before that %B can be calculated.`,
+      `The last peak is at ${formatMinutes(current.lastPeakTimeMin!)} min, which is not under ${formatMinutes(line)} min (${retentionPercent()} of the ${formatMinutes(rules.lastPeakTimeMin)} min you set). This is the only chromatogram so far, so the %B that would hit ${formatMinutes(rules.lastPeakTimeMin)} min is not calculated. ${from}% B minus 5 percentage points is ${to}% B. Another run is needed before that %B can be calculated.`,
     );
   }
 
@@ -274,10 +274,10 @@ function dropPoints(
 
 function calculatePercentB(samples: RetentionSample[], rules: CompleteRules): RetentionDecision {
   const current = samples[samples.length - 1];
-  const line = 0.8 * rules.lastPeakTimeMin;
+  const line = retentionLine(rules.lastPeakTimeMin);
   const intro = [
     ...situationSentences(samples, rules),
-    `The last peak is at ${formatMinutes(current.lastPeakTimeMin!)} min, which is not under ${formatMinutes(line)} min (80% of the ${formatMinutes(rules.lastPeakTimeMin)} min you set). That calls for the %B that should hit ${formatMinutes(rules.lastPeakTimeMin)} min, not a 10 percentage point drop.`,
+    `The last peak is at ${formatMinutes(current.lastPeakTimeMin!)} min, which is not under ${formatMinutes(line)} min (${retentionPercent()} of the ${formatMinutes(rules.lastPeakTimeMin)} min you set). That calls for the %B that should hit ${formatMinutes(rules.lastPeakTimeMin)} min, not a 10 percentage point drop.`,
   ];
 
   if (!isBelow(current.lastPeakTimeMin!, rules.lastPeakTimeMin)) {
@@ -607,6 +607,17 @@ function missingMeasurements(sample: RetentionSample): string[] {
 function pressureIsUnder(measured: number, limit: number): boolean {
   if (nearly(measured, limit)) return false;
   return measured < limit;
+}
+
+/** Keep the 10-point drop while the last peak is under this fraction of the typed time. */
+const RETENTION_TIME_FRACTION = 0.66;
+
+function retentionLine(specMin: number): number {
+  return RETENTION_TIME_FRACTION * specMin;
+}
+
+function retentionPercent(): string {
+  return `${Math.round(RETENTION_TIME_FRACTION * 100)}%`;
 }
 
 function isBelow(value: number, limit: number): boolean {

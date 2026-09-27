@@ -16,6 +16,8 @@ export type LabFileRead = {
   peakRowCount: number;
   /** R.Time of the first peak row. Used as the unretained peak (t0). */
   firstPeakTimeMin: number | null;
+  /** Every peak-table R.Time, in table order. */
+  peakTimesMin: number[];
   lastPeakTimeMin: number | null;
   /** Smallest Resolution after the first peak. Null when that value is not available. */
   minResolutionExcludingFirst: number | null;
@@ -104,12 +106,11 @@ export function readLabFile(input: string | ArrayBuffer | Uint8Array): LabFileRe
     );
   }
 
-  const times = peakRows
+  const peakTimesMin = peakRows
     .map((row) => parseFileNumber(row[timeCol] ?? ""))
     .filter((value): value is number => value != null);
-  const firstPeakTimeMin =
-    peakRows.length > 0 ? parseFileNumber(peakRows[0][timeCol] ?? "") : null;
-  const lastPeakTimeMin = times.length > 0 ? Math.max(...times) : null;
+  const firstPeakTimeMin = peakTimesMin[0] ?? null;
+  const lastPeakTimeMin = peakTimesMin.length > 0 ? Math.max(...peakTimesMin) : null;
   if (lastPeakTimeMin == null) {
     notes.push("The peak table has no retention times in the R.Time column.");
   }
@@ -137,6 +138,7 @@ export function readLabFile(input: string | ArrayBuffer | Uint8Array): LabFileRe
     peakCount,
     peakRowCount: peakRows.length,
     firstPeakTimeMin,
+    peakTimesMin,
     lastPeakTimeMin,
     minResolutionExcludingFirst,
     resolutionColumnFound: resolutionCol >= 0,
@@ -184,6 +186,7 @@ function emptyRead(): LabFileRead {
     peakCount: null,
     peakRowCount: 0,
     firstPeakTimeMin: null,
+    peakTimesMin: [],
     lastPeakTimeMin: null,
     minResolutionExcludingFirst: null,
     resolutionColumnFound: false,

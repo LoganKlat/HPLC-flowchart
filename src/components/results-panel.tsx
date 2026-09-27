@@ -25,7 +25,11 @@ export function ResultsPanel({ fileName, read, rows }: ResultsPanelProps) {
         Showing <span className="font-medium text-foreground">{fileName}</span>
       </p>
       {read.chromatogram && read.chromatogramMissingMessage == null ? (
-        <ChromatogramChart points={read.chromatogram} yLabel={read.chromatogramYAxis} />
+        <ChromatogramChart
+          points={read.chromatogram}
+          yLabel={read.chromatogramYAxis}
+          peakTimesMin={read.peakTimesMin}
+        />
       ) : (
         <div className="rounded-xl bg-card px-4 py-6 text-sm ring-1 ring-foreground/10" role="status">
           {read.chromatogramMissingMessage ??

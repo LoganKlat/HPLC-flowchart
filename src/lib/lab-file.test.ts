@@ -83,6 +83,14 @@ describe("real LabSolutions exports", () => {
     expect(read.peakCount).toBe(6);
     expect(read.peakRowCount).toBe(6);
     expect(read.firstPeakTimeMin).toBeCloseTo(1.101, 5);
+    expect(read.peakTimesMin.map((time) => time.toFixed(3))).toEqual([
+      "1.101",
+      "1.401",
+      "1.511",
+      "1.707",
+      "1.787",
+      "1.952",
+    ]);
     expect(read.lastPeakTimeMin).toBeCloseTo(1.952, 5);
     expect(read.maxBackPressurePsi).toBeCloseTo(73.1 * 14.2233, 4);
     expect(read.minResolutionExcludingFirst).toBeCloseTo(0.64, 5);

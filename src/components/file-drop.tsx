@@ -33,7 +33,7 @@ export function FileDrop({ prompt, reading, onBegin, onBuffer, onProblem }: File
   }
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-1 flex-col">
       <div
         onDragEnter={(event) => {
           event.preventDefault();
@@ -55,35 +55,35 @@ export function FileDrop({ prompt, reading, onBegin, onBuffer, onProblem }: File
           void takeFile(event.dataTransfer.files?.[0]);
         }}
         className={cn(
-          "flex flex-col items-center gap-3 rounded-xl border-2 border-dashed px-4 py-8 text-center transition-colors",
-          dragging ? "border-primary bg-accent" : "border-border bg-card",
+          "relative flex min-h-[24rem] flex-1 flex-col items-center justify-center gap-4 px-4 py-16 text-center transition-colors",
+          dragging && "rounded-xl bg-accent",
         )}
       >
-        <p className="font-heading text-lg text-foreground">{prompt}</p>
+        <p className="font-heading text-2xl text-foreground sm:text-3xl">{prompt}</p>
         <p className="max-w-md text-sm text-muted-foreground">
           LabSolutions export (.csv or .txt). Drag it here, or choose it from your computer.
         </p>
         <div
           className={cn(
             buttonVariants({ variant: "outline" }),
-            "relative h-10 px-4",
-            reading && "pointer-events-none opacity-50",
+            "pointer-events-none h-10 px-4",
+            reading && "opacity-50",
           )}
         >
-          <span className="pointer-events-none">Choose a file</span>
-          <input
-            id={inputId}
-            type="file"
-            accept=".csv,.txt,text/csv,text/plain"
-            aria-label="Choose a file"
-            disabled={reading}
-            className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
-            onChange={(event) => {
-              void takeFile(event.target.files?.[0]);
-              event.target.value = "";
-            }}
-          />
+          <span>Choose a file</span>
         </div>
+        <input
+          id={inputId}
+          type="file"
+          accept=".csv,.txt,text/csv,text/plain"
+          aria-label="Choose a file"
+          disabled={reading}
+          className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
+          onChange={(event) => {
+            void takeFile(event.target.files?.[0]);
+            event.target.value = "";
+          }}
+        />
       </div>
     </div>
   );

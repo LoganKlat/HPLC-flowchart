@@ -21,7 +21,7 @@ const files = [
  * Peak counts in these files are 6, 6, 6, and 7.
  * Max pressures are about 1040, 1226, 1390, and 1516 psi.
  * Last peaks are 1.952, 2.779, 4.918, and 11.593 min.
- * 0.8 × 10 min = 8 min, so 70, 60, and 50 are under that line and 40 is over it.
+ * 0.66 × 10 min = 6.6 min, so 70, 60, and 50 are under that line and 40 is over it.
  */
 const pathRules: RetentionRules = {
   requiredPeaks: 8,
@@ -32,7 +32,7 @@ const pathRules: RetentionRules = {
 const reads = files.map((file) => readLabFile(readFileSync(path.join(fixtureDir, file.name))));
 
 describe("retention fixtures can use one last-peak time", () => {
-  it("keeps 70, 60, and 50 under 80% of 10 min, and 40 over it", () => {
+  it("keeps 70, 60, and 50 under 66% of 10 min, and 40 over it", () => {
     const times = reads.map((read) => read.lastPeakTimeMin);
     const counts = reads.map((read) => read.peakCount);
     const pressures = reads.map((read) => read.maxBackPressurePsi);
@@ -41,10 +41,10 @@ describe("retention fixtures can use one last-peak time", () => {
     for (const time of times) {
       expect(time).not.toBeNull();
     }
-    expect(times[0]!).toBeLessThan(8);
-    expect(times[1]!).toBeLessThan(8);
-    expect(times[2]!).toBeLessThan(8);
-    expect(times[3]!).toBeGreaterThan(8);
+    expect(times[0]!).toBeLessThan(6.6);
+    expect(times[1]!).toBeLessThan(6.6);
+    expect(times[2]!).toBeLessThan(6.6);
+    expect(times[3]!).toBeGreaterThan(6.6);
     for (const count of counts) expect(count!).toBeLessThan(8);
     for (const pressure of pressures) {
       expect(pressure!).toBeLessThan(2000);
@@ -98,6 +98,8 @@ describe("retention %B along the four lab files", () => {
     expect(decision.fit!.rawPercentB).toBeCloseTo(41.420785, 3);
     expect(decision.why).toContain("m =");
     expect(decision.why).toContain("c =");
+    expect(decision.why).toContain("66%");
+    expect(decision.why).not.toContain("80%");
   });
 
   it("uses the %B saved on the run, not the percent in the file name", () => {
@@ -274,14 +276,14 @@ describe("retention rule edges", () => {
     expect(decision.why).not.toContain("Max back-pressure is blank.");
   });
 
-  it("uses the calculated path, not a 10 point drop, when the last peak is exactly 80% of the time", () => {
+  it("uses the calculated path, not a 10 point drop, when the last peak is exactly 66% of the time", () => {
     const spec = 10;
     const decision = decideRetention(
       [
         sample({
           percentB: 70,
           peakCount: 2,
-          lastPeakTimeMin: 0.8 * spec,
+          lastPeakTimeMin: 0.66 * spec,
           maxBackPressurePsi: 100,
         }),
       ],
@@ -289,9 +291,34 @@ describe("retention rule edges", () => {
     );
     expect(decision.move).toBe("drop-5");
     expect(decision.nextPercentB).toBe(65);
+    expect(decision.why).toContain("66%");
+    expect(decision.why).not.toContain("80%");
     expect(decision.nextChange).toContain("5 percentage points");
     expect(decision.nextChange.toLowerCase()).toContain("another run");
     expect(decision.nextChange).not.toContain("10 percentage points");
+  });
+
+  it("drops 10 points under 66% of the time and switches once the last peak reaches that line", () => {
+    const rules: RetentionRules = {
+      requiredPeaks: 8,
+      lastPeakTimeMin: 10,
+      maxBackPressurePsi: 500,
+    };
+    const under = decideRetention(
+      [sample({ percentB: 70, peakCount: 2, lastPeakTimeMin: 6.5, maxBackPressurePsi: 100 })],
+      rules,
+    );
+    expect(under.move).toBe("drop-10");
+    expect(under.nextPercentB).toBe(60);
+    expect(under.why).toContain("66%");
+
+    const over = decideRetention(
+      [sample({ percentB: 70, peakCount: 2, lastPeakTimeMin: 7, maxBackPressurePsi: 100 })],
+      rules,
+    );
+    expect(over.move).toBe("drop-5");
+    expect(over.nextPercentB).toBe(65);
+    expect(over.why).not.toContain("minus 10");
   });
 
   it("leaves out the first run and the highest %B when they are different files", () => {
