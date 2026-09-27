@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, type ReactNode } from "react";
+import { ChoiceSelect } from "@/components/choice-select";
 import { FileDrop } from "@/components/file-drop";
 import { LaterChangeNote, RetentionDecisionView, StartHighBNote } from "@/components/retention-decision";
 import { ResultsPanel } from "@/components/results-panel";
@@ -15,6 +16,8 @@ import { readLabFile, type LabFileRead } from "@/lib/lab-file";
 import { decideRetention, formatPercentB, type RetentionDecision, type RetentionSample } from "@/lib/retention";
 import { emptyRuleInputs, emptyRunDetails, type RuleInputs, type RunDetails } from "@/lib/run-details";
 import {
+  LIGANDS,
+  SOLVENTS,
   findSolvent,
   planHistory,
   solventById,
@@ -233,11 +236,15 @@ export function HplcApp() {
           if (index >= 0 && index < syncedRuns.length) setActive(index);
         }}
       >
-        <div className="sticky top-0 z-20 -mx-4 mb-5 border-b border-border bg-background/95 px-4 backdrop-blur sm:-mx-6 sm:px-6">
-          <div className="overflow-x-auto">
-            <TabsList variant="line" className="h-11 w-max min-w-full justify-start gap-1 bg-transparent p-0">
+        <div id="run-tabs" className="sticky top-0 z-20 -mx-4 mb-5 bg-background/95 px-4 pt-3 backdrop-blur sm:-mx-6 sm:px-6">
+          <div className="overflow-x-auto border-b border-border">
+            <TabsList className="h-auto w-max min-w-full items-end justify-start gap-1 rounded-none bg-transparent p-0">
               {syncedRuns.map((_, index) => (
-                <TabsTrigger key={index} value={String(index)} className="h-11 px-4 text-base">
+                <TabsTrigger
+                  key={index}
+                  value={String(index)}
+                  className="h-9! rounded-t-lg rounded-b-none border border-b-0 border-transparent bg-[#cfc6b6] px-4 text-sm font-medium text-[#6d675c] shadow-none! after:hidden! hover:text-foreground data-active:z-10 data-active:-mb-px data-active:h-11! data-active:border-border data-active:bg-background! data-active:font-semibold data-active:text-foreground data-active:shadow-none!"
+                >
                   Run {index + 1}
                 </TabsTrigger>
               ))}
@@ -553,19 +560,21 @@ function RunSummary({
           />
         </Field>
         <Field label="Solvent" id={`run-${index + 1}-solvent`}>
-          <Input
+          <ChoiceSelect
             id={`run-${index + 1}-solvent`}
             value={run.solvent}
-            className="h-10"
-            onChange={(event) => onSolvent(event.target.value)}
+            placeholder="Choose a solvent"
+            options={SOLVENTS.map((solvent) => ({ value: solvent.label, label: solvent.label }))}
+            onChange={onSolvent}
           />
         </Field>
         <Field label="Ligand" id={`run-${index + 1}-ligand`}>
-          <Input
+          <ChoiceSelect
             id={`run-${index + 1}-ligand`}
             value={run.ligand}
-            className="h-10"
-            onChange={(event) => onLigand(event.target.value)}
+            placeholder="Choose a coating"
+            options={LIGANDS.map((name) => ({ value: name, label: name }))}
+            onChange={onLigand}
           />
         </Field>
       </div>

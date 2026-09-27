@@ -16,14 +16,9 @@ export type Solvent = {
 };
 
 export const SOLVENTS: readonly Solvent[] = [
-  { id: "acetonitrile", label: "Acetonitrile (ACN)", name: "acetonitrile", aliases: ["acn", "acetonitrile", "acetonitrile (acn)"] },
-  { id: "methanol", label: "Methanol (MeOH)", name: "methanol", aliases: ["meoh", "methanol", "methanol (meoh)"] },
-  { id: "tetrahydrofuran", label: "Tetrahydrofuran (THF)", name: "tetrahydrofuran", aliases: ["thf", "tetrahydrofuran", "tetrahydrofuran (thf)"] },
-  { id: "ethanol", label: "Ethanol", name: "ethanol", aliases: ["ethanol", "etoh"] },
-  { id: "isopropanol", label: "Isopropanol (2-Propanol)", name: "isopropanol", aliases: ["isopropanol", "2-propanol", "ipa", "isopropanol (2-propanol)"] },
-  { id: "n-propanol", label: "n-Propanol (1-Propanol)", name: "n-propanol", aliases: ["n-propanol", "1-propanol", "propanol", "n-propanol (1-propanol)"] },
-  { id: "acetone", label: "Acetone", name: "acetone", aliases: ["acetone"] },
-  { id: "n-butanol", label: "n-Butanol (1-Butanol)", name: "n-butanol", aliases: ["n-butanol", "1-butanol", "butanol", "n-butanol (1-butanol)"] },
+  { id: "acetonitrile", label: "ACN", name: "ACN", aliases: ["acn", "acetonitrile", "acetonitrile (acn)"] },
+  { id: "methanol", label: "MeOH", name: "MeOH", aliases: ["meoh", "methanol", "methanol (meoh)"] },
+  { id: "tetrahydrofuran", label: "THF", name: "THF", aliases: ["thf", "tetrahydrofuran", "tetrahydrofuran (thf)"] },
 ];
 
 /** Percent, then the nomograph x of that tick. Piecewise linear between ticks. */
@@ -65,7 +60,7 @@ const NOMOGRAPH_IDS = ["methanol", "acetonitrile", "tetrahydrofuran"] as const;
 export const CHART_X_MIN = 26;
 export const CHART_X_MAX = 991.5;
 
-export const LIGANDS = ["C18", "C8", "C4", "Phenyl", "Phenyl-hexyl", "Biphenyl", "PFP", "Cyano"] as const;
+export const LIGANDS = ["C18", "C18aq", "PFPP", "C8", "biphenyl", "IBD"] as const;
 
 export type SelectivityRun = {
   percentB: number | null;
@@ -613,12 +608,12 @@ function solventPlan(args: {
   const typed = args.setup.originalSolvent.trim();
   const recognized = findSolvent(typed);
   const nomograph = recognized ? solventNomograph(anchorPercent, recognized.name) : null;
-  const oldName = recognized?.name ?? typed;
+  const oldName = recognized?.label ?? typed;
   const pick = "Pick a new solvent you can actually use.";
   const oldSentence = typed ? `The old solvent is ${oldName} at ${formatPercentB(anchorPercent)}% B.` : "";
   const readings = nomograph
-    ? `The chart reads methanol ${nomograph[0].percentText}% B, acetonitrile ${nomograph[1].percentText}% B, and tetrahydrofuran ${nomograph[2].percentText}% B.`
-    : "The chart covers only methanol, acetonitrile, and tetrahydrofuran.";
+    ? `The chart reads ${nomograph[0].label} ${nomograph[0].percentText}% B, ${nomograph[1].label} ${nomograph[1].percentText}% B, and ${nomograph[2].label} ${nomograph[2].percentText}% B.`
+    : "The chart covers only MeOH, ACN, and THF.";
   const cap = nomograph?.some((entry) => entry.capped)
     ? " A reading past a scale’s 100% end is held at 100. That is the strongest the pump can mix."
     : "";
@@ -648,38 +643,39 @@ function ligandPlan(args: {
   ambient: Ambient;
   triedLigands: string[];
 }): SelectivityPlan {
-  const next = recommendLigand(args.triedLigands);
+  const unused = recommendLigand(args.triedLigands);
   const triedText = uniqueLabels(args.triedLigands);
   const original = findSolvent(args.setup.originalSolvent);
-  const solventWords = original?.name ?? (args.setup.originalSolvent.trim() || "the original solvent");
-  const solventField = args.setup.originalSolvent.trim();
-  if (!next) {
+  const solventWords = original?.label ?? (args.setup.originalSolvent.trim() || "the original solvent");
+  const solventField = original?.label ?? args.setup.originalSolvent.trim();
+  if (!unused) {
     return blockedPlan(
       "Every column coating in the list has already been tried.",
-      `Temperature and a solvent change still do not meet the selectivity checks, and every coating has been used (${triedText}). There is no unused coating to recommend.`,
+      `Temperature and a solvent change still do not meet the selectivity checks. Every coating in the list has already been used: ${triedText}.`,
     );
   }
+  const pick = "Pick a new column coating from the dropdown.";
   return {
     status: "recommend",
     step: "ligand",
-    nextChange: `Change the column coating to ${next}. Go back to 100% B, ${args.ambient.celsius}°C, and ${solventWords}, then start the %B steps over.`,
+    nextChange: `${pick} Go back to 100% B, ${args.ambient.celsius}°C, and ${solventWords}, then start the %B steps over.`,
     why: [
       "The temperature steps and the solvent change still do not meet the peak count and the resolution check.",
-      `Use a coating that has not been tried yet. Already tried: ${triedText}.`,
-      `The next run is 100% B, the starting temperature (${args.ambient.celsius}°C), and the original solvent (${solventWords}). The %B steps then start over from that run.`,
+      `${pick} Already used: ${triedText}.`,
+      `Go back to 100% B, the starting temperature (${args.ambient.celsius}°C), and the original solvent (${solventWords}), then start the %B steps over.`,
       args.ambient.sentence,
     ].join(" "),
     prefill: {
       percentB: "100",
       temperature: String(args.ambient.celsius),
       solvent: solventField,
-      ligand: next,
+      ligand: "",
     },
     nomograph: null,
     showSolventChoices: false,
     showLigandChoices: true,
     recommendedSolventId: null,
-    recommendedLigand: next,
+    recommendedLigand: null,
     anchorPercentB: 100,
     oldSolvent: args.setup.originalSolvent,
   };

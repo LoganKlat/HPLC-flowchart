@@ -39,7 +39,7 @@ export function SelectivityDecisionView({
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
               {plan.nomograph.map((entry) => (
                 <div key={entry.id} className="rounded-lg bg-[#e7f3ee] px-3 py-3 text-[#144237]">
-                  <p className="text-xs tracking-wide uppercase">{entry.label}</p>
+                  <p className="text-xs tracking-wide">{entry.label}</p>
                   <p className="mt-1 font-heading text-2xl">{entry.percentText}% B</p>
                   {entry.capped ? (
                     <p className="mt-1 text-xs leading-snug">Held at 100. That is the strongest the pump can mix.</p>
@@ -73,9 +73,10 @@ export function SelectivityDecisionView({
             <select
               id="ligand-choice"
               className={fieldClass}
-              value={ligand}
+              value={ligandChoices.includes(ligand) ? ligand : ""}
               onChange={(event) => onLigand(event.target.value)}
             >
+              <option value="">Choose a coating</option>
               {ligandChoices.map((name) => (
                 <option key={name} value={name}>
                   {name}

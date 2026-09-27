@@ -80,10 +80,14 @@ describe("solvent nomograph", () => {
     expect(solventNomograph(50, "n-butanol")).toBeNull();
     expect(solventChoicePercent(50, "acetonitrile", "ethanol")).toBeNull();
     expect(solventChoicePercent(50, "ethanol", "methanol")).toBeNull();
-    expect(findSolvent("ACN")?.id).toBe("acetonitrile");
+    expect(findSolvent("ACN")?.label).toBe("ACN");
     expect(findSolvent("MeOH")?.id).toBe("methanol");
-    expect(findSolvent("2-Propanol")?.id).toBe("isopropanol");
-    expect(findSolvent("1-Butanol")?.id).toBe("n-butanol");
+    expect(findSolvent("THF")?.label).toBe("THF");
+    expect(findSolvent("acetonitrile")?.label).toBe("ACN");
+    expect(solventNomograph(40, "ACN")?.map((row) => row.label)).toEqual(["MeOH", "ACN", "THF"]);
+    expect(findSolvent("2-Propanol")).toBeNull();
+    expect(findSolvent("ethanol")).toBeNull();
+    expect(recommendLigand(["C18", "C18aq", "PFPP", "C8", "biphenyl", "IBD"])).toBeNull();
   });
 });
 
@@ -181,8 +185,8 @@ describe("selectivity plan", () => {
     expect(history.plan.nextChange.toLowerCase()).not.toContain("methanol");
     expect(history.plan.nextChange).not.toContain("60°C");
     expect(history.plan.nomograph?.map((row) => row.percentText)).toEqual(["85.9", "80.0", "59.7"]);
-    expect(history.plan.why).toContain("The old solvent is acetonitrile at 80% B.");
-    expect(history.plan.why).toContain("methanol 85.9% B, acetonitrile 80.0% B, and tetrahydrofuran 59.7% B");
+    expect(history.plan.why).toContain("The old solvent is ACN at 80% B.");
+    expect(history.plan.why).toContain("MeOH 85.9% B, ACN 80.0% B, and THF 59.7% B");
     expect(history.plan.why).not.toContain("The new solvent is");
     expect(history.plan.why.toLowerCase()).not.toContain("guess");
     expect(history.plan.recommendedSolventId).toBeNull();
@@ -223,7 +227,7 @@ describe("selectivity plan", () => {
     const solventRun = run({
       percentB: 91,
       temperatureC: 25,
-      solvent: "Methanol (MeOH)",
+      solvent: "MeOH",
       peakCount: 8,
       minResolutionExcludingFirst: 0.4,
       lastPeakTimeMin: 10,
@@ -231,7 +235,7 @@ describe("selectivity plan", () => {
     const again = run({
       percentB: 91,
       temperatureC: 40,
-      solvent: "Methanol (MeOH)",
+      solvent: "MeOH",
       peakCount: 8,
       minResolutionExcludingFirst: 0.4,
       lastPeakTimeMin: 6,
@@ -239,7 +243,7 @@ describe("selectivity plan", () => {
     const againAdjusted = run({
       percentB: 86,
       temperatureC: 40,
-      solvent: "Methanol (MeOH)",
+      solvent: "MeOH",
       peakCount: 8,
       minResolutionExcludingFirst: 0.4,
       lastPeakTimeMin: 8,
@@ -248,16 +252,39 @@ describe("selectivity plan", () => {
     expect(history.phase).toBe("selectivity");
     if (history.phase !== "selectivity") return;
     expect(history.plan.step).toBe("ligand");
-    expect(history.plan.recommendedLigand).toBe("C8");
+    expect(history.plan.recommendedLigand).toBeNull();
     expect(history.plan.prefill).toMatchObject({
       percentB: "100",
       temperature: "25",
       solvent: "ACN",
-      ligand: "C8",
+      ligand: "",
     });
-    expect(history.plan.nextChange).toContain("100% B");
-    expect(history.plan.why).toContain("C18");
-    expect(recommendLigand(["C18", "C8"])).toBe("C4");
+    expect(history.plan.nextChange).toBe(
+      "Pick a new column coating from the dropdown. Go back to 100% B, 25°C, and ACN, then start the %B steps over.",
+    );
+    expect(history.plan.why).toContain("Already used: C18");
+    expect(history.plan.why).not.toMatch(/C18aq|PFPP|C8|biphenyl|IBD/);
+    expect(history.plan.nextChange).not.toMatch(/C18aq|PFPP|C8|biphenyl|IBD|C18/);
+  });
+
+  it("says every coating was already used and does not invent another", () => {
+    const ligands = ["C18", "C18aq", "PFPP", "C8", "biphenyl", "IBD"];
+    const runs = ligands.flatMap((ligand) => [
+      run({ ligand, peakCount: 8, minResolutionExcludingFirst: 0.4, lastPeakTimeMin: 10, percentB: 80 }),
+      run({ ligand, temperatureC: 40, peakCount: 8, minResolutionExcludingFirst: 0.4, lastPeakTimeMin: 6, percentB: 80 }),
+      run({ ligand, temperatureC: 40, peakCount: 8, minResolutionExcludingFirst: 0.4, lastPeakTimeMin: 8, percentB: 75 }),
+      run({ ligand, solvent: "MeOH", temperatureC: 25, peakCount: 8, minResolutionExcludingFirst: 0.4, lastPeakTimeMin: 10, percentB: 90 }),
+      run({ ligand, solvent: "MeOH", temperatureC: 40, peakCount: 8, minResolutionExcludingFirst: 0.4, lastPeakTimeMin: 6, percentB: 90 }),
+      run({ ligand, solvent: "MeOH", temperatureC: 40, peakCount: 8, minResolutionExcludingFirst: 0.4, lastPeakTimeMin: 8, percentB: 85 }),
+    ]);
+    const history = planHistory(runs, setup);
+    expect(history.phase).toBe("selectivity");
+    if (history.phase !== "selectivity") return;
+    expect(history.plan.step).toBe("blocked");
+    expect(history.plan.nextChange).toBe("Every column coating in the list has already been tried.");
+    expect(history.plan.why).toContain("Every coating in the list has already been used");
+    expect(history.plan.recommendedLigand).toBeNull();
+    expect(history.plan.prefill).toBeNull();
   });
 
   it("treats the 38% 40°C file as worse than the ambient 40% file and changes solvent", () => {
@@ -349,8 +376,8 @@ describe("selectivity plan", () => {
     expect(history.plan.why).toContain("worse because it has fewer peaks");
     expect(history.plan.why).toContain("minimum resolution is 0");
     expect(history.plan.why).toContain("new solvent");
-    expect(history.plan.why).toContain("The old solvent is acetonitrile at 40% B.");
-    expect(history.plan.why).toContain("methanol 51.2% B, acetonitrile 40.0% B, and tetrahydrofuran 30.7% B");
+    expect(history.plan.why).toContain("The old solvent is ACN at 40% B.");
+    expect(history.plan.why).toContain("MeOH 51.2% B, ACN 40.0% B, and THF 30.7% B");
     expect(history.plan.why).not.toContain("The new solvent is");
     expect(history.plan.why).not.toContain("2.312");
     expect(history.plan.nextChange).not.toMatch(/methanol|acetonitrile|tetrahydrofuran/i);

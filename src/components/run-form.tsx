@@ -1,10 +1,12 @@
 "use client";
 
+import { ChoiceSelect } from "@/components/choice-select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { parseUserCount, parseUserNumber } from "@/lib/evaluate";
 import type { CoreShell, RuleInputs, RunDetails } from "@/lib/run-details";
+import { LIGANDS, SOLVENTS } from "@/lib/selectivity";
 
 type RunFormProps = {
   details: RunDetails;
@@ -30,9 +32,11 @@ export function RunForm({ details, rules, onDetails, onRules }: RunFormProps) {
           <CardDescription>Saved with this session, even if a check does not use them yet.</CardDescription>
         </CardHeader>
         <CardContent className="grid grid-cols-1 gap-x-4 gap-y-3 @min-[28rem]:grid-cols-2">
-          <TextField
+          <ChoiceField
             label="Ligand"
             value={details.ligand}
+            placeholder="Choose a coating"
+            options={LIGANDS.map((name) => ({ value: name, label: name }))}
             onChange={(value) => setDetail("ligand", value)}
           />
           <TextField
@@ -74,9 +78,11 @@ export function RunForm({ details, rules, onDetails, onRules }: RunFormProps) {
             onChange={(value) => setDetail("particleSize", value)}
             inputMode="decimal"
           />
-          <TextField
+          <ChoiceField
             label="Solvent"
             value={details.solvent}
+            placeholder="Choose a solvent"
+            options={SOLVENTS.map((solvent) => ({ value: solvent.label, label: solvent.label }))}
             onChange={(value) => setDetail("solvent", value)}
           />
           <TextField
@@ -219,6 +225,30 @@ function CoreShellField({
           );
         })}
       </div>
+    </div>
+  );
+}
+
+function ChoiceField({
+  label,
+  value,
+  onChange,
+  options,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: readonly { value: string; label: string }[];
+  placeholder: string;
+}) {
+  const id = label.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+  return (
+    <div className="flex min-w-0 flex-col gap-1.5">
+      <Label htmlFor={id} className="h-auto whitespace-normal leading-snug">
+        {label}
+      </Label>
+      <ChoiceSelect id={id} value={value} onChange={onChange} options={options} placeholder={placeholder} />
     </div>
   );
 }
