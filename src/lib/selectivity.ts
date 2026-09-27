@@ -3,7 +3,7 @@ import { carryForwardIndex, decideRetention, formatPercentB, roundTargetPercent,
 
 /**
  * Selectivity starts after retention has picked a run to carry forward.
- * Temperature is tried first, then a solvent matched by solvent strength,
+ * Temperature is tried first, then a solvent read from the nomograph,
  * then a new column coating that sends retention back to the beginning.
  */
 
@@ -12,23 +12,58 @@ export type Solvent = {
   label: string;
   /** Name used in sentences. */
   name: string;
-  strength: number;
   aliases: string[];
 };
 
 export const SOLVENTS: readonly Solvent[] = [
-  { id: "acetonitrile", label: "Acetonitrile (ACN)", name: "acetonitrile", strength: 5.8, aliases: ["acn", "acetonitrile", "acetonitrile (acn)"] },
-  { id: "methanol", label: "Methanol (MeOH)", name: "methanol", strength: 5.1, aliases: ["meoh", "methanol", "methanol (meoh)"] },
-  { id: "tetrahydrofuran", label: "Tetrahydrofuran (THF)", name: "tetrahydrofuran", strength: 8.0, aliases: ["thf", "tetrahydrofuran", "tetrahydrofuran (thf)"] },
-  { id: "ethanol", label: "Ethanol", name: "ethanol", strength: 4.3, aliases: ["ethanol", "etoh"] },
-  { id: "isopropanol", label: "Isopropanol (2-Propanol)", name: "isopropanol", strength: 3.9, aliases: ["isopropanol", "2-propanol", "ipa", "isopropanol (2-propanol)"] },
-  { id: "n-propanol", label: "n-Propanol (1-Propanol)", name: "n-propanol", strength: 4.0, aliases: ["n-propanol", "1-propanol", "propanol", "n-propanol (1-propanol)"] },
-  { id: "acetone", label: "Acetone", name: "acetone", strength: 5.1, aliases: ["acetone"] },
-  { id: "n-butanol", label: "n-Butanol (1-Butanol)", name: "n-butanol", strength: 3.9, aliases: ["n-butanol", "1-butanol", "butanol", "n-butanol (1-butanol)"] },
+  { id: "acetonitrile", label: "Acetonitrile (ACN)", name: "acetonitrile", aliases: ["acn", "acetonitrile", "acetonitrile (acn)"] },
+  { id: "methanol", label: "Methanol (MeOH)", name: "methanol", aliases: ["meoh", "methanol", "methanol (meoh)"] },
+  { id: "tetrahydrofuran", label: "Tetrahydrofuran (THF)", name: "tetrahydrofuran", aliases: ["thf", "tetrahydrofuran", "tetrahydrofuran (thf)"] },
+  { id: "ethanol", label: "Ethanol", name: "ethanol", aliases: ["ethanol", "etoh"] },
+  { id: "isopropanol", label: "Isopropanol (2-Propanol)", name: "isopropanol", aliases: ["isopropanol", "2-propanol", "ipa", "isopropanol (2-propanol)"] },
+  { id: "n-propanol", label: "n-Propanol (1-Propanol)", name: "n-propanol", aliases: ["n-propanol", "1-propanol", "propanol", "n-propanol (1-propanol)"] },
+  { id: "acetone", label: "Acetone", name: "acetone", aliases: ["acetone"] },
+  { id: "n-butanol", label: "n-Butanol (1-Butanol)", name: "n-butanol", aliases: ["n-butanol", "1-butanol", "butanol", "n-butanol (1-butanol)"] },
 ];
 
+/** Percent, then the nomograph x of that tick. Piecewise linear between ticks. */
+const CHART_TICKS = {
+  methanol: [
+    [0, 26],
+    [10, 64.5],
+    [20, 122.5],
+    [30, 177.5],
+    [40, 239.5],
+    [50, 292.5],
+    [60, 365.5],
+    [70, 431.5],
+    [80, 515.5],
+    [90, 617.5],
+    [100, 713.5],
+  ],
+  acetonitrile: [
+    [0, 26],
+    [100, 713.5],
+  ],
+  tetrahydrofuran: [
+    [0, 26],
+    [10, 116.5],
+    [20, 211.5],
+    [30, 294.5],
+    [40, 385.5],
+    [50, 477.5],
+    [60, 579],
+    [70, 693.5],
+    [80, 794.5],
+    [90, 894.5],
+    [100, 991.5],
+  ],
+} as const;
+
 const NOMOGRAPH_IDS = ["methanol", "acetonitrile", "tetrahydrofuran"] as const;
-const RECOMMEND_IDS = ["methanol", "acetonitrile", "tetrahydrofuran"] as const;
+
+export const CHART_X_MIN = 26;
+export const CHART_X_MAX = 991.5;
 
 export const LIGANDS = ["C18", "C8", "C4", "Phenyl", "Phenyl-hexyl", "Biphenyl", "PFP", "Cyano"] as const;
 
@@ -107,29 +142,66 @@ export function solventById(id: string): Solvent | null {
   return SOLVENTS.find((solvent) => solvent.id === id) ?? null;
 }
 
-export function matchSolventPercent(
-  oldPercent: number,
-  oldStrength: number,
-  newStrength: number,
-): { percent: number; capped: boolean; raw: number } {
-  const raw = oldPercent * (oldStrength / newStrength);
-  if (!Number.isFinite(raw)) return { percent: oldPercent, capped: false, raw };
-  if (raw > 100) return { percent: 100, capped: true, raw };
-  const percent = Math.min(100, Math.max(0, roundTenths(raw)));
-  return { percent, capped: false, raw };
+export function formatMatchedPercent(percent: number, capped: boolean): string {
+  if (capped || percent === 100) return "100";
+  return percent.toFixed(1);
 }
 
-export function formatMatchedPercent(percent: number, capped: boolean): string {
-  if (capped) return "100";
-  return percent.toFixed(1);
+type ChartTicks = readonly (readonly [number, number])[];
+
+function chartTicks(solventId: string): ChartTicks | null {
+  if (solventId === "methanol" || solventId === "acetonitrile" || solventId === "tetrahydrofuran") {
+    return CHART_TICKS[solventId];
+  }
+  return null;
+}
+
+function percentToX(ticks: ChartTicks, percent: number): number {
+  const clamped = Math.min(100, Math.max(0, percent));
+  for (let index = 0; index < ticks.length - 1; index++) {
+    const [startPercent, startX] = ticks[index];
+    const [endPercent, endX] = ticks[index + 1];
+    if (clamped <= endPercent) {
+      const span = endPercent - startPercent;
+      const t = span === 0 ? 0 : (clamped - startPercent) / span;
+      return startX + t * (endX - startX);
+    }
+  }
+  return ticks[ticks.length - 1][1];
+}
+
+function xToPercent(ticks: ChartTicks, x: number): { percent: number; capped: boolean } {
+  const lastX = ticks[ticks.length - 1][1];
+  const firstX = ticks[0][1];
+  if (x > lastX) return { percent: 100, capped: true };
+  if (x <= firstX) return { percent: 0, capped: false };
+  for (let index = 0; index < ticks.length - 1; index++) {
+    const [startPercent, startX] = ticks[index];
+    const [endPercent, endX] = ticks[index + 1];
+    if (x <= endX) {
+      const span = endX - startX;
+      const t = span === 0 ? 0 : (x - startX) / span;
+      const raw = startPercent + t * (endPercent - startPercent);
+      const percent = Math.min(100, Math.max(0, roundTenths(raw)));
+      return { percent, capped: false };
+    }
+  }
+  return { percent: 100, capped: true };
+}
+
+export function chartX(solventId: string, percent: number): number | null {
+  const ticks = chartTicks(solventId);
+  if (!ticks) return null;
+  return percentToX(ticks, percent);
 }
 
 export function solventNomograph(oldPercent: number, oldSolvent: string): NomographEntry[] | null {
   const current = findSolvent(oldSolvent);
-  if (!current) return null;
+  if (!current || !chartTicks(current.id)) return null;
+  const x = percentToX(chartTicks(current.id)!, oldPercent);
   return NOMOGRAPH_IDS.map((id) => {
     const solvent = solventById(id)!;
-    const matched = matchSolventPercent(oldPercent, current.strength, solvent.strength);
+    const matched = xToPercent(chartTicks(id)!, x);
     return {
       id,
       label: solvent.label,
@@ -139,24 +211,15 @@ export function solventNomograph(oldPercent: number, oldSolvent: string): Nomogr
   });
 }
 
-export function recommendSolventId(currentSolvent: string): string {
-  const current = findSolvent(currentSolvent);
-  for (const id of RECOMMEND_IDS) {
-    if (current?.id !== id) return id;
-  }
-  return "methanol";
-}
-
 export function solventChoicePercent(
   anchorPercentB: number,
   oldSolvent: string,
   newSolventId: string,
 ): { percentText: string; capped: boolean } | null {
-  const old = findSolvent(oldSolvent);
-  const next = solventById(newSolventId);
-  if (!old || !next) return null;
-  const matched = matchSolventPercent(anchorPercentB, old.strength, next.strength);
-  return { percentText: formatMatchedPercent(matched.percent, matched.capped), capped: matched.capped };
+  const rows = solventNomograph(anchorPercentB, oldSolvent);
+  const row = rows?.find((entry) => entry.id === newSolventId);
+  if (!row) return null;
+  return { percentText: row.percentText, capped: row.capped };
 }
 
 export function recommendLigand(tried: string[]): string | null {
@@ -303,7 +366,6 @@ function walkSelectivity(args: {
           plan: solventPlan({
             anchor: args.carry,
             anchorNumber: args.carryRunNumber,
-            currentSolvent: solventName || args.setup.originalSolvent,
             setup: args.setup,
             ambient,
             ligandName: baseline.ligand || args.setup.originalLigand,
@@ -541,7 +603,6 @@ function plan60(
 function solventPlan(args: {
   anchor: SelectivityRun;
   anchorNumber: number;
-  currentSolvent: string;
   setup: SelectivitySetup;
   ambient: Ambient;
   ligandName: string;
@@ -549,54 +610,36 @@ function solventPlan(args: {
   heated: SelectivityRun[];
 }): SelectivityPlan {
   const anchorPercent = args.anchor.percentB!;
-  const current = findSolvent(args.currentSolvent);
-  const recommendedId = recommendSolventId(args.currentSolvent);
-  const recommended = solventById(recommendedId)!;
-  const nomograph = current ? solventNomograph(anchorPercent, current.name) : null;
-  const matched = current ? matchSolventPercent(anchorPercent, current.strength, recommended.strength) : null;
-  const percentText = matched ? formatMatchedPercent(matched.percent, matched.capped) : "";
-  const oldName = current?.name ?? (args.currentSolvent.trim() || "the solvent on Run 1");
-  const three = nomograph
-    ? nomograph.map((entry) => `${entry.label} ${entry.percentText}% B`).join(", ")
+  const typed = args.setup.originalSolvent.trim();
+  const recognized = findSolvent(typed);
+  const nomograph = recognized ? solventNomograph(anchorPercent, recognized.name) : null;
+  const oldName = recognized?.name ?? typed;
+  const pick = "Pick a new solvent you can actually use.";
+  const oldSentence = typed ? `The old solvent is ${oldName} at ${formatPercentB(anchorPercent)}% B.` : "";
+  const readings = nomograph
+    ? `The chart reads methanol ${nomograph[0].percentText}% B, acetonitrile ${nomograph[1].percentText}% B, and tetrahydrofuran ${nomograph[2].percentText}% B.`
+    : "The chart covers only methanol, acetonitrile, and tetrahydrofuran.";
+  const cap = nomograph?.some((entry) => entry.capped)
+    ? " A reading past a scale’s 100% end is held at 100. That is the strongest the pump can mix."
     : "";
-  const formula = current
-    ? `The old solvent is ${oldName} at ${formatPercentB(anchorPercent)}% B. The new solvent is ${recommended.name}. New %B = old %B × (strength of the old solvent / strength of the new solvent). ${oldName} strength ${formatStrength(current.strength)}, ${recommended.name} strength ${formatStrength(recommended.strength)}. Matched %B: ${three}.`
-    : `The solvent “${args.currentSolvent.trim() || "blank"}” is not one of the eight solvents, so a matched %B cannot be calculated. Pick one of the eight in the list.`;
-  const cap = matched?.capped
-    ? ` The matched %B for ${recommended.name} is above 100, so it is held at 100. That is the strongest the pump can mix.`
-    : "";
-  const prefill = matched
-    ? {
-        percentB: percentText,
-        temperature: String(args.ambient.celsius),
-        solvent: recommended.label,
-        ligand: args.ligandName,
-      }
-    : {
-        percentB: "",
-        temperature: String(args.ambient.celsius),
-        solvent: recommended.label,
-        ligand: args.ligandName,
-      };
   return {
     status: "recommend",
     step: "solvent",
-    nextChange: matched
-      ? `Go back to ${args.ambient.celsius}°C and change the solvent to ${recommended.name} at ${percentText}% B.`
-      : `Go back to ${args.ambient.celsius}°C and change the solvent. Pick the new solvent from the list.`,
-    why: [
-      solventLead(args),
-      formula + cap,
-      args.ambient.sentence,
-    ].join(" "),
-    prefill,
+    nextChange: `Go back to ${args.ambient.celsius}°C and change the solvent. ${pick}`,
+    why: [solventLead(args), [oldSentence, pick, readings].filter(Boolean).join(" ") + cap, args.ambient.sentence].join(" "),
+    prefill: {
+      percentB: "",
+      temperature: String(args.ambient.celsius),
+      solvent: "",
+      ligand: args.ligandName,
+    },
     nomograph,
     showSolventChoices: true,
     showLigandChoices: false,
-    recommendedSolventId: recommended.id,
+    recommendedSolventId: null,
     recommendedLigand: null,
     anchorPercentB: anchorPercent,
-    oldSolvent: args.currentSolvent,
+    oldSolvent: typed || null,
   };
 }
 
@@ -871,10 +914,6 @@ function uniqueLabels(values: string[]): string {
 function roundTenths(value: number): number {
   const sign = value < 0 ? -1 : 1;
   return (sign * Math.floor(Math.abs(value) * 10 + 0.5 + 1e-10)) / 10;
-}
-
-function formatStrength(value: number): string {
-  return value.toFixed(1);
 }
 
 function formatMinutes(value: number): string {

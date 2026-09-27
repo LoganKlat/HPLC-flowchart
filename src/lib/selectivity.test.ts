@@ -5,16 +5,13 @@ import { evaluateRun, resolutionForDecision } from "@/lib/evaluate";
 import { readLabFile } from "@/lib/lab-file";
 import { carryForwardIndex } from "@/lib/retention";
 import {
-  SOLVENTS,
   adjustedPercentB,
   assessHappy,
   findSolvent,
   formatMatchedPercent,
-  matchSolventPercent,
   planHistory,
   recommendLigand,
-  recommendSolventId,
-  solventById,
+  solventChoicePercent,
   solventNomograph,
   type SelectivityRun,
   type SelectivitySetup,
@@ -45,57 +42,54 @@ function run(overrides: Partial<SelectivityRun> = {}): SelectivityRun {
   };
 }
 
-describe("solvent strengths", () => {
-  it("uses the eight strengths, including the five corrected values", () => {
-    expect(SOLVENTS.map((solvent) => [solvent.label, solvent.strength])).toEqual([
-      ["Acetonitrile (ACN)", 5.8],
-      ["Methanol (MeOH)", 5.1],
-      ["Tetrahydrofuran (THF)", 8.0],
-      ["Ethanol", 4.3],
-      ["Isopropanol (2-Propanol)", 3.9],
-      ["n-Propanol (1-Propanol)", 4.0],
-      ["Acetone", 5.1],
-      ["n-Butanol (1-Butanol)", 3.9],
+describe("solvent nomograph", () => {
+  it("reads 20% acetonitrile as methanol 27.5 and tetrahydrofuran 14.9", () => {
+    expect(percents(20)).toEqual(["27.5", "20.0", "14.9"]);
+  });
+
+  it("reads 40% acetonitrile as methanol 51.2 and tetrahydrofuran 30.7", () => {
+    expect(percents(40)).toEqual(["51.2", "40.0", "30.7"]);
+  });
+
+  it("reads 50% acetonitrile as methanol 60.6 and tetrahydrofuran 38.3", () => {
+    expect(percents(50)).toEqual(["60.6", "50.0", "38.3"]);
+  });
+
+  it("reads 100% acetonitrile as methanol 100 and tetrahydrofuran 72.0", () => {
+    const rows = solventNomograph(100, "acetonitrile");
+    expect(rows?.map((row) => [row.percentText, row.capped])).toEqual([
+      ["100", false],
+      ["100", false],
+      ["72.0", false],
     ]);
   });
 
-  it("matches 50% acetonitrile to methanol 56.9 and tetrahydrofuran 36.3", () => {
-    const rows = solventNomograph(50, "acetonitrile");
-    expect(rows?.map((row) => [row.id, row.percentText, row.capped])).toEqual([
-      ["methanol", "56.9", false],
-      ["acetonitrile", "50.0", false],
-      ["tetrahydrofuran", "36.3", false],
-    ]);
+  it("holds a reading at 100 when the line is past that scale", () => {
+    const rows = solventNomograph(80, "THF");
+    const methanol = rows?.find((row) => row.id === "methanol");
+    expect(methanol?.capped).toBe(true);
+    expect(methanol?.percentText).toBe("100");
+    expect(formatMatchedPercent(100, true)).toBe("100");
   });
 
-  it("matches the corrected strengths at one decimal", () => {
-    const acetonitrile = solventById("acetonitrile")!;
-    expect(matchSolventPercent(50, acetonitrile.strength, solventById("ethanol")!.strength).percent).toBe(67.4);
-    expect(matchSolventPercent(50, acetonitrile.strength, solventById("acetone")!.strength).percent).toBe(56.9);
-    expect(matchSolventPercent(50, acetonitrile.strength, solventById("n-propanol")!.strength).percent).toBe(72.5);
-    expect(matchSolventPercent(50, acetonitrile.strength, solventById("isopropanol")!.strength).percent).toBe(74.4);
-    expect(matchSolventPercent(50, acetonitrile.strength, solventById("n-butanol")!.strength).percent).toBe(74.4);
-  });
-
-  it("holds a matched %B at 100 when the formula goes past the pump", () => {
-    const matched = matchSolventPercent(90, 8.0, 5.1);
-    expect(matched.capped).toBe(true);
-    expect(matched.percent).toBe(100);
-    expect(formatMatchedPercent(matched.percent, matched.capped)).toBe("100");
-    expect(matched.raw).toBeGreaterThan(100);
-  });
-
-  it("recognizes short solvent names and recommends methanol after acetonitrile", () => {
+  it("does not invent a match for solvents that are not on the chart", () => {
+    expect(solventNomograph(50, "ethanol")).toBeNull();
+    expect(solventNomograph(50, "acetone")).toBeNull();
+    expect(solventNomograph(50, "n-propanol")).toBeNull();
+    expect(solventNomograph(50, "isopropanol")).toBeNull();
+    expect(solventNomograph(50, "n-butanol")).toBeNull();
+    expect(solventChoicePercent(50, "acetonitrile", "ethanol")).toBeNull();
+    expect(solventChoicePercent(50, "ethanol", "methanol")).toBeNull();
     expect(findSolvent("ACN")?.id).toBe("acetonitrile");
     expect(findSolvent("MeOH")?.id).toBe("methanol");
     expect(findSolvent("2-Propanol")?.id).toBe("isopropanol");
     expect(findSolvent("1-Butanol")?.id).toBe("n-butanol");
-    expect(recommendSolventId("ACN")).toBe("methanol");
-    expect(recommendSolventId("methanol")).toBe("acetonitrile");
-    expect(recommendSolventId("THF")).toBe("methanol");
-    expect(recommendSolventId("ethanol")).toBe("methanol");
   });
 });
+
+function percents(percent: number): string[] | undefined {
+  return solventNomograph(percent, "acetonitrile")?.map((row) => row.percentText);
+}
 
 describe("selectivity checks", () => {
   it("is finished only when peaks are enough and resolution is above 70% of the typed minimum", () => {
@@ -183,14 +177,16 @@ describe("selectivity plan", () => {
     expect(history.phase).toBe("selectivity");
     if (history.phase !== "selectivity") return;
     expect(history.plan.step).toBe("solvent");
-    expect(history.plan.nextChange).toContain("methanol");
+    expect(history.plan.nextChange).toContain("Pick a new solvent you can actually use.");
+    expect(history.plan.nextChange.toLowerCase()).not.toContain("methanol");
     expect(history.plan.nextChange).not.toContain("60°C");
-    expect(history.plan.nomograph?.map((row) => row.percentText)).toEqual(["91.0", "80.0", "58.0"]);
-    expect(history.plan.why).toContain("acetonitrile");
-    expect(history.plan.why).toContain("80");
-    expect(history.plan.why).toContain("methanol");
+    expect(history.plan.nomograph?.map((row) => row.percentText)).toEqual(["85.9", "80.0", "59.7"]);
+    expect(history.plan.why).toContain("The old solvent is acetonitrile at 80% B.");
+    expect(history.plan.why).toContain("methanol 85.9% B, acetonitrile 80.0% B, and tetrahydrofuran 59.7% B");
+    expect(history.plan.why).not.toContain("The new solvent is");
     expect(history.plan.why.toLowerCase()).not.toContain("guess");
-    expect(history.plan.prefill).toMatchObject({ percentB: "91.0", temperature: "25", solvent: "Methanol (MeOH)" });
+    expect(history.plan.recommendedSolventId).toBeNull();
+    expect(history.plan.prefill).toMatchObject({ percentB: "", temperature: "25", solvent: "" });
   });
 
   it("recommends 60°C at the adjusted %B when 40°C improves the separation", () => {
@@ -353,7 +349,11 @@ describe("selectivity plan", () => {
     expect(history.plan.why).toContain("worse because it has fewer peaks");
     expect(history.plan.why).toContain("minimum resolution is 0");
     expect(history.plan.why).toContain("new solvent");
+    expect(history.plan.why).toContain("The old solvent is acetonitrile at 40% B.");
+    expect(history.plan.why).toContain("methanol 51.2% B, acetonitrile 40.0% B, and tetrahydrofuran 30.7% B");
+    expect(history.plan.why).not.toContain("The new solvent is");
     expect(history.plan.why).not.toContain("2.312");
+    expect(history.plan.nextChange).not.toMatch(/methanol|acetonitrile|tetrahydrofuran/i);
   });
 
   it("uses 25°C when Run 1 has no temperature", () => {

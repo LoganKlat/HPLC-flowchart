@@ -125,19 +125,19 @@ export function HplcApp() {
         current.slice(0, count).map((run, runIndex) => toSelectivityRun(run, runIndex, details)),
         setupFrom(details, checks),
       );
-      const solvent = solventById(solventId);
+      const solvent = solventId ? solventById(solventId) : null;
       const matched =
-        history.phase === "selectivity" && history.plan.anchorPercentB != null && history.plan.oldSolvent
+        solvent && history.phase === "selectivity" && history.plan.anchorPercentB != null && history.plan.oldSolvent
           ? solventChoicePercent(history.plan.anchorPercentB, history.plan.oldSolvent, solventId)
           : null;
       const copy = current.slice();
       const run = copy[index] ?? emptyRun();
       copy[index] = {
         ...run,
-        solvent: solvent?.label ?? run.solvent,
+        solvent: solvent?.label ?? "",
         solventEdited: true,
-        percentB: matched ? matched.percentText : run.percentB,
-        percentEdited: matched ? true : run.percentEdited,
+        percentB: matched ? matched.percentText : "",
+        percentEdited: true,
       };
       return copy;
     });
