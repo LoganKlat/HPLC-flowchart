@@ -1,22 +1,38 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { FileDrop } from "@/components/file-drop";
 import { LaterChangeNote, RetentionDecisionView, StartHighBNote } from "@/components/retention-decision";
 import { ResultsPanel } from "@/components/results-panel";
 import { RunForm } from "@/components/run-form";
+import { SelectivityDecisionView } from "@/components/selectivity-decision";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { evaluateRun, parseUserCount, parseUserNumber, type RuleNumbers } from "@/lib/evaluate";
 import { readLabFile, type LabFileRead } from "@/lib/lab-file";
-import { decideRetention, formatPercentB, type RetentionSample } from "@/lib/retention";
+import { decideRetention, formatPercentB, type RetentionDecision, type RetentionSample } from "@/lib/retention";
 import { emptyRuleInputs, emptyRunDetails, type RuleInputs, type RunDetails } from "@/lib/run-details";
+import {
+  findSolvent,
+  planHistory,
+  solventById,
+  solventChoicePercent,
+  type SelectivityPlan,
+  type SelectivityPrefill,
+  type SelectivityRun,
+} from "@/lib/selectivity";
 
 type RunState = {
   percentB: string;
   percentEdited: boolean;
+  temperature: string;
+  temperatureEdited: boolean;
+  solvent: string;
+  solventEdited: boolean;
+  ligand: string;
+  ligandEdited: boolean;
   afterRetention: boolean;
   status: "empty" | "reading" | "ready" | "error";
   fileName: string | null;
@@ -28,6 +44,12 @@ function emptyRun(): RunState {
   return {
     percentB: "",
     percentEdited: false,
+    temperature: "",
+    temperatureEdited: false,
+    solvent: "",
+    solventEdited: false,
+    ligand: "",
+    ligandEdited: false,
     afterRetention: false,
     status: "empty",
     fileName: null,
@@ -47,16 +69,7 @@ export function HplcApp() {
   const [runs, setRuns] = useState<RunState[]>([emptyRun()]);
 
   const checks = useMemo(() => toRuleNumbers(rules), [rules]);
-  const retentionRules = useMemo(
-    () => ({
-      requiredPeaks: checks.requiredPeaks,
-      lastPeakTimeMin: checks.lastPeakTimeMin,
-      maxBackPressurePsi: checks.maxBackPressurePsi,
-      minResolution: checks.minResolution,
-    }),
-    [checks],
-  );
-  const syncedRuns = syncNextRun(runs, retentionRules);
+  const syncedRuns = syncNextRun(runs, details, checks);
   if (syncedRuns !== runs) {
     setRuns(syncedRuns);
   }
@@ -76,6 +89,56 @@ export function HplcApp() {
     setRuns((current) => {
       const copy = current.slice();
       copy[index] = { ...copy[index], percentB: value, percentEdited: true };
+      return copy;
+    });
+  }
+
+  function setRunTemperature(index: number, value: string) {
+    setRuns((current) => {
+      const copy = current.slice();
+      copy[index] = { ...copy[index], temperature: value, temperatureEdited: true };
+      return copy;
+    });
+  }
+
+  function setRunSolvent(index: number, value: string) {
+    setRuns((current) => {
+      const copy = current.slice();
+      copy[index] = { ...copy[index], solvent: value, solventEdited: true };
+      return copy;
+    });
+  }
+
+  function setRunLigand(index: number, value: string) {
+    setRuns((current) => {
+      if (!current[index]) return current;
+      const copy = current.slice();
+      copy[index] = { ...copy[index], ligand: value, ligandEdited: true };
+      return copy;
+    });
+  }
+
+  function chooseNextSolvent(index: number, solventId: string) {
+    setRuns((current) => {
+      const count = readyPrefix(current);
+      const history = planHistory(
+        current.slice(0, count).map((run, runIndex) => toSelectivityRun(run, runIndex, details)),
+        setupFrom(details, checks),
+      );
+      const solvent = solventById(solventId);
+      const matched =
+        history.phase === "selectivity" && history.plan.anchorPercentB != null && history.plan.oldSolvent
+          ? solventChoicePercent(history.plan.anchorPercentB, history.plan.oldSolvent, solventId)
+          : null;
+      const copy = current.slice();
+      const run = copy[index] ?? emptyRun();
+      copy[index] = {
+        ...run,
+        solvent: solvent?.label ?? run.solvent,
+        solventEdited: true,
+        percentB: matched ? matched.percentText : run.percentB,
+        percentEdited: matched ? true : run.percentEdited,
+      };
       return copy;
     });
   }
@@ -125,6 +188,12 @@ export function HplcApp() {
         ...emptyRun(),
         percentB: run.percentB,
         percentEdited: run.percentEdited,
+        temperature: run.temperature,
+        temperatureEdited: run.temperatureEdited,
+        solvent: run.solvent,
+        solventEdited: run.solventEdited,
+        ligand: run.ligand,
+        ligandEdited: run.ligandEdited,
       };
       return next;
     });
@@ -151,8 +220,8 @@ export function HplcApp() {
         <p className="text-xs tracking-[0.16em] text-[#0f6b56] uppercase">Composite sample</p>
         <h1 className="mt-1 font-heading text-3xl text-foreground sm:text-4xl">HPLC run check</h1>
         <p className="mt-2 max-w-2xl text-base text-muted-foreground">
-          See whether this chromatogram meets the rules you set. While retention is still the step,
-          the page says what %B to run next.
+          See whether this chromatogram meets the rules you set. While retention or selectivity is
+          the step, the page says what to change next.
         </p>
       </header>
 
@@ -185,10 +254,14 @@ export function HplcApp() {
               details={details}
               rules={rules}
               checks={checks}
-              retentionRules={retentionRules}
               onDetails={onDetails}
               onRules={setRules}
               onPercent={(value) => setRunPercent(index, value)}
+              onTemperature={(value) => setRunTemperature(index, value)}
+              onSolvent={(value) => setRunSolvent(index, value)}
+              onLigand={(value) => setRunLigand(index, value)}
+              onChooseSolvent={(solventId) => chooseNextSolvent(index + 1, solventId)}
+              onChooseLigand={(value) => setRunLigand(index + 1, value)}
               onBegin={beginRead}
               onBuffer={acceptBuffer}
               onProblem={acceptProblem}
@@ -276,10 +349,14 @@ function RunPane({
   details,
   rules,
   checks,
-  retentionRules,
   onDetails,
   onRules,
   onPercent,
+  onTemperature,
+  onSolvent,
+  onLigand,
+  onChooseSolvent,
+  onChooseLigand,
   onBegin,
   onBuffer,
   onProblem,
@@ -292,14 +369,14 @@ function RunPane({
   details: RunDetails;
   rules: RuleInputs;
   checks: RuleNumbers;
-  retentionRules: {
-    requiredPeaks: number | null;
-    lastPeakTimeMin: number | null;
-    maxBackPressurePsi: number | null;
-  };
   onDetails: (details: RunDetails) => void;
   onRules: (rules: RuleInputs) => void;
   onPercent: (value: string) => void;
+  onTemperature: (value: string) => void;
+  onSolvent: (value: string) => void;
+  onLigand: (value: string) => void;
+  onChooseSolvent: (solventId: string) => void;
+  onChooseLigand: (value: string) => void;
   onBegin: (index: number, fileName: string) => void;
   onBuffer: (index: number, fileName: string, buffer: ArrayBuffer) => void;
   onProblem: (index: number, fileName: string, message: string) => void;
@@ -307,13 +384,14 @@ function RunPane({
   onOpen: (index: number) => void;
 }) {
   if (run.afterRetention) {
-    const prior = index > 0 ? decisionFor(runs, index - 1, retentionRules) : null;
-    return <LaterChangeNote decision={prior} />;
+    const prior = index > 0 ? explainRun(runs, index - 1, details, checks) : null;
+    return <LaterChangeNote decision={prior?.kind === "retention" ? prior.decision : null} />;
   }
 
-  const decision = decisionFor(runs, index, retentionRules);
+  const explanation = explainRun(runs, index, details, checks);
   const rows = run.read ? evaluateRun(run.read, checks) : null;
   const next = runs[index + 1];
+  const selectivity = explanation?.kind === "selectivity" ? explanation.plan : null;
 
   return (
     <>
@@ -323,7 +401,15 @@ function RunPane({
       {index === 0 ? (
         <RunForm details={details} rules={rules} onDetails={onDetails} onRules={onRules} />
       ) : (
-        <RunSummary index={index} rules={rules} percentB={run.percentB} onPercent={onPercent} />
+        <RunSummary
+          index={index}
+          rules={rules}
+          run={run}
+          onPercent={onPercent}
+          onTemperature={onTemperature}
+          onSolvent={onSolvent}
+          onLigand={onLigand}
+        />
       )}
 
       <section
@@ -345,7 +431,16 @@ function RunPane({
               </Button>
             </div>
             <ResultsPanel fileName={run.fileName} read={run.read} rows={rows} />
-            {decision ? <RetentionDecisionView decision={decision} /> : null}
+            {explanation?.kind === "retention" ? <RetentionDecisionView decision={explanation.decision} /> : null}
+            {selectivity ? (
+              <SelectivityDecisionView
+                plan={selectivity}
+                solventId={findSolvent(next?.solvent ?? "")?.id ?? selectivity.recommendedSolventId ?? ""}
+                ligand={next?.ligand || selectivity.recommendedLigand || ""}
+                onSolvent={onChooseSolvent}
+                onLigand={onChooseLigand}
+              />
+            ) : null}
             {next ? (
               <div className="mt-auto flex flex-col gap-2">
                 <Button
@@ -355,12 +450,7 @@ function RunPane({
                 >
                   NEXT RUN
                 </Button>
-                <p className="text-center text-xs text-muted-foreground">
-                  {next.afterRetention
-                    ? (decision?.nextChange ??
-                      "Retention is finished. The next kind of change is not built yet.")
-                    : `Run ${index + 2} opens with ${next.percentB ? `${next.percentB}% B` : "the %B"} filled in.`}
-                </p>
+                <p className="text-center text-xs text-muted-foreground">{nextRunCaption(index + 2, next)}</p>
               </div>
             ) : null}
           </>
@@ -370,17 +460,19 @@ function RunPane({
               prompt={
                 index === 0
                   ? "Drop in the lab file from the first run."
-                  : "Drop in the lab file from the run at this %B."
+                  : run.temperature.trim()
+                    ? "Drop in the lab file from the run at this temperature and %B."
+                    : "Drop in the lab file from the run at this %B."
               }
               reading={run.status === "reading"}
               onBegin={(fileName) => onBegin(index, fileName)}
               onBuffer={(fileName, buffer) => void onBuffer(index, fileName, buffer)}
               onProblem={(fileName, message) => onProblem(index, fileName, message)}
             />
-            {run.status === "empty" && run.percentB.trim() ? (
+            {run.status === "empty" && runSettingLine(run) ? (
               <p className="text-center text-sm text-muted-foreground">
-                This run is set to {run.percentB}% B. Change it if the file you upload was run at a
-                different %B.
+                This run is set to {runSettingLine(run)}. Change it if the file you upload was run
+                differently.
               </p>
             ) : null}
             {run.status === "reading" ? (
@@ -407,13 +499,19 @@ function RunPane({
 function RunSummary({
   index,
   rules,
-  percentB,
+  run,
   onPercent,
+  onTemperature,
+  onSolvent,
+  onLigand,
 }: {
   index: number;
   rules: RuleInputs;
-  percentB: string;
+  run: RunState;
   onPercent: (value: string) => void;
+  onTemperature: (value: string) => void;
+  onSolvent: (value: string) => void;
+  onLigand: (value: string) => void;
 }) {
   const ruleLine = [
     rules.requiredPeaks.trim() ? `${rules.requiredPeaks.trim()} peaks` : "peak count not set",
@@ -435,79 +533,216 @@ function RunSummary({
         <span className="font-medium">Rules. </span>
         {ruleLine}
       </p>
-      <div className="mt-3 flex items-center gap-3">
-        <Label htmlFor={`run-${index + 1}-percent-b`} className="shrink-0">
-          %B
-        </Label>
-        <Input
-          id={`run-${index + 1}-percent-b`}
-          value={percentB}
-          inputMode="decimal"
-          className="h-10 w-28"
-          onChange={(event) => onPercent(event.target.value)}
-        />
+      <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <Field label="Temperature (°C)" id={`run-${index + 1}-temperature`}>
+          <Input
+            id={`run-${index + 1}-temperature`}
+            value={run.temperature}
+            inputMode="decimal"
+            className="h-10"
+            onChange={(event) => onTemperature(event.target.value)}
+          />
+        </Field>
+        <Field label="%B" id={`run-${index + 1}-percent-b`}>
+          <Input
+            id={`run-${index + 1}-percent-b`}
+            value={run.percentB}
+            inputMode="decimal"
+            className="h-10"
+            onChange={(event) => onPercent(event.target.value)}
+          />
+        </Field>
+        <Field label="Solvent" id={`run-${index + 1}-solvent`}>
+          <Input
+            id={`run-${index + 1}-solvent`}
+            value={run.solvent}
+            className="h-10"
+            onChange={(event) => onSolvent(event.target.value)}
+          />
+        </Field>
+        <Field label="Ligand" id={`run-${index + 1}-ligand`}>
+          <Input
+            id={`run-${index + 1}-ligand`}
+            value={run.ligand}
+            className="h-10"
+            onChange={(event) => onLigand(event.target.value)}
+          />
+        </Field>
       </div>
     </section>
   );
 }
 
-function decisionFor(
+function Field({ label, id, children }: { label: string; id: string; children: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Label htmlFor={id}>{label}</Label>
+      {children}
+    </div>
+  );
+}
+
+type Explanation =
+  | { kind: "retention"; decision: RetentionDecision }
+  | { kind: "selectivity"; plan: SelectivityPlan };
+
+function explainRun(
   runs: RunState[],
   index: number,
-  rules: {
-    requiredPeaks: number | null;
-    lastPeakTimeMin: number | null;
-    maxBackPressurePsi: number | null;
-  },
-) {
+  details: RunDetails,
+  checks: RuleNumbers,
+): Explanation | null {
   const run = runs[index];
   if (!run || run.status !== "ready" || !run.read) return null;
   for (let i = 0; i < index; i++) {
     if (runs[i].status !== "ready" || !runs[i].read) return null;
   }
-  return decideRetention(runs.slice(0, index + 1).map(toSample), rules);
+  const prefix = runs.slice(0, index + 1);
+  const history = planHistory(
+    prefix.map((item, itemIndex) => toSelectivityRun(item, itemIndex, details)),
+    setupFrom(details, checks),
+  );
+  if (history.phase === "selectivity") return { kind: "selectivity", plan: history.plan };
+  const segment = prefix.slice(history.segmentStart);
+  return { kind: "retention", decision: decideRetention(segment.map(toSample), checks) };
 }
 
-function syncNextRun(
-  runs: RunState[],
-  rules: {
-    requiredPeaks: number | null;
-    lastPeakTimeMin: number | null;
-    maxBackPressurePsi: number | null;
-  },
-): RunState[] {
+function syncNextRun(runs: RunState[], details: RunDetails, checks: RuleNumbers): RunState[] {
   const count = readyPrefix(runs);
   if (count === 0) return runs;
-  const decision = decideRetention(runs.slice(0, count).map(toSample), rules);
+  const ready = runs.slice(0, count);
+  const history = planHistory(
+    ready.map((run, index) => toSelectivityRun(run, index, details)),
+    setupFrom(details, checks),
+  );
   const next = runs[count];
+  const prefill = prefillFor(ready, history, details, checks);
 
-  if (decision.status === "blocked") {
-    if (!next || next.status !== "empty" || next.percentEdited) return runs;
+  if (!prefill) {
+    if (!next || next.status !== "empty" || runWasEdited(next)) return runs;
     if (runs.length !== count + 1) return runs;
     return runs.slice(0, count);
   }
 
-  const prefill =
-    decision.status === "recommend" && decision.nextPercentB != null
-      ? formatPercentB(decision.nextPercentB)
-      : "";
-  const afterRetention = decision.status === "finished";
-
   if (!next) {
     if (runs.length !== count) return runs;
-    return [...runs, { ...emptyRun(), percentB: prefill, percentEdited: false, afterRetention }];
+    return [...runs, { ...emptyRun(), ...prefill }];
   }
   if (next.status !== "empty") return runs;
-  if (next.percentEdited) {
-    if (next.afterRetention === afterRetention) return runs;
-    const copy = runs.slice();
-    copy[count] = { ...next, afterRetention };
-    return copy;
-  }
-  if (next.percentB === prefill && next.afterRetention === afterRetention) return runs;
+  const merged = mergePrefill(next, prefill);
+  if (merged === next) return runs;
   const copy = runs.slice();
-  copy[count] = { ...next, percentB: prefill, afterRetention };
+  copy[count] = merged;
   return copy;
+}
+
+function prefillFor(
+  ready: RunState[],
+  history: ReturnType<typeof planHistory>,
+  details: RunDetails,
+  checks: RuleNumbers,
+): SelectivityPrefill | null {
+  if (history.phase === "selectivity") {
+    return history.plan.status === "recommend" ? history.plan.prefill : null;
+  }
+  const decision = decideRetention(ready.slice(history.segmentStart).map(toSample), checks);
+  if (decision.status !== "recommend" || decision.nextPercentB == null) return null;
+  const lastIndex = ready.length - 1;
+  const inherited = inheritedConditions(ready[lastIndex], lastIndex, details);
+  return {
+    percentB: formatPercentB(decision.nextPercentB),
+    temperature: inherited.temperature,
+    solvent: inherited.solvent,
+    ligand: inherited.ligand,
+  };
+}
+
+function inheritedConditions(run: RunState, index: number, details: RunDetails) {
+  if (index <= 0) {
+    return {
+      temperature: details.temperature.trim(),
+      solvent: details.solvent.trim(),
+      ligand: details.ligand.trim(),
+    };
+  }
+  return {
+    temperature: run.temperature.trim() || details.temperature.trim(),
+    solvent: run.solvent.trim() || details.solvent.trim(),
+    ligand: run.ligand.trim() || details.ligand.trim(),
+  };
+}
+
+function mergePrefill(run: RunState, prefill: SelectivityPrefill): RunState {
+  const percentB = run.percentEdited ? run.percentB : prefill.percentB;
+  const temperature = run.temperatureEdited ? run.temperature : prefill.temperature;
+  const solvent = run.solventEdited ? run.solvent : prefill.solvent;
+  const ligand = run.ligandEdited ? run.ligand : prefill.ligand;
+  if (
+    run.percentB === percentB &&
+    run.temperature === temperature &&
+    run.solvent === solvent &&
+    run.ligand === ligand &&
+    !run.afterRetention
+  ) {
+    return run;
+  }
+  return { ...run, percentB, temperature, solvent, ligand, afterRetention: false };
+}
+
+function runWasEdited(run: RunState): boolean {
+  return run.percentEdited || run.temperatureEdited || run.solventEdited || run.ligandEdited;
+}
+
+function setupFrom(details: RunDetails, checks: RuleNumbers) {
+  return {
+    requiredPeaks: checks.requiredPeaks,
+    lastPeakTimeMin: checks.lastPeakTimeMin,
+    minResolution: checks.minResolution,
+    maxBackPressurePsi: checks.maxBackPressurePsi,
+    ambientTemperatureC: parseUserNumber(details.temperature),
+    originalSolvent: details.solvent.trim(),
+    originalLigand: details.ligand.trim(),
+  };
+}
+
+function toSelectivityRun(run: RunState, index: number, details: RunDetails): SelectivityRun {
+  const temperatureText = index === 0 ? details.temperature : run.temperature.trim() || details.temperature;
+  const solvent = index === 0 ? details.solvent : run.solvent.trim() || details.solvent;
+  const ligand = index === 0 ? details.ligand : run.ligand.trim() || details.ligand;
+  const percentText = index === 0 ? details.percentB || run.percentB : run.percentB;
+  return {
+    percentB: parseUserNumber(percentText),
+    temperatureC: parseUserNumber(temperatureText),
+    solvent: solvent.trim(),
+    ligand: ligand.trim(),
+    peakCount: run.read?.peakCount ?? null,
+    lastPeakTimeMin: run.read?.lastPeakTimeMin ?? null,
+    firstPeakTimeMin: run.read?.firstPeakTimeMin ?? null,
+    minResolutionExcludingFirst: run.read?.minResolutionExcludingFirst ?? null,
+    maxBackPressurePsi: run.read?.maxBackPressurePsi ?? null,
+  };
+}
+
+function nextRunCaption(runNumber: number, next: RunState): string {
+  const bits = [
+    next.temperature.trim() ? `${next.temperature}°C` : "",
+    next.percentB.trim() ? `${next.percentB}% B` : "",
+    next.solvent.trim(),
+    next.ligand.trim(),
+  ].filter(Boolean);
+  if (bits.length === 0) return `Run ${runNumber} is ready for a file.`;
+  return `Run ${runNumber} opens with ${bits.join(", ")} filled in.`;
+}
+
+function runSettingLine(run: RunState): string {
+  return [
+    run.temperature.trim() ? `${run.temperature}°C` : "",
+    run.percentB.trim() ? `${run.percentB}% B` : "",
+    run.solvent.trim(),
+    run.ligand.trim(),
+  ]
+    .filter(Boolean)
+    .join(", ");
 }
 
 function readyPrefix(runs: RunState[]): number {

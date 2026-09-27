@@ -295,6 +295,20 @@ function finishedCalculated(
   };
 }
 
+/** Index of the in-time run selectivity should start from, or null when none qualify. */
+export function carryForwardIndex(samples: RetentionSample[], rules: RetentionRules): number | null {
+  if (rules.requiredPeaks == null || rules.lastPeakTimeMin == null || rules.maxBackPressurePsi == null) {
+    return null;
+  }
+  const chosen = chooseCarryRun(samples, {
+    requiredPeaks: rules.requiredPeaks,
+    lastPeakTimeMin: rules.lastPeakTimeMin,
+    maxBackPressurePsi: rules.maxBackPressurePsi,
+    minResolution: rules.minResolution ?? null,
+  });
+  return chosen?.index ?? null;
+}
+
 function chooseCarryRun(
   samples: RetentionSample[],
   rules: CompleteRules,
