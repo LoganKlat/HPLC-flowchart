@@ -5,6 +5,10 @@ import { formatDecimal } from "@/lib/evaluate";
  * The typed minimum resolution does not finish this step. It is used only to
  * decide whether the first run, or the highest-%B run, can be left out of the
  * line once there are more than three chromatograms.
+ *
+ * A run is also left out when its first-peak time (t0) is more than 10% away
+ * from the middle first-peak time of the other runs. That check runs even when
+ * the peaks look separated, and even when there are three or fewer runs.
  */
 
 export type RetentionSample = {
@@ -307,6 +311,15 @@ function calculatePercentB(samples: RetentionSample[], rules: CompleteRules): Re
 
   const spec = separationSpecFrom(rules);
   const picked = selectForLine(samples, spec);
+  if (picked.t0Blocked) {
+    return blocked(
+      "fit-unavailable",
+      "Do not recommend a %B. Leaving out the runs whose first-peak time does not match the others would leave fewer than two chromatograms, so the line is not fit.",
+      [...intro, t0ComparisonParagraph(samples, picked.checks, new Set()), "Leaving those runs out would leave fewer than two chromatograms, so the line is not fit."].join(
+        "\n\n",
+      ),
+    );
+  }
   const rows: RetentionFitRow[] = [];
   const skipped: string[] = [];
   for (const item of picked.kept) {
@@ -400,9 +413,11 @@ function calculatePercentB(samples: RetentionSample[], rules: CompleteRules): Re
     nextChange += " The calculated value was below 0, so it is held at 0.";
   }
 
-  const why = [...intro, fitMembershipSentence(samples, fit, spec), calculationSentence(fit)].join(
-    "\n\n",
-  );
+  const why = [
+    ...intro,
+    fitMembershipSentence(samples, fit, spec, picked.checks),
+    calculationSentence(fit),
+  ].join("\n\n");
 
   return {
     status: "recommend",
@@ -470,30 +485,56 @@ function fitMembershipSentence(
   samples: RetentionSample[],
   fit: RetentionFit,
   spec: SeparationSpec,
+  checks: T0Check[],
 ): string {
   const used = fit.rows
     .map((row) => `Run ${row.runNumber} at ${formatPercentB(row.percentB)}% B`)
     .join(", ");
-  if (samples.length <= 3) {
+  const far = checks.some((check) => check.far);
+  if (!far && samples.length <= 3) {
     const howMany =
       samples.length === 2 ? "Both chromatograms are used" : "All three chromatograms are used";
     return `${howMany}. ${used}.`;
   }
 
+  const parts: string[] = [];
+  if (far) {
+    const keptRunNumbers = new Set(fit.rows.map((row) => row.runNumber));
+    parts.push(t0ComparisonParagraph(samples, checks, keptRunNumbers));
+    if (samples.length > 3) {
+      const separation = separationMembershipSentence(samples, spec, checks);
+      if (separation) parts.push(separation);
+    }
+  } else {
+    parts.push(`There are ${formatCount(samples.length)} chromatograms.`);
+    parts.push(separationMembershipSentence(samples, spec, checks));
+  }
+  parts.push(`The calculation uses ${used}.`);
+  return parts.join(" ");
+}
+
+function separationMembershipSentence(
+  samples: RetentionSample[],
+  spec: SeparationSpec,
+  checks: T0Check[],
+): string {
   const highest = highestPercentIndex(samples);
-  const parts = [`There are ${formatCount(samples.length)} chromatograms.`];
+  const parts: string[] = [];
   if (highest === 0) {
+    if (checks[0]?.far) return "";
     const verdict = separationVerdict(samples[0], spec);
     let line = `${runLabel(0, samples[0])} is the first run and also the highest %B, so that run is checked once. ${verdict.sentence}`;
     if (!verdict.keep) line += " It is left out once.";
-    parts.push(line);
-  } else {
+    return line;
+  }
+  if (!checks[0]?.far) {
     const first = separationVerdict(samples[0], spec);
     parts.push(`${runLabel(0, samples[0])} is the first run. ${first.sentence}`);
+  }
+  if (!checks[highest]?.far) {
     const high = separationVerdict(samples[highest], spec);
     parts.push(`${runLabel(highest, samples[highest])} has the highest %B. ${high.sentence}`);
   }
-  parts.push(`The calculation uses ${used}.`);
   return parts.join(" ");
 }
 
@@ -601,20 +642,51 @@ function separationVerdict(
   };
 }
 
-function selectForLine(
-  samples: RetentionSample[],
-  spec: SeparationSpec,
-): {
+/** A run is far when its t0 is more than this fraction from the leave-one-out median. */
+const T0_RELATIVE_CUTOFF = 0.1;
+
+type T0Check = {
+  index: number;
+  t0: number | null;
+  medianOthers: number | null;
+  relative: number | null;
+  far: boolean;
+};
+
+type LineSelection = {
   kept: IndexedSample[];
   excluded: RetentionExclusion[];
-} {
-  const indexed = samples.map((sample, index) => ({ runNumber: index + 1, sample }));
-  if (samples.length <= 3) return { kept: indexed, excluded: [] };
+  checks: T0Check[];
+  /** True when dropping the far t0 runs would leave fewer than two chromatograms. */
+  t0Blocked: boolean;
+};
 
-  const highest = highestPercentIndex(samples);
-  const dropIndexes = new Set<number>();
-  for (const index of [0, highest]) {
-    if (!separationVerdict(samples[index], spec).keep) dropIndexes.add(index);
+function selectForLine(samples: RetentionSample[], spec: SeparationSpec): LineSelection {
+  const indexed = samples.map((sample, index) => ({ runNumber: index + 1, sample }));
+  const checks = t0Checks(samples);
+  const t0Drop = new Set(checks.filter((check) => check.far).map((check) => check.index));
+  if (t0Drop.size > 0 && samples.length - t0Drop.size < 2) {
+    return {
+      kept: [],
+      excluded: indexed
+        .filter((item) => t0Drop.has(item.runNumber - 1))
+        .map((item) => ({
+          runNumber: item.runNumber,
+          percentB: item.sample.percentB,
+          reason: t0LeaveOutSentence(checks[item.runNumber - 1]),
+        })),
+      checks,
+      t0Blocked: true,
+    };
+  }
+
+  const dropIndexes = new Set(t0Drop);
+  if (samples.length > 3) {
+    const highest = highestPercentIndex(samples);
+    for (const index of [0, highest]) {
+      if (dropIndexes.has(index)) continue;
+      if (!separationVerdict(samples[index], spec).keep) dropIndexes.add(index);
+    }
   }
 
   const excluded: RetentionExclusion[] = [];
@@ -624,13 +696,85 @@ function selectForLine(
       kept.push(item);
       return;
     }
+    const check = checks[index];
     excluded.push({
       runNumber: item.runNumber,
       percentB: item.sample.percentB,
-      reason: separationVerdict(item.sample, spec).sentence,
+      reason: check.far
+        ? t0LeaveOutSentence(check)
+        : separationVerdict(item.sample, spec).sentence,
     });
   });
-  return { kept, excluded };
+  return { kept, excluded, checks, t0Blocked: false };
+}
+
+function t0Checks(samples: RetentionSample[]): T0Check[] {
+  return samples.map((sample, index) => {
+    const others = samples
+      .filter((_, other) => other !== index)
+      .map((item) => item.firstPeakTimeMin)
+      .filter((time): time is number => time != null && time > 0);
+    const medianOthers = median(others);
+    const t0 = sample.firstPeakTimeMin != null && sample.firstPeakTimeMin > 0 ? sample.firstPeakTimeMin : null;
+    const relative =
+      t0 != null && medianOthers != null && medianOthers > 0
+        ? Math.abs(t0 - medianOthers) / medianOthers
+        : null;
+    return {
+      index,
+      t0,
+      medianOthers,
+      relative,
+      far: relative != null && relative > T0_RELATIVE_CUTOFF,
+    };
+  });
+}
+
+function median(values: number[]): number | null {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  if (sorted.length % 2 === 1) return sorted[mid];
+  return (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+function t0ComparisonParagraph(
+  samples: RetentionSample[],
+  checks: T0Check[],
+  keptRunNumbers: Set<number>,
+): string {
+  const lines = [
+    "Each run’s first-peak time is compared with the middle first-peak time of the other runs. A run is left out when that time is more than 10% away.",
+  ];
+  for (const check of checks) {
+    const sample = samples[check.index];
+    const label = runLabel(check.index, sample);
+    if (check.far) {
+      lines.push(`${label}. ${t0LeaveOutSentence(check)}`);
+      continue;
+    }
+    if (check.t0 == null || check.medianOthers == null || check.relative == null) continue;
+    if (keptRunNumbers.has(check.index + 1)) {
+      lines.push(`${label}. ${t0KeepSentence(check)}`);
+    } else {
+      lines.push(
+        `${label}. Its first-peak time is ${formatMinutes(check.t0)} min, ${formatRelative(check.relative)} from the middle of the other runs (${formatMinutes(check.medianOthers)} min), so it is not left out for that.`,
+      );
+    }
+  }
+  return lines.join(" ");
+}
+
+function t0LeaveOutSentence(check: T0Check): string {
+  return `It is left out because its first-peak time (${formatMinutes(check.t0!)} min) does not match the other runs. The middle first-peak time of the other runs is ${formatMinutes(check.medianOthers!)} min, and this one is ${formatRelative(check.relative!)} away, past the 10% cutoff.`;
+}
+
+function t0KeepSentence(check: T0Check): string {
+  return `It is kept. Its first-peak time is ${formatMinutes(check.t0!)} min, ${formatRelative(check.relative!)} from the middle of the other runs (${formatMinutes(check.medianOthers!)} min).`;
+}
+
+function formatRelative(value: number): string {
+  return `${(Math.round(value * 1000) / 10).toFixed(1)}%`;
 }
 
 function retentionFactor(sample: RetentionSample): { k: number; logK: number } | null {

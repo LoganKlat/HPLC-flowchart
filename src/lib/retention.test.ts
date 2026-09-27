@@ -538,6 +538,123 @@ describe("retention rule edges", () => {
   });
 });
 
+describe("first-peak time outliers", () => {
+  const files = [
+    { percentB: 90, name: "GR41-04-90.csv" },
+    { percentB: 70, name: "GR41-06-70-good.csv" },
+    { percentB: 60, name: "GR41-07-60-good.csv" },
+    { percentB: 50, name: "GR41-08-50-good.csv" },
+    { percentB: 40, name: "GR41-09-40-good.csv" },
+  ] as const;
+  const reads = files.map((file) => readLabFile(readFileSync(path.join(fixtureDir, file.name))));
+  const samples = files.map((file, index) => sampleFromRead(file.percentB, reads[index]));
+  const rules: RetentionRules = {
+    requiredPeaks: 8,
+    lastPeakTimeMin: 10,
+    maxBackPressurePsi: 2000,
+  };
+
+  it("leaves the 90% run out of the five-file fit and keeps 70, 60, 50, and 40", () => {
+    expect(reads.map((read) => read.firstPeakTimeMin?.toFixed(3))).toEqual([
+      "1.296",
+      "1.101",
+      "1.088",
+      "1.084",
+      "1.095",
+    ]);
+    const decision = decideRetention(samples, rules);
+    expect(decision.move).toBe("calculated");
+    expect(decision.fit!.rows.map((row) => row.percentB)).toEqual([70, 60, 50, 40]);
+    expect(decision.fit!.rows.map((row) => row.runNumber)).toEqual([2, 3, 4, 5]);
+    expect(decision.fit!.excluded.map((row) => row.percentB)).toEqual([90]);
+    expect(decision.why).toContain("1.296");
+    expect(decision.why).toContain("1.101");
+    expect(decision.why).toContain("does not match the other runs");
+    expect(decision.why).toContain("10%");
+    expect(decision.why).toContain("Run 2 at 70% B");
+    expect(decision.why).toContain("It is kept");
+    expect(decision.why).not.toContain("Run 1 at 90% B. It is kept");
+  });
+
+  it("leaves out a separated 90% run because its first-peak time is off, and keeps 70%", () => {
+    const decision = decideRetention(
+      [
+        sample({
+          percentB: 90,
+          peakCount: 6,
+          minResolutionExcludingFirst: 2.3,
+          firstPeakTimeMin: 1.296,
+          lastPeakTimeMin: 1.8,
+        }),
+        sample({
+          percentB: 70,
+          peakCount: 6,
+          minResolutionExcludingFirst: 0.6,
+          firstPeakTimeMin: 1.101,
+          lastPeakTimeMin: 2,
+        }),
+        sample({
+          percentB: 60,
+          peakCount: 6,
+          minResolutionExcludingFirst: 0.7,
+          firstPeakTimeMin: 1.088,
+          lastPeakTimeMin: 3,
+        }),
+        sample({
+          percentB: 50,
+          peakCount: 6,
+          minResolutionExcludingFirst: 0.9,
+          firstPeakTimeMin: 1.084,
+          lastPeakTimeMin: 5,
+        }),
+        sample({
+          percentB: 40,
+          peakCount: 6,
+          minResolutionExcludingFirst: 1.2,
+          firstPeakTimeMin: 1.095,
+          lastPeakTimeMin: 9,
+        }),
+      ],
+      { requiredPeaks: 2, lastPeakTimeMin: 10, maxBackPressurePsi: 500 },
+    );
+    expect(decision.move).toBe("calculated");
+    expect(decision.fit!.rows.map((row) => row.percentB)).toEqual([70, 60, 50, 40]);
+    expect(decision.fit!.excluded.map((row) => row.percentB)).toEqual([90]);
+    expect(decision.why).toContain("does not match the other runs");
+    expect(decision.why).toContain("Run 2 at 70% B. It is kept");
+  });
+
+  it("drops a far first-peak time even when there are only three runs", () => {
+    const decision = decideRetention(
+      [
+        sample({ percentB: 90, peakCount: 2, firstPeakTimeMin: 1.296, lastPeakTimeMin: 2 }),
+        sample({ percentB: 70, peakCount: 2, firstPeakTimeMin: 1.101, lastPeakTimeMin: 4 }),
+        sample({ percentB: 60, peakCount: 2, firstPeakTimeMin: 1.088, lastPeakTimeMin: 9 }),
+      ],
+      { requiredPeaks: 8, lastPeakTimeMin: 10, maxBackPressurePsi: 500 },
+    );
+    expect(decision.move).toBe("calculated");
+    expect(decision.fit!.rows.map((row) => row.percentB)).toEqual([70, 60]);
+    expect(decision.fit!.excluded.map((row) => row.percentB)).toEqual([90]);
+  });
+
+  it("does not fit when dropping the far first-peak times would leave fewer than two runs", () => {
+    const decision = decideRetention(
+      [
+        sample({ percentB: 90, peakCount: 2, firstPeakTimeMin: 1.296, lastPeakTimeMin: 8 }),
+        sample({ percentB: 70, peakCount: 2, firstPeakTimeMin: 1.101, lastPeakTimeMin: 9 }),
+      ],
+      { requiredPeaks: 8, lastPeakTimeMin: 10, maxBackPressurePsi: 500 },
+    );
+    expect(decision.move).toBeNull();
+    expect(decision.reason).toBe("fit-unavailable");
+    expect(decision.fit).toBeNull();
+    expect(decision.why.toLowerCase()).toContain("fewer than two");
+    expect(decision.why).toContain("1.296");
+    expect(decision.why).toContain("1.101");
+  });
+});
+
 function sampleFromRead(percentB: number, read: LabFileRead): RetentionSample {
   return {
     percentB,
