@@ -6,9 +6,9 @@ export const FILE_NAME_EXAMPLE =
 
 /** Shown beside the Run 1 checkbox. One real name, broken into its pieces. */
 export const FILE_NAME_CHECKBOX_LABEL =
-  "Fill these details from the file name. Separate the pieces with hyphens, in this order: group, injection number, HPLC number, solvent, pH, method, %B, flow rate, injection volume, sample type, sample concentration, ligand, length x diameter x particle size, oven temperature, and wavelength. A shorter name fills only the pieces it includes. For example, " +
+  "Fill these details from the file name. Hyphens separate the pieces. Skip the first three, then read solvent, pH, method, %B, flow rate, injection volume, sample type, sample concentration, ligand, length x diameter x particle size, oven temperature, and wavelength. A shorter name fills only the pieces it includes. For example, " +
   FILE_NAME_EXAMPLE +
-  " is group GR09, injection 05, HPLC 3, solvent ACN, pH 3, method ISO, 90% B, flow 1.5, injection volume 20, sample type CP, sample concentration 0.1, ligand C18aqP, length 150 mm, diameter 4.6 mm, particle size 5 µm, oven ambient, and wavelength 254.";
+  " gives solvent ACN, pH 3, method ISO, 90% B, flow 1.5, injection volume 20, sample type CP, sample concentration 0.1, ligand C18aqP, length 150 mm, diameter 4.6 mm, particle size 5 µm, oven ambient, and wavelength 254.";
 
 export const FILE_NAME_MISMATCH =
   "This file name does not follow that pattern, so the details you typed were left as they are.";
@@ -67,8 +67,6 @@ function splitPieces(stem: string): string[] {
 function parseShort(parts: string[], oven: string | null): Partial<RunDetails> | null {
   if (!isGroup(parts[0]) || !isDigits(parts[1]) || !isNumber(parts[2])) return null;
   const fields: Partial<RunDetails> = {
-    group: parts[0],
-    injectionNumber: parts[1],
     percentB: parts[2],
   };
   if (oven) fields.temperature = oven;
@@ -100,11 +98,7 @@ function parseFull(parts: string[]): Partial<RunDetails> | null {
   }
 
   const fields: Partial<RunDetails> = {
-    group,
-    injectionNumber: injection,
-    hplcNumber: hplc,
     ph,
-    method,
     percentB,
     flowRate: flow,
     injectionVolume,
@@ -116,11 +110,19 @@ function parseFull(parts: string[]): Partial<RunDetails> | null {
     temperature,
     wavelength,
   };
+  const methodName = methodLabel(method);
+  if (methodName) fields.method = methodName;
   const solventLabel = solventLabelFor(solvent);
   if (solventLabel) fields.solvent = solventLabel;
   const ligandName = LIGAND_NAMES.get(ligand.toLowerCase());
   if (ligandName) fields.ligand = ligandName;
   return fields;
+}
+
+function methodLabel(token: string): "GRA" | "ISO" | null {
+  if (/^gra$/i.test(token)) return "GRA";
+  if (/^iso$/i.test(token)) return "ISO";
+  return null;
 }
 
 function solventLabelFor(token: string): string | null {

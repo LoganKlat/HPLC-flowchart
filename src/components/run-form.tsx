@@ -32,17 +32,6 @@ export function RunForm({ details, rules, onDetails, onRules }: RunFormProps) {
           <CardDescription>Saved with this session, even if a check does not use them yet.</CardDescription>
         </CardHeader>
         <CardContent className="grid grid-cols-1 gap-x-4 gap-y-3 @min-[28rem]:grid-cols-2">
-          <TextField label="Group" value={details.group} onChange={(value) => setDetail("group", value)} />
-          <TextField
-            label="Injection number"
-            value={details.injectionNumber}
-            onChange={(value) => setDetail("injectionNumber", value)}
-          />
-          <TextField
-            label="HPLC number"
-            value={details.hplcNumber}
-            onChange={(value) => setDetail("hplcNumber", value)}
-          />
           <ChoiceField
             label="Solvent"
             value={details.solvent}
@@ -56,7 +45,17 @@ export function RunForm({ details, rules, onDetails, onRules }: RunFormProps) {
             onChange={(value) => setDetail("ph", value)}
             inputMode="decimal"
           />
-          <TextField label="Method" value={details.method} onChange={(value) => setDetail("method", value)} />
+          <ChoiceField
+            label="Method"
+            value={details.method}
+            placeholder="select a method"
+            placeholderInList={false}
+            options={[
+              { value: "GRA", label: "GRA" },
+              { value: "ISO", label: "ISO" },
+            ]}
+            onChange={(value) => setDetail("method", value === "GRA" || value === "ISO" ? value : "")}
+          />
           <TextField
             label="%B"
             value={details.percentB}
@@ -140,11 +139,6 @@ export function RunForm({ details, rules, onDetails, onRules }: RunFormProps) {
             value={details.particleSize}
             onChange={(value) => setDetail("particleSize", value)}
             inputMode="decimal"
-          />
-          <TextField
-            label="Particle physics"
-            value={details.particlePhysics}
-            onChange={(value) => setDetail("particlePhysics", value)}
           />
           <TextField
             label="Temperature (°C)"

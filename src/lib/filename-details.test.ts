@@ -12,8 +12,9 @@ const name80 = "GR09-06-3-ACN-3-ISO-80-1.5-20-CP-0.1-C18aqP-150x4.6x5-amb-254.xl
 describe("run file names", () => {
   it("explains the pattern with the GR09 90% B name", () => {
     expect(FILE_NAME_CHECKBOX_LABEL).toContain(name90.replace(/\.xlsx$/, ""));
-    expect(FILE_NAME_CHECKBOX_LABEL).toContain("group GR09");
-    expect(FILE_NAME_CHECKBOX_LABEL).toContain("ligand C18aqP");
+    expect(FILE_NAME_CHECKBOX_LABEL).toContain("solvent ACN");
+    expect(FILE_NAME_CHECKBOX_LABEL).toContain("method ISO");
+    expect(FILE_NAME_CHECKBOX_LABEL).not.toMatch(/group|injection number|HPLC number|particle physics/i);
   });
 
   it("parses both workbook names, including the extra upload suffix", () => {
@@ -25,9 +26,6 @@ describe("run file names", () => {
     const at80 = parseRunFileName(name80);
     if (!at90.ok || !at80.ok) throw new Error("names did not parse");
     expect(at90.fields).toMatchObject({
-      group: "GR09",
-      injectionNumber: "05",
-      hplcNumber: "3",
       solvent: "ACN",
       ph: "3",
       method: "ISO",
@@ -44,7 +42,7 @@ describe("run file names", () => {
       wavelength: "254",
     });
     expect(at80.fields.percentB).toBe("80");
-    expect(at80.fields.injectionNumber).toBe("06");
+    expect(at80.fields.method).toBe("ISO");
     expect(at80.fields.ligand).toBe("C18aq");
   });
 
@@ -61,11 +59,7 @@ describe("run file names", () => {
     const short = parseRunFileName("GR41-04-90.csv");
     expect(short.ok).toBe(true);
     if (!short.ok) return;
-    expect(short.fields).toEqual({
-      group: "GR41",
-      injectionNumber: "04",
-      percentB: "90",
-    });
+    expect(short.fields).toEqual({ percentB: "90" });
 
     const ambient = parseRunFileName("GR41-09-40-ambient.csv");
     expect(ambient.ok).toBe(true);
@@ -99,6 +93,13 @@ describe("run file names", () => {
     if (!methanol.ok) return;
     expect(methanol.fields.solvent).toBe("MeOH");
     expect(methanol.fields.ligand).toBe("C8");
+
+    const gradient = parseRunFileName(
+      "GR09-05-3-ACN-3-GRA-90-1.5-20-CP-0.1-C18aqP-150x4.6x5-amb-254.xlsx",
+    );
+    expect(gradient.ok).toBe(true);
+    if (!gradient.ok) return;
+    expect(gradient.fields.method).toBe("GRA");
 
     const mismatch = parseRunFileName("notes.csv");
     expect(mismatch).toEqual({ ok: false, message: FILE_NAME_MISMATCH });
