@@ -6,9 +6,9 @@ import { formatDecimal, resolutionForDecision } from "@/lib/evaluate";
  * decide whether the first run, or the highest-%B run, can be left out of the
  * line once there are more than three chromatograms.
  *
- * A run is also left out when Dixon's Q-test at 95% confidence flags its
- * t0 peak. That test needs at least three t0 peaks, and it never leaves
- * fewer than two runs. Poor separation is a separate reason to leave a run out.
+ * A run is also left out when Dixon's Q-test flags its t0 peak. That test
+ * needs at least three t0 peaks, and it never leaves fewer than two runs.
+ * Poor separation is a separate reason to leave a run out.
  */
 
 export type RetentionSample = {
@@ -720,42 +720,41 @@ function separationVerdict(
 }
 
 /**
- * Dixon r10 critical values at 95% confidence. Index is n.
- * Values through n=10 are the ones used in class. n=11 through n=30 are the
- * published r10 95% table (0.342 at n=20, 0.298 at n=30). Past n=30, use n=30.
+ * Dixon r10 critical values at 70% confidence (α = 0.30). Index is n.
+ * One-outlier test, n = 3 through n = 30. Past n = 30, use n = 30.
  */
-const DIXON_Q95 = [
+const DIXON_Q70 = [
   Number.NaN,
   Number.NaN,
   Number.NaN,
-  0.97,
-  0.829,
-  0.71,
-  0.625,
-  0.568,
-  0.526,
-  0.493,
-  0.466,
-  0.444,
-  0.426,
-  0.41,
-  0.396,
-  0.384,
-  0.374,
-  0.365,
-  0.356,
-  0.349,
-  0.342,
-  0.337,
-  0.331,
-  0.326,
-  0.321,
-  0.317,
-  0.312,
-  0.308,
-  0.305,
-  0.301,
-  0.298,
+  0.6836,
+  0.4704,
+  0.373,
+  0.3173,
+  0.2811,
+  0.255,
+  0.2361,
+  0.2208,
+  0.2086,
+  0.1983,
+  0.1898,
+  0.1826,
+  0.1764,
+  0.1707,
+  0.1656,
+  0.1613,
+  0.1572,
+  0.1535,
+  0.1504,
+  0.1474,
+  0.1446,
+  0.142,
+  0.1397,
+  0.1376,
+  0.1355,
+  0.1335,
+  0.1318,
+  0.13,
 ];
 
 type T0Check = {
@@ -812,11 +811,11 @@ function t0Checks(samples: RetentionSample[]): T0Check[] {
 
 function dixonCritical(n: number): number | null {
   if (n < 3) return null;
-  if (n >= DIXON_Q95.length) return DIXON_Q95[DIXON_Q95.length - 1];
-  return DIXON_Q95[n];
+  if (n >= DIXON_Q70.length) return DIXON_Q70[DIXON_Q70.length - 1];
+  return DIXON_Q70[n];
 }
 
-/** Leave out t0 peaks that fail Dixon's Q-test at 95%. Never leave fewer than two runs. */
+/** Leave out t0 peaks that fail Dixon's Q-test. Never leave fewer than two runs. */
 function dixonOutliers(samples: RetentionSample[]): Set<number> {
   const pool = samples.flatMap((sample, index) => {
     const t0 = sample.firstPeakTimeMin;

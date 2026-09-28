@@ -637,7 +637,7 @@ describe("first-peak time outliers", () => {
     expect(decision.why).not.toContain("middle t0");
   });
 
-  it("leaves out only the 90% run when its t0 peak is 1.190 min", () => {
+  it("leaves out the 1.190 and 1.110 t0 peaks", () => {
     const decision = decideRetention(
       [
         sample({ percentB: 90, peakCount: 2, firstPeakTimeMin: 1.19, lastPeakTimeMin: 2 }),
@@ -650,14 +650,17 @@ describe("first-peak time outliers", () => {
       { requiredPeaks: 8, lastPeakTimeMin: 10, maxBackPressurePsi: 500 },
     );
     expect(decision.move).toBe("calculated");
-    expect(decision.fit!.rows.map((row) => row.t0)).toEqual([1.11, 1.075, 1.064, 1.068, 1.08]);
-    expect(decision.fit!.excluded.map((row) => row.percentB)).toEqual([90]);
-    expect(decision.why).toContain("The Q-test left out Run 1 at 90% B (t0 peak 1.190 min).");
+    expect(decision.fit!.rows.map((row) => row.t0)).toEqual([1.075, 1.064, 1.068, 1.08]);
+    expect(decision.fit!.excluded.map((row) => row.percentB)).toEqual([90, 80]);
     expect(decision.why).toContain(
-      "The calculation uses Run 2 at 80% B, Run 3 at 70% B, Run 4 at 60% B, Run 5 at 50% B, Run 6 at 40% B.",
+      "The Q-test left out Run 1 at 90% B (t0 peak 1.190 min) and Run 2 at 80% B (t0 peak 1.110 min).",
+    );
+    expect(decision.why).toContain(
+      "The calculation uses Run 3 at 70% B, Run 4 at 60% B, Run 5 at 50% B, Run 6 at 40% B.",
     );
     expect(decision.why).not.toContain("middle t0");
     expect(decision.why).not.toContain("10% cutoff");
+    expect(decision.why).not.toContain("95%");
   });
 
   it("says the t0 peaks passed the Q-test when none is an outlier", () => {
@@ -665,13 +668,13 @@ describe("first-peak time outliers", () => {
       [
         sample({ percentB: 80, peakCount: 2, firstPeakTimeMin: 1.064, lastPeakTimeMin: 7 }),
         sample({ percentB: 60, peakCount: 2, firstPeakTimeMin: 1.068, lastPeakTimeMin: 8 }),
-        sample({ percentB: 40, peakCount: 2, firstPeakTimeMin: 1.08, lastPeakTimeMin: 9 }),
+        sample({ percentB: 40, peakCount: 2, firstPeakTimeMin: 1.076, lastPeakTimeMin: 9 }),
       ],
       { requiredPeaks: 8, lastPeakTimeMin: 10, maxBackPressurePsi: 500 },
     );
     expect(decision.move).toBe("calculated");
     expect(decision.fit!.excluded).toEqual([]);
-    expect(decision.fit!.rows.map((row) => row.t0)).toEqual([1.064, 1.068, 1.08]);
+    expect(decision.fit!.rows.map((row) => row.t0)).toEqual([1.064, 1.068, 1.076]);
     expect(decision.why).toContain(
       "The t0 peaks passed the Q-test. The calculation uses Run 1 at 80% B, Run 2 at 60% B, Run 3 at 40% B.",
     );
