@@ -153,7 +153,9 @@ export type HappyCheck = {
 export const RESOLUTION_MULTIPLES = [0.4, 0.55, 0.7, 0.85, 1] as const;
 
 export type EfficiencyAsk = {
-  multiple: number;
+  /** Set for a resolution-benchmark ask. Null for the one-time 7-peak ask. */
+  multiple: number | null;
+  peakCount: number;
   measured: number;
   spec: number;
   question: string;
@@ -273,36 +275,65 @@ export function efficiencyAsk(input: {
   requiredPeaks: number | null;
   minResolution: number | null;
   declinedThrough: number | null;
+  /** No again means a later run is not asked only because it also has 7 peaks. */
+  declinedSevenPeaks?: boolean;
   lastPeakTimeMin?: number | null;
   specifiedRunTimeMin?: number | null;
   maxBackPressurePsi?: number | null;
   maxBackPressureSpec?: number | null;
 }): EfficiencyAsk | null {
   if (input.minResolution == null || !(input.minResolution > 0)) return null;
-  if (input.requiredPeaks == null || input.peakCount == null || input.peakCount < input.requiredPeaks) return null;
+  if (input.peakCount == null) return null;
   const measured = resolutionForDecision(input.peakCount, input.foundResolution, input.requiredPeaks);
   if (measured == null || !Number.isFinite(measured)) return null;
-  const multiple = highestMultiple(measured, input.minResolution);
-  if (multiple == null) return null;
-  if (input.declinedThrough != null && multiple <= input.declinedThrough + 1e-9) return null;
-  const resolutionMeets = measured + 1e-9 >= input.minResolution;
+
+  const peaksMeetSpec = input.requiredPeaks != null && input.peakCount >= input.requiredPeaks;
+  const multiple = peaksMeetSpec ? highestMultiple(measured, input.minResolution) : null;
+  if (peaksMeetSpec && multiple != null) {
+    if (input.declinedThrough != null && multiple <= input.declinedThrough + 1e-9) return null;
+    return finishEfficiencyAsk(input, measured, multiple);
+  }
+
+  if (input.peakCount >= 7 && !input.declinedSevenPeaks) {
+    return finishEfficiencyAsk(input, measured, null);
+  }
+  return null;
+}
+
+function finishEfficiencyAsk(
+  input: {
+    peakCount: number | null;
+    requiredPeaks: number | null;
+    minResolution: number | null;
+    lastPeakTimeMin?: number | null;
+    specifiedRunTimeMin?: number | null;
+    maxBackPressurePsi?: number | null;
+    maxBackPressureSpec?: number | null;
+  },
+  measured: number,
+  multiple: number | null,
+): EfficiencyAsk {
+  const spec = input.minResolution!;
+  const peakCount = input.peakCount!;
   const lastPeak = input.lastPeakTimeMin ?? null;
   const specified = input.specifiedRunTimeMin ?? null;
+  const resolutionMeets = measured + 1e-9 >= spec;
   const lastPeakLate =
     lastPeak != null && specified != null && Number.isFinite(lastPeak) && Number.isFinite(specified) && isLater(lastPeak, specified);
   return {
     multiple,
+    peakCount,
     measured,
-    spec: input.minResolution,
+    spec,
     question:
       resolutionMeets && lastPeakLate
         ? runtimeQuestion(lastPeak, specified)
-        : efficiencyQuestion(measured, input.minResolution),
+        : efficiencyQuestion(measured, spec),
     why: efficiencyWhy({
-      peakCount: input.peakCount,
+      peakCount,
       requiredPeaks: input.requiredPeaks,
       measured,
-      spec: input.minResolution,
+      spec,
       lastPeakTimeMin: lastPeak,
       specifiedRunTimeMin: specified,
       maxBackPressurePsi: input.maxBackPressurePsi ?? null,
@@ -329,7 +360,7 @@ function runtimeQuestion(lastPeakMin: number, specifiedMin: number): string {
 
 function efficiencyWhy(input: {
   peakCount: number;
-  requiredPeaks: number;
+  requiredPeaks: number | null;
   measured: number;
   spec: number;
   lastPeakTimeMin: number | null;
@@ -350,12 +381,17 @@ function efficiencyWhy(input: {
     input.maxBackPressurePsi != null &&
     Number.isFinite(input.maxBackPressurePsi) &&
     !isOver(input.maxBackPressurePsi, input.maxBackPressureSpec!);
+  const peaksChecked = input.requiredPeaks != null;
+  const peaksMet = peaksChecked && input.peakCount >= input.requiredPeaks;
   const everySpecificationMet =
-    resolutionMet && (!lastPeakChecked || lastPeakMet) && (!pressureChecked || pressureMet);
+    (!peaksChecked || peaksMet) &&
+    resolutionMet &&
+    (!lastPeakChecked || lastPeakMet) &&
+    (!pressureChecked || pressureMet);
 
   const parts = [
     "Moving on to efficiency is a choice.",
-    `Peaks: ${formatCount(input.peakCount)}. The specification is ${formatCount(input.requiredPeaks)}. ${input.peakCount >= input.requiredPeaks ? "Met." : "Not met."}`,
+    peakLine(input.peakCount, input.requiredPeaks),
     `Minimum resolution: ${formatResolution(input.measured)}. ${resolutionMet ? "Above" : "Under"} the specification of ${formatResolution(input.spec)}.`,
     lastPeakSentence(input.lastPeakTimeMin, input.specifiedRunTimeMin),
     pressureSentence(input.maxBackPressurePsi, input.maxBackPressureSpec),
@@ -374,6 +410,11 @@ function efficiencyWhy(input: {
     parts.push("Every specification is met.");
   }
   return parts.join("\n\n");
+}
+
+function peakLine(count: number, spec: number | null): string {
+  if (spec == null) return `Peaks: ${formatCount(count)}. The specification is blank, so it is not checked.`;
+  return `Peaks: ${formatCount(count)}. The specification is ${formatCount(spec)}. ${count >= spec ? "Met." : "Not met."}`;
 }
 
 function lastPeakSentence(measured: number | null, spec: number | null): string {

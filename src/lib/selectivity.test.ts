@@ -227,6 +227,99 @@ describe("selectivity checks", () => {
     expect(blankPressure?.why).toContain("Back-pressure: the specification is blank, so it is not checked.");
   });
 
+  it("asks about the ambient 7-peak file when resolution is under 0.4 times the specification", () => {
+    const ambient = readLabFile(readFileSync(path.join(process.cwd(), "fixtures/selectivity/GR41-09-40-ambient.csv")));
+    expect(ambient.peakCount).toBe(7);
+    expect(ambient.minResolutionExcludingFirst).toBeCloseTo(0.324, 3);
+    const ask = efficiencyAsk({
+      peakCount: ambient.peakCount,
+      foundResolution: ambient.minResolutionExcludingFirst,
+      requiredPeaks: 7,
+      minResolution: 1,
+      declinedThrough: null,
+      lastPeakTimeMin: ambient.lastPeakTimeMin,
+      specifiedRunTimeMin: 15,
+      maxBackPressurePsi: ambient.maxBackPressurePsi,
+      maxBackPressureSpec: 4000,
+    });
+    expect(ask?.multiple).toBeNull();
+    expect(ask?.why).toBe(
+      [
+        "Moving on to efficiency is a choice.",
+        "Peaks: 7. The specification is 7. Met.",
+        "Minimum resolution: 0.324. Under the specification of 1.000.",
+        "Last peak: 11.593 min. The specification is 15 min. Met.",
+        "Back-pressure: 1516.2 psi. Under the specification of 4000 psi. Met.",
+        "Not every specification is met. Efficiency and gradient may still bring the resolution up to the specification.",
+      ].join("\n\n"),
+    );
+    expect(ask?.question).toBe(
+      "Consider whether efficiency and gradient can still bring the resolution up to the specification. Minimum resolution: 0.324. Under the specification of 1.000. Move on to efficiency and be done with selectivity?",
+    );
+  });
+
+  it("asks once at 7 peaks even under the 0.4 resolution benchmark", () => {
+    const under = efficiencyAsk({
+      peakCount: 7,
+      foundResolution: 0.324,
+      requiredPeaks: 10,
+      minResolution: 1,
+      declinedThrough: null,
+      lastPeakTimeMin: 11.593,
+      specifiedRunTimeMin: 15,
+      maxBackPressurePsi: 1180.5,
+      maxBackPressureSpec: 4000,
+    });
+    expect(under?.multiple).toBeNull();
+    expect(under?.question).toContain("bring the resolution up to the specification");
+    expect(under?.question).toContain("Minimum resolution: 0.000. Under the specification of 1.000.");
+    expect(under?.question).not.toContain("last peak time");
+    expect(under?.why).toBe(
+      [
+        "Moving on to efficiency is a choice.",
+        "Peaks: 7. The specification is 10. Not met.",
+        "Minimum resolution: 0.000. Under the specification of 1.000.",
+        "Last peak: 11.593 min. The specification is 15 min. Met.",
+        "Back-pressure: 1180.5 psi. Under the specification of 4000 psi. Met.",
+        "Not every specification is met. Efficiency and gradient may still bring the resolution up to the specification.",
+      ].join("\n\n"),
+    );
+    expect(under?.why).not.toContain("you set");
+    expect(under?.why).not.toContain("times");
+
+    expect(efficiencyAsk({
+      peakCount: 7,
+      foundResolution: 0.2,
+      requiredPeaks: 10,
+      minResolution: 1,
+      declinedThrough: null,
+      declinedSevenPeaks: true,
+    })).toBeNull();
+
+    const laterBenchmark = efficiencyAsk({
+      peakCount: 10,
+      foundResolution: 0.4,
+      requiredPeaks: 10,
+      minResolution: 1,
+      declinedThrough: null,
+      declinedSevenPeaks: true,
+    });
+    expect(laterBenchmark?.multiple).toBe(0.4);
+    expect(laterBenchmark?.question).toContain("Minimum resolution: 0.400. Under the specification of 1.000.");
+  });
+
+  it("asks once when 7 peaks already reach a resolution benchmark", () => {
+    const ask = efficiencyAsk({
+      peakCount: 7,
+      foundResolution: 0.4,
+      requiredPeaks: 7,
+      minResolution: 1,
+      declinedThrough: null,
+    });
+    expect(ask?.multiple).toBe(0.4);
+    expect(ask?.why).toContain("Peaks: 7. The specification is 7. Met.");
+  });
+
   it("does not ask when peaks are short or the resolution spec is blank", () => {
     expect(efficiencyAsk({
       peakCount: 5,

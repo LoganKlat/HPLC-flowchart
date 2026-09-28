@@ -23,6 +23,7 @@ import {
   SOLVENTS,
   efficiencyAsk,
   findSolvent,
+  type EfficiencyAsk,
   planHistory,
   solventById,
   solventChoicePercent,
@@ -98,6 +99,7 @@ export function HplcApp() {
   const [rules, setRules] = useState<RuleInputs>(emptyRuleInputs);
   const [runs, setRuns] = useState<RunState[]>([emptyRun()]);
   const [declinedThrough, setDeclinedThrough] = useState<number | null>(null);
+  const [declinedSevenPeaks, setDeclinedSevenPeaks] = useState(false);
   const [leftSelectivity, setLeftSelectivity] = useState(false);
   const [tempPathByRun, setTempPathByRun] = useState<Record<number, TempPath>>({});
   const [hoveredRun, setHoveredRun] = useState<number | null>(null);
@@ -379,8 +381,12 @@ export function HplcApp() {
               onRemove={removeFile}
               onOpen={(next) => setActive(next)}
               declinedThrough={declinedThrough}
+              declinedSevenPeaks={declinedSevenPeaks}
               leftSelectivity={leftSelectivity}
-              onDecline={(multiple) => setDeclinedThrough(multiple)}
+              onDecline={(ask) => {
+                if (ask.peakCount >= 7) setDeclinedSevenPeaks(true);
+                if (ask.multiple != null) setDeclinedThrough(ask.multiple);
+              }}
               onLeave={() => setLeftSelectivity(true)}
               fillFromFileName={fillFromFileName}
               fileNameNote={fileNameNote}
@@ -502,6 +508,7 @@ function RunPane({
   onRemove,
   onOpen,
   declinedThrough,
+  declinedSevenPeaks,
   leftSelectivity,
   onDecline,
   onLeave,
@@ -531,8 +538,9 @@ function RunPane({
   onRemove: (index: number) => void;
   onOpen: (index: number) => void;
   declinedThrough: number | null;
+  declinedSevenPeaks: boolean;
   leftSelectivity: boolean;
-  onDecline: (multiple: number) => void;
+  onDecline: (ask: EfficiencyAsk) => void;
   onLeave: () => void;
   fillFromFileName: boolean;
   fileNameNote: string | null;
@@ -555,6 +563,7 @@ function RunPane({
           requiredPeaks: checks.requiredPeaks,
           minResolution: checks.minResolution,
           declinedThrough,
+          declinedSevenPeaks,
           lastPeakTimeMin: run.read.lastPeakTimeMin,
           specifiedRunTimeMin: checks.lastPeakTimeMin,
           maxBackPressurePsi: run.read.maxBackPressurePsi,
@@ -628,7 +637,7 @@ function RunPane({
               <LeaveSelectivityAsk
                 ask={ask}
                 onYes={onLeave}
-                onNo={() => onDecline(ask.multiple)}
+                onNo={() => onDecline(ask)}
               />
             ) : (
               <>
