@@ -40,7 +40,7 @@ const manualInjector =
 const autosampler = "Injects the sample from a vial. The setting is the injection volume.";
 const controller = "Not used in this class.";
 
-function box(x: number, y: number, w: number, h: number, imgW: number, imgH: number, pad = 10): Box {
+function box(x: number, y: number, w: number, h: number, imgW: number, imgH: number, pad = 2): Box {
   const left = Math.max(0, x - pad);
   const top = Math.max(0, y - pad);
   const right = Math.min(imgW, x + w + pad);
@@ -58,35 +58,35 @@ const setups: Setup[] = [
     id: "hplc-1-2-5",
     label: "HPLC 1, 2, and 5",
     src: "/equipment/hplc-1-2-5.png",
-    width: 1094,
-    height: 508,
+    width: 387,
+    height: 422,
     parts: [
-      { id: "solvents", label: "Solvents", body: solvents, box: box(408, 48, 180, 118, 1094, 508) },
-      { id: "degasser", label: "Degasser", body: degasser, box: box(408, 166, 180, 64, 1094, 508) },
-      { id: "uv", label: "UV detector", body: uvDetector, box: box(408, 228, 185, 100, 1094, 508) },
+      { id: "solvents", label: "Solvents", body: solvents, box: box(21, 20, 171, 111, 387, 422) },
+      { id: "degasser", label: "Degasser", body: degasser, box: box(29, 141, 161, 47, 387, 422) },
+      { id: "uv", label: "UV detector", body: uvDetector, box: box(30, 201, 162, 89, 387, 422) },
       {
         id: "pump",
         label: "Pump with quaternary valve",
         body: pumpQuaternary,
-        box: box(408, 330, 180, 110, 1094, 508),
+        box: box(20, 307, 169, 93, 387, 422),
       },
       {
         id: "controller",
         label: "Controller or fluorescence detector",
         body: controller,
-        box: box(592, 158, 175, 100, 1094, 508),
+        box: box(205, 127, 162, 92, 387, 422),
       },
       {
         id: "oven",
         label: "Oven and column",
         body: ovenAndColumn,
-        box: box(592, 290, 180, 85, 1094, 508),
+        box: box(205, 219, 162, 118, 387, 422),
       },
       {
         id: "injector",
         label: "Manual injector",
         body: manualInjector,
-        box: box(592, 370, 180, 70, 1094, 508),
+        box: box(205, 337, 162, 65, 387, 422),
       },
     ],
   },
@@ -94,68 +94,68 @@ const setups: Setup[] = [
     id: "hplc-3",
     label: "HPLC 3",
     src: "/equipment/hplc-3.png",
-    width: 1264,
-    height: 660,
+    width: 399,
+    height: 655,
     parts: [
-      { id: "solvents", label: "Solvents", body: solvents, box: box(440, 20, 190, 120, 1264, 660) },
-      { id: "degasser", label: "Degasser", body: degasser, box: box(440, 140, 190, 50, 1264, 660) },
-      { id: "pump-1", label: "Pump 1", body: pumps12, box: box(440, 185, 190, 95, 1264, 660) },
-      { id: "pump-2", label: "Pump 2", body: pumps12, box: box(440, 278, 190, 95, 1264, 660) },
+      { id: "solvents", label: "Solvents", body: solvents, box: box(20, 20, 164, 114, 399, 655) },
+      { id: "degasser", label: "Degasser", body: degasser, box: box(20, 134, 164, 49, 399, 655) },
+      { id: "pump-1", label: "Pump 1", body: pumps12, box: box(23, 183, 158, 89, 399, 655) },
+      { id: "pump-2", label: "Pump 2", body: pumps12, box: box(23, 277, 158, 89, 399, 655) },
       {
         id: "controller",
         label: "Controller or fluorescence detector",
         body: controller,
-        box: box(640, 185, 185, 95, 1264, 660),
+        box: box(221, 187, 158, 87, 399, 655),
       },
       {
         id: "detector",
         label: "UV or PDA detector",
         body: uvOrPda,
-        box: box(640, 280, 185, 95, 1264, 660),
+        box: box(221, 277, 158, 93, 399, 655),
       },
       {
         id: "oven",
         label: "Oven and column",
         body: ovenAndColumn,
-        box: box(640, 455, 185, 195, 1264, 660),
+        box: box(221, 370, 158, 269, 399, 655),
       },
-      { id: "autosampler", label: "Autosampler", body: autosampler, box: box(440, 375, 190, 270, 1264, 660) },
+      { id: "autosampler", label: "Autosampler", body: autosampler, box: box(23, 369, 163, 270, 399, 655) },
     ],
   },
   {
     id: "hplc-6",
     label: "HPLC 6",
     src: "/equipment/hplc-6.png",
-    width: 1228,
-    height: 582,
+    width: 400,
+    height: 565,
     parts: [
-      { id: "solvents", label: "Solvents", body: solvents, box: box(435, 35, 190, 125, 1228, 582) },
-      { id: "degasser", label: "Degasser", body: degasser, box: box(435, 155, 190, 55, 1228, 582) },
+      { id: "solvents", label: "Solvents", body: solvents, box: box(21, 20, 164, 116, 400, 565) },
+      { id: "degasser", label: "Degasser", body: degasser, box: box(21, 137, 164, 47, 400, 565) },
       {
         id: "pump",
         label: "Pump with quaternary valve",
         body: pumpQuaternary,
-        box: box(435, 205, 190, 180, 1228, 582),
+        box: box(20, 184, 168, 90, 400, 565),
       },
       {
         id: "controller",
         label: "Controller or fluorescence detector",
         body: controller,
-        box: box(635, 110, 185, 95, 1228, 582),
+        box: box(222, 93, 158, 88, 400, 565),
       },
       {
         id: "detector",
         label: "UV or PDA detector",
         body: uvOrPda,
-        box: box(635, 200, 185, 140, 1228, 582),
+        box: box(222, 183, 158, 93, 400, 565),
       },
       {
         id: "oven",
         label: "Oven and column",
         body: ovenAndColumn,
-        box: box(635, 375, 185, 195, 1228, 582),
+        box: box(222, 276, 158, 268, 400, 565),
       },
-      { id: "autosampler", label: "Autosampler", body: autosampler, box: box(435, 400, 190, 170, 1228, 582) },
+      { id: "autosampler", label: "Autosampler", body: autosampler, box: box(24, 275, 164, 271, 400, 565) },
     ],
   },
 ];
@@ -193,7 +193,7 @@ export function EquipmentPanel({ onOpenNav }: { onOpenNav: () => void }) {
           Sections
         </Button>
       </div>
-      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
       <div className="flex min-w-0 flex-col gap-5">
       <header>
         <p className="text-xs tracking-[0.16em] text-[#0f6b56] uppercase">Lab setups</p>
@@ -230,7 +230,7 @@ export function EquipmentPanel({ onOpenNav }: { onOpenNav: () => void }) {
         <div className="relative">
           <img
             src={setup.src}
-            alt={`Diagram of ${setup.label}`}
+            alt=""
             width={setup.width}
             height={setup.height}
             className="block h-auto w-full"
