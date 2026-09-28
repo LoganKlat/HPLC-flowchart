@@ -1,6 +1,9 @@
 export type CoreShell = "" | "yes" | "no";
 
 export type RunDetails = {
+  group: string;
+  injectionNumber: string;
+  hplcNumber: string;
   ligand: string;
   beadType: string;
   coreShell: CoreShell;
@@ -9,9 +12,14 @@ export type RunDetails = {
   lengthMm: string;
   diameterMm: string;
   particleSize: string;
+  particlePhysics: string;
   solvent: string;
+  ph: string;
+  method: string;
   percentB: string;
   flowRate: string;
+  injectionVolume: string;
+  sampleType: string;
   sampleConcentration: string;
   temperature: string;
   wavelength: string;
@@ -26,6 +34,9 @@ export type RuleInputs = {
 
 export function emptyRunDetails(): RunDetails {
   return {
+    group: "",
+    injectionNumber: "",
+    hplcNumber: "",
     ligand: "",
     beadType: "",
     coreShell: "",
@@ -34,9 +45,14 @@ export function emptyRunDetails(): RunDetails {
     lengthMm: "",
     diameterMm: "",
     particleSize: "",
+    particlePhysics: "",
     solvent: "",
+    ph: "",
+    method: "",
     percentB: "",
     flowRate: "",
+    injectionVolume: "",
+    sampleType: "",
     sampleConcentration: "",
     temperature: "",
     wavelength: "",

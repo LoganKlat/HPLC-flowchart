@@ -1,7 +1,10 @@
 /**
  * Reads a LabSolutions export by section name and column name.
  * Row numbers are never used to find data.
+ * A workbook is turned into the same labeled sections before it is read.
  */
+
+import * as XLSX from "xlsx";
 
 export type ChromatogramPoint = {
   timeMin: number;
@@ -37,7 +40,7 @@ const PRESSURE_SECTION = "LC Status Trace(Pump A Pressure)";
 
 export function readLabFile(input: string | ArrayBuffer | Uint8Array): LabFileRead {
   const blank = emptyRead();
-  const text = decodeLabText(input).replace(/^\uFEFF/, "");
+  const text = labText(input).replace(/^\uFEFF/, "");
   if (!text.trim()) {
     return { ...blank, blockingMessage: "This file is empty." };
   }
@@ -53,7 +56,10 @@ export function readLabFile(input: string | ArrayBuffer | Uint8Array): LabFileRe
   }
 
   const notes: string[] = [];
-  const peakLines = sections.get(PEAK_SECTION);
+  const peakName =
+    (sections.has(PEAK_SECTION) ? PEAK_SECTION : undefined) ??
+    [...sections.keys()].find((name) => name.startsWith("Peak Table"));
+  const peakLines = peakName ? sections.get(peakName) : undefined;
   if (!peakLines) {
     return {
       ...blank,
@@ -150,6 +156,63 @@ export function readLabFile(input: string | ArrayBuffer | Uint8Array): LabFileRe
     chromatogramYAxis: chromatogram.yAxis,
     chromatogramMissingMessage: chromatogram.missingMessage,
   };
+}
+
+function labText(input: string | ArrayBuffer | Uint8Array): string {
+  if (typeof input !== "string") {
+    const bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
+    if (isXlsx(bytes)) return workbookToLabText(bytes);
+  }
+  return decodeLabText(input);
+}
+
+function isXlsx(bytes: Uint8Array): boolean {
+  return bytes.length >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4b && bytes[2] === 0x03 && bytes[3] === 0x04;
+}
+
+/** One sheet, cells in order. A section title in the first cell stays a [Section] line. */
+function workbookToLabText(bytes: Uint8Array): string {
+  const book = XLSX.read(bytes, { type: "array" });
+  const sheetName = book.SheetNames[0];
+  if (!sheetName) return "";
+  const sheet = book.Sheets[sheetName];
+  const ref = sheet["!ref"];
+  if (!ref) return "";
+  const range = XLSX.utils.decode_range(ref);
+  const lines: string[] = [];
+  for (let row = range.s.r; row <= range.e.r; row++) {
+    const cells: string[] = [];
+    let last = -1;
+    for (let column = range.s.c; column <= range.e.c; column++) {
+      const cell = sheet[XLSX.utils.encode_cell({ r: row, c: column })];
+      const value = cellValue(cell);
+      cells.push(value);
+      if (value !== "") last = cells.length - 1;
+    }
+    if (last < 0) {
+      lines.push("");
+      continue;
+    }
+    const used = cells.slice(0, last + 1);
+    if (used.length === 1 && /^\[[^[\]]+\]$/.test(used[0])) {
+      lines.push(used[0]);
+    } else {
+      lines.push(used.map(csvCell).join(","));
+    }
+  }
+  return lines.join("\n");
+}
+
+function cellValue(cell: XLSX.CellObject | undefined): string {
+  if (!cell || cell.v == null) return "";
+  if (typeof cell.v === "number") return String(cell.v);
+  if (typeof cell.v === "boolean") return cell.v ? "TRUE" : "FALSE";
+  return String(cell.v).trim();
+}
+
+function csvCell(value: string): string {
+  if (/[",\n]/.test(value)) return `"${value.replaceAll('"', '""')}"`;
+  return value;
 }
 
 export function decodeLabText(input: string | ArrayBuffer | Uint8Array): string {
@@ -377,7 +440,9 @@ function readChromatogram(
   const sectionName =
     [...sections.keys()].find(
       (name) => name.includes("Chromatogram") && name.includes("Detector A"),
-    ) ?? null;
+    ) ??
+    [...sections.keys()].find((name) => name.includes("Chromatogram")) ??
+    null;
 
   if (!sectionName) {
     return {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { ChoiceSelect } from "@/components/choice-select";
 import { FileDrop } from "@/components/file-drop";
 import { LeaveSelectivityAsk, LeaveSelectivityDone } from "@/components/leave-selectivity";
@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { evaluateRun, parseUserCount, parseUserNumber, type RuleNumbers } from "@/lib/evaluate";
+import { FILE_NAME_CHECKBOX_LABEL, parseRunFileName } from "@/lib/filename-details";
 import { readLabFile, type LabFileRead } from "@/lib/lab-file";
 import { decideRetention, formatPercentB, type RetentionDecision, type RetentionSample } from "@/lib/retention";
 import { emptyRuleInputs, emptyRunDetails, type RuleInputs, type RunDetails } from "@/lib/run-details";
@@ -96,6 +97,12 @@ export function HplcApp() {
   const [declinedThrough, setDeclinedThrough] = useState<number | null>(null);
   const [leftSelectivity, setLeftSelectivity] = useState(false);
   const [hoveredRun, setHoveredRun] = useState<number | null>(null);
+  const [fillFromFileName, setFillFromFileName] = useState(false);
+  const [fileNameNote, setFileNameNote] = useState<string | null>(null);
+  const detailsRef = useRef(details);
+  const fillFromFileNameRef = useRef(fillFromFileName);
+  detailsRef.current = details;
+  fillFromFileNameRef.current = fillFromFileName;
 
   const checks = useMemo(() => toRuleNumbers(rules), [rules]);
   const syncedRuns = syncNextRun(runs, details, checks, leftSelectivity);
@@ -180,11 +187,32 @@ export function HplcApp() {
     });
   }
 
+  function applyFileName(fileName: string) {
+    const parsed = parseRunFileName(fileName);
+    if (!parsed.ok) {
+      setFileNameNote(parsed.message);
+      return;
+    }
+    setFileNameNote(null);
+    onDetails({ ...detailsRef.current, ...parsed.fields });
+  }
+
+  function onToggleFillFromFileName(checked: boolean) {
+    setFillFromFileName(checked);
+    if (!checked) {
+      setFileNameNote(null);
+      return;
+    }
+    const name = runs[0]?.fileName;
+    if (name) applyFileName(name);
+  }
+
   function beginRead(index: number, fileName: string) {
     patchRun(index, { status: "reading", fileName, read: null, message: null });
   }
 
   async function acceptBuffer(index: number, fileName: string, buffer: ArrayBuffer) {
+    if (index === 0 && fillFromFileNameRef.current) applyFileName(fileName);
     patchRun(index, { status: "reading", fileName, read: null, message: null });
     await new Promise((resolve) => setTimeout(resolve, 30));
     try {
@@ -315,6 +343,9 @@ export function HplcApp() {
               leftSelectivity={leftSelectivity}
               onDecline={(multiple) => setDeclinedThrough(multiple)}
               onLeave={() => setLeftSelectivity(true)}
+              fillFromFileName={fillFromFileName}
+              fileNameNote={fileNameNote}
+              onToggleFillFromFileName={onToggleFillFromFileName}
             />
           </TabsContent>
         ))}
@@ -433,6 +464,9 @@ function RunPane({
   leftSelectivity,
   onDecline,
   onLeave,
+  fillFromFileName,
+  fileNameNote,
+  onToggleFillFromFileName,
 }: {
   index: number;
   run: RunState;
@@ -457,6 +491,9 @@ function RunPane({
   leftSelectivity: boolean;
   onDecline: (multiple: number) => void;
   onLeave: () => void;
+  fillFromFileName: boolean;
+  fileNameNote: string | null;
+  onToggleFillFromFileName: (checked: boolean) => void;
 }) {
   if (run.afterRetention) {
     const prior = index > 0 ? explainRun(runs, index - 1, details, checks) : null;
@@ -506,6 +543,28 @@ function RunPane({
           (run.status === "ready" ? "border-solid border-border" : "border-dashed border-border")
         }
       >
+        {index === 0 ? (
+          <div id="filename-fill" className="flex flex-col gap-2">
+            <label
+              htmlFor="fill-from-filename"
+              className="flex items-start gap-3 text-sm leading-relaxed text-foreground"
+            >
+              <input
+                id="fill-from-filename"
+                type="checkbox"
+                className="mt-1 size-4 shrink-0 accent-[#0f6b56]"
+                checked={fillFromFileName}
+                onChange={(event) => onToggleFillFromFileName(event.target.checked)}
+              />
+              <span>{FILE_NAME_CHECKBOX_LABEL}</span>
+            </label>
+            {fileNameNote ? (
+              <p className="text-sm text-orange-950" role="status">
+                {fileNameNote}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
         {run.status === "ready" && run.read && rows && run.fileName ? (
           <>
             <div className="flex justify-end">

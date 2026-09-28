@@ -19,8 +19,8 @@ export function FileDrop({ prompt, reading, onBegin, onBuffer, onProblem }: File
   async function takeFile(file: File | undefined) {
     if (!file) return;
     const lower = file.name.toLowerCase();
-    if (!lower.endsWith(".csv") && !lower.endsWith(".txt")) {
-      onProblem(file.name, "Choose a LabSolutions export. It should be a .csv or .txt file.");
+    if (!lower.endsWith(".csv") && !lower.endsWith(".txt") && !lower.endsWith(".xlsx")) {
+      onProblem(file.name, "Choose a LabSolutions export. It should be a .csv, .txt, or .xlsx file.");
       return;
     }
     if (file.size === 0) {
@@ -61,7 +61,7 @@ export function FileDrop({ prompt, reading, onBegin, onBuffer, onProblem }: File
       >
         <p className="font-heading text-2xl text-foreground sm:text-3xl">{prompt}</p>
         <p className="max-w-md text-sm text-muted-foreground">
-          LabSolutions export (.csv or .txt). Drag it here, or choose it from your computer.
+          LabSolutions export (.csv, .txt, or .xlsx). Drag it here, or choose it from your computer.
         </p>
         <div
           className={cn(
@@ -75,7 +75,7 @@ export function FileDrop({ prompt, reading, onBegin, onBuffer, onProblem }: File
         <input
           id={inputId}
           type="file"
-          accept=".csv,.txt,text/csv,text/plain"
+          accept=".csv,.txt,.xlsx,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
           aria-label="Choose a file"
           disabled={reading}
           className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
