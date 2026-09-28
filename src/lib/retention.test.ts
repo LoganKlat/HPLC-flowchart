@@ -100,9 +100,13 @@ describe("retention %B along the four lab files", () => {
     expect(decision.fit!.m).toBeCloseTo(-0.03950888685102025, 8);
     expect(decision.fit!.c).toBeCloseTo(2.5493876718280926, 8);
     expect(decision.fit!.rawPercentB).toBeCloseTo(41.420785, 3);
-    expect(decision.why).toContain("m =");
-    expect(decision.why).toContain("c =");
-    expect(decision.why).toContain("66%");
+    expect(decision.why).toContain(
+      "The last peak is at 11.593 min, close to the specified run time of 10 min. Another 10% drop would make that retention time much longer, because retention grows exponentially as %B goes down. The next %B is calculated instead.",
+    );
+    expect(decision.why).not.toContain("66%");
+    expect(decision.why).not.toContain("0.66");
+    expect(decision.why).not.toContain("logK");
+    expect(decision.why).not.toContain("m =");
     expect(decision.why).not.toContain("80%");
   });
 
@@ -315,10 +319,13 @@ describe("retention rule edges", () => {
     expect(under.move).toBe("drop-10");
     expect(under.nextPercentB).toBe(60);
     expect(under.why).toContain(
-      "The last peak is at 6.500 min, still significantly under the specified run time of 10 min. 70% B minus 10 percentage points is 60% B.",
+      "The last peak is at 6.500 min, still significantly under the specified run time of 10 min. Decrease %B by 10% to increase retention and peak separation.",
     );
+    expect(under.why).not.toContain("minus 10");
     expect(under.why).not.toContain("66%");
     expect(under.why).not.toContain("0.66");
+    expect(under.nextChange).toContain("Run the next one at 60% B");
+    expect(under.nextChange).not.toContain("minus");
 
     const over = decideRetention(
       [sample({ percentB: 70, peakCount: 2, lastPeakTimeMin: 7, maxBackPressurePsi: 100 })],

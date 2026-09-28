@@ -190,7 +190,7 @@ export function RunForm({ details, rules, onDetails, onRules }: RunFormProps) {
             hint={
               rules.minResolution.trim() && parseUserNumber(rules.minResolution) == null
                 ? "Use a number."
-                : "Met when the smallest resolution, leaving out the first peak, is at least this number. If the file has fewer peaks than you asked for, this shows NA and is not met."
+                : "Met when the smallest resolution, leaving out the t0 peak, is at least this number. If the file has fewer peaks than you asked for, this shows NA and is not met."
             }
             invalid={rules.minResolution.trim() !== "" && parseUserNumber(rules.minResolution) == null}
           />

@@ -1,5 +1,5 @@
 import type { RetentionDecision, RetentionFit } from "@/lib/retention";
-import { formatPercentB, formatSlope } from "@/lib/retention";
+import { formatPercentB } from "@/lib/retention";
 
 export function RetentionDecisionView({ decision }: { decision: RetentionDecision }) {
   return (
@@ -85,8 +85,7 @@ function FitWorking({ fit }: { fit: RetentionFit }) {
     <div className="mt-4 overflow-x-auto">
       <table className="w-full min-w-[36rem] border-collapse text-left text-sm">
         <caption className="pb-2 text-left font-medium text-foreground">
-          Runs used to calculate %B. t0 is the first peak time. tR is the last peak time. k = (tR −
-          t0) / t0. logK is the base-10 log of k.
+          Runs used to calculate %B. t0 is the t0 peak. tR is the last peak time.
         </caption>
         <thead>
           <tr className="border-t border-border text-xs tracking-wide text-muted-foreground uppercase">
@@ -94,8 +93,6 @@ function FitWorking({ fit }: { fit: RetentionFit }) {
             <th className="px-2 py-2 font-medium">%B</th>
             <th className="px-2 py-2 font-medium">t0 (min)</th>
             <th className="px-2 py-2 font-medium">tR (min)</th>
-            <th className="px-2 py-2 font-medium">k</th>
-            <th className="px-2 py-2 font-medium">logK</th>
           </tr>
         </thead>
         <tbody>
@@ -107,16 +104,11 @@ function FitWorking({ fit }: { fit: RetentionFit }) {
               <td className="px-2 py-2">{formatPercentB(row.percentB)}</td>
               <td className="px-2 py-2">{row.t0.toFixed(3)}</td>
               <td className="px-2 py-2">{row.tR.toFixed(3)}</td>
-              <td className="px-2 py-2">{row.k.toFixed(3)}</td>
-              <td className="px-2 py-2">{row.logK.toFixed(4)}</td>
             </tr>
           ))}
         </tbody>
       </table>
-      <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-sm sm:grid-cols-3">
-        <Item term="m" value={formatSlope(fit.m)} />
-        <Item term="c" value={formatSlope(fit.c)} />
-        <Item term="Average t0" value={`${fit.t0Average.toFixed(3)} min`} />
+      <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
         <Item term="Next %B" value={`${formatPercentB(fit.nextPercentB)}%`} />
       </dl>
     </div>

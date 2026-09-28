@@ -142,6 +142,50 @@ describe("selectivity checks", () => {
     })).toBeNull();
   });
 
+  it("asks about the last peak time when this workbook already meets resolution", () => {
+    const workbook =
+      "/home/ubuntu/.cursor/projects/workspace/uploads/GR09-14-4-ACN-3-ISO-35-1.5-20u-CP-0.1-C18aqP-150x4.6x5-amb-254_ae4e.xlsx";
+    const read = readLabFile(readFileSync(workbook));
+    const rules = {
+      requiredPeaks: 7,
+      lastPeakTimeMin: 15,
+      minResolution: 1.4,
+      maxBackPressurePsi: 2000,
+    };
+    const rows = evaluateRun(read, rules);
+    expect(rows.find((row) => row.id === "peaks")?.status).toBe("met");
+    expect(rows.find((row) => row.id === "resolution")?.status).toBe("met");
+    expect(rows.find((row) => row.id === "back-pressure")?.status).toBe("met");
+    expect(rows.find((row) => row.id === "last-peak")?.status).toBe("not-met");
+    expect(read.lastPeakTimeMin).toBeCloseTo(19.854, 3);
+
+    const ask = efficiencyAsk({
+      peakCount: read.peakCount,
+      foundResolution: read.minResolutionExcludingFirst,
+      requiredPeaks: rules.requiredPeaks,
+      minResolution: rules.minResolution,
+      declinedThrough: null,
+      lastPeakTimeMin: read.lastPeakTimeMin,
+      specifiedRunTimeMin: rules.lastPeakTimeMin,
+    });
+    expect(ask?.question).toBe(
+      "Consider whether efficiency and gradient can still bring the last peak time to the run time you set. The last peak is at 19.854 min, later than the 15 min you set. Move on to efficiency and be done with selectivity?",
+    );
+    expect(ask?.question).not.toContain("bring the resolution");
+
+    const stillShort = efficiencyAsk({
+      peakCount: read.peakCount,
+      foundResolution: 0.9,
+      requiredPeaks: rules.requiredPeaks,
+      minResolution: rules.minResolution,
+      declinedThrough: null,
+      lastPeakTimeMin: read.lastPeakTimeMin,
+      specifiedRunTimeMin: rules.lastPeakTimeMin,
+    });
+    expect(stillShort?.question).toContain("bring the resolution up to the spec");
+    expect(stillShort?.question).not.toContain("last peak time");
+  });
+
   it("does not ask when peaks are short or the resolution spec is blank", () => {
     expect(efficiencyAsk({
       peakCount: 5,

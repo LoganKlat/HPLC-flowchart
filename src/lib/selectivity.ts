@@ -248,6 +248,8 @@ export function efficiencyAsk(input: {
   requiredPeaks: number | null;
   minResolution: number | null;
   declinedThrough: number | null;
+  lastPeakTimeMin?: number | null;
+  specifiedRunTimeMin?: number | null;
 }): EfficiencyAsk | null {
   if (input.minResolution == null || !(input.minResolution > 0)) return null;
   if (input.requiredPeaks == null || input.peakCount == null || input.peakCount < input.requiredPeaks) return null;
@@ -256,16 +258,38 @@ export function efficiencyAsk(input: {
   const multiple = highestMultiple(measured, input.minResolution);
   if (multiple == null) return null;
   if (input.declinedThrough != null && multiple <= input.declinedThrough + 1e-9) return null;
+  const resolutionMeets = measured + 1e-9 >= input.minResolution;
+  const lastPeak = input.lastPeakTimeMin;
+  const specified = input.specifiedRunTimeMin;
+  const lastPeakLate =
+    lastPeak != null && specified != null && Number.isFinite(lastPeak) && Number.isFinite(specified) && isLater(lastPeak, specified);
   return {
     multiple,
     measured,
     spec: input.minResolution,
-    question: efficiencyQuestion(multiple, measured, input.minResolution),
+    question:
+      resolutionMeets && lastPeakLate
+        ? runtimeQuestion(lastPeak, specified)
+        : efficiencyQuestion(multiple, measured, input.minResolution),
   };
 }
 
 export function efficiencyQuestion(multiple: number, measured: number, spec: number): string {
   return `Consider whether efficiency and gradient can still bring the resolution up to the spec. The minimum resolution is ${formatResolution(measured)}, which is at least ${formatMultiple(multiple)} times the ${formatResolution(spec)} you set. Move on to efficiency and be done with selectivity?`;
+}
+
+function runtimeQuestion(lastPeakMin: number, specifiedMin: number): string {
+  return `Consider whether efficiency and gradient can still bring the last peak time to the run time you set. The last peak is at ${formatMinutes(lastPeakMin)} min, later than the ${formatTypedMinutes(specifiedMin)} min you set. Move on to efficiency and be done with selectivity?`;
+}
+
+function isLater(measured: number, spec: number): boolean {
+  const scale = Math.max(1, Math.abs(measured), Math.abs(spec));
+  if (Math.abs(measured - spec) <= scale * 1e-9) return false;
+  return measured > spec;
+}
+
+function formatTypedMinutes(value: number): string {
+  return String(value);
 }
 
 function highestMultiple(measured: number, spec: number): number | null {

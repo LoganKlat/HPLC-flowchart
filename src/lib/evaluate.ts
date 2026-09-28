@@ -54,7 +54,7 @@ export function evaluateRun(read: LabFileRead, rules: RuleNumbers): ResultRow[] 
   } else if (!read.resolutionColumnFound) {
     resolutionNote = "The peak table is missing the Resolution column.";
   } else if (read.peakCount != null && read.minResolutionExcludingFirst == null) {
-    resolutionNote = "There is no resolution after the first peak.";
+    resolutionNote = "There is no resolution after the t0 peak.";
   }
 
   const resolutionMet =

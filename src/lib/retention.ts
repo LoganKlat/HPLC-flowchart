@@ -6,8 +6,8 @@ import { formatDecimal, resolutionForDecision } from "@/lib/evaluate";
  * decide whether the first run, or the highest-%B run, can be left out of the
  * line once there are more than three chromatograms.
  *
- * A run is also left out when its first-peak time (t0) is more than 10% away
- * from the middle first-peak time of the other runs. That check runs even when
+ * A run is also left out when its t0 peak is more than 10% away
+ * from the middle t0 peak of the other runs. That check runs even when
  * the peaks look separated, and even when there are three or fewer runs.
  */
 
@@ -375,13 +375,13 @@ function dropPoints(
   const nextChange =
     reason === "drop-5"
       ? `Lower %B by 5 percentage points. Run the next chromatogram at ${to}% B. Another run is needed before the %B that hits the last-peak time can be calculated.${clampNote}`
-      : `Lower %B by 10 percentage points. Run the next chromatogram at ${to}% B.${clampNote}`;
+      : `Run the next one at ${to}% B.${clampNote}`;
 
   const line = retentionLine(rules.lastPeakTimeMin);
   const whyParts = situationSentences(samples, rules);
   if (reason === "drop-10") {
     whyParts.push(
-      `The last peak is at ${formatMinutes(current.lastPeakTimeMin!)} min, still significantly under the specified run time of ${formatTypedMinutes(rules.lastPeakTimeMin)} min. ${from}% B minus 10 percentage points is ${to}% B.`,
+      `The last peak is at ${formatMinutes(current.lastPeakTimeMin!)} min, still significantly under the specified run time of ${formatTypedMinutes(rules.lastPeakTimeMin)} min. Decrease %B by 10% to increase retention and peak separation.`,
     );
   } else {
     whyParts.push(
@@ -402,10 +402,9 @@ function dropPoints(
 
 function calculatePercentB(samples: RetentionSample[], rules: CompleteRules): RetentionDecision {
   const current = samples[samples.length - 1];
-  const line = retentionLine(rules.lastPeakTimeMin);
   const intro = [
     ...situationSentences(samples, rules),
-    `The last peak is at ${formatMinutes(current.lastPeakTimeMin!)} min, which is not under ${formatMinutes(line)} min (${retentionPercent()} of the ${formatMinutes(rules.lastPeakTimeMin)} min you set). That calls for the %B that should hit ${formatMinutes(rules.lastPeakTimeMin)} min, not a 10 percentage point drop.`,
+    `The last peak is at ${formatMinutes(current.lastPeakTimeMin!)} min, close to the specified run time of ${formatTypedMinutes(rules.lastPeakTimeMin)} min. Another 10% drop would make that retention time much longer, because retention grows exponentially as %B goes down. The next %B is calculated instead.`,
   ];
 
   if (!isBelow(current.lastPeakTimeMin!, rules.lastPeakTimeMin)) {
@@ -423,7 +422,7 @@ function calculatePercentB(samples: RetentionSample[], rules: CompleteRules): Re
   if (picked.t0Blocked) {
     return blocked(
       "fit-unavailable",
-      "Do not recommend a %B. Leaving out the runs whose first-peak time does not match the others would leave fewer than two chromatograms, so the line is not fit.",
+      "Do not recommend a %B. Leaving out the runs whose t0 peak does not match the others would leave fewer than two chromatograms, so the line is not fit.",
       [...intro, t0ComparisonParagraph(samples, picked.checks, new Set()), "Leaving those runs out would leave fewer than two chromatograms, so the line is not fit."].join(
         "\n\n",
       ),
@@ -439,7 +438,7 @@ function calculatePercentB(samples: RetentionSample[], rules: CompleteRules): Re
     }
     if (!factor) {
       skipped.push(
-        `Run ${item.runNumber} is not used because the last peak is not after the first peak.`,
+        `Run ${item.runNumber} is not used because the last peak is not after the t0 peak.`,
       );
       continue;
     }
@@ -469,8 +468,8 @@ function calculatePercentB(samples: RetentionSample[], rules: CompleteRules): Re
   if (!lineFit) {
     return blocked(
       "fit-unavailable",
-      "Do not recommend a %B. Those runs do not draw a line from logK to %B.",
-      [...intro, "The runs kept for the calculation do not give a usable m."].join("\n\n"),
+      "Do not recommend a %B. Those runs do not point to a %B.",
+      [...intro, "The runs kept for the calculation do not point to a %B."].join("\n\n"),
     );
   }
 
@@ -479,7 +478,7 @@ function calculatePercentB(samples: RetentionSample[], rules: CompleteRules): Re
   if (!(kTarget > 0) || !(t0Average > 0)) {
     return blocked(
       "fit-unavailable",
-      "Do not recommend a %B. The last-peak time you set is not after the average first-peak time.",
+      "Do not recommend a %B. The last-peak time you set is not after the average t0 peak.",
       [...intro, `The average t0 of the runs used here is ${formatMinutes(t0Average)} min.`].join(
         "\n\n",
       ),
@@ -522,11 +521,7 @@ function calculatePercentB(samples: RetentionSample[], rules: CompleteRules): Re
     nextChange += " The calculated value was below 0, so it is held at 0.";
   }
 
-  const why = [
-    ...intro,
-    fitMembershipSentence(samples, fit, spec, picked.checks),
-    calculationSentence(fit),
-  ].join("\n\n");
+  const why = [...intro, fitMembershipSentence(samples, fit, spec, picked.checks)].join("\n\n");
 
   return {
     status: "recommend",
@@ -652,26 +647,6 @@ function runLabel(index: number, sample: RetentionSample): string {
   return `Run ${index + 1}${percent}`;
 }
 
-function calculationSentence(fit: RetentionFit): string {
-  const percent = formatPercentB(fit.nextPercentB);
-  let rounding = `That rounds to ${percent}% B.`;
-  if (fit.oneDecimal) {
-    rounding = `The nearest whole percent is already a %B in these runs, so one decimal place is kept: ${percent}% B.`;
-  }
-  if (fit.clamped === "high") {
-    rounding += " The result was above 100, so it is held at 100.";
-  } else if (fit.clamped === "low") {
-    rounding += " The result was below 0, so it is held at 0.";
-  }
-  return [
-    "logK = m × %B + c.",
-    `m = ${formatSlope(fit.m)}, c = ${formatSlope(fit.c)}.`,
-    `Average t0 = ${formatMinutes(fit.t0Average)} min.`,
-    `k at the last-peak time you set = ${formatK(fit.kTarget)}. logK for that k = ${formatLogK(fit.logKTarget)}.`,
-    `%B = (logK − c) / m = ${formatSlope(fit.rawPercentB)}. ${rounding}`,
-  ].join(" ");
-}
-
 type IndexedSample = {
   runNumber: number;
   sample: RetentionSample;
@@ -721,7 +696,7 @@ function separationVerdict(
     if (askedResolution) {
       return {
         keep: true,
-        sentence: `It is kept because it has enough peaks (${formatCount(count!)} of the ${formatCount(spec.requiredPeaks)} you asked for) and the smallest resolution after the first peak (${formatResolution(resolution!)}) meets the ${formatResolution(spec.minResolution!)} you set.`,
+        sentence: `It is kept because it has enough peaks (${formatCount(count!)} of the ${formatCount(spec.requiredPeaks)} you asked for) and the smallest resolution after the t0 peak (${formatResolution(resolution!)}) meets the ${formatResolution(spec.minResolution!)} you set.`,
       };
     }
     return {
@@ -741,8 +716,8 @@ function separationVerdict(
   if (askedResolution && !resolutionOk) {
     problems.push(
       resolution == null || !Number.isFinite(resolution)
-        ? `there is no resolution after the first peak to compare with the ${formatResolution(spec.minResolution!)} you set`
-        : `the smallest resolution after the first peak is ${formatResolution(resolution)}, under the ${formatResolution(spec.minResolution!)} you set`,
+        ? `there is no resolution after the t0 peak to compare with the ${formatResolution(spec.minResolution!)} you set`
+        : `the smallest resolution after the t0 peak is ${formatResolution(resolution)}, under the ${formatResolution(spec.minResolution!)} you set`,
     );
   }
   return {
@@ -853,7 +828,7 @@ function t0ComparisonParagraph(
   keptRunNumbers: Set<number>,
 ): string {
   const lines = [
-    "Each run’s first-peak time is compared with the middle first-peak time of the other runs. A run is left out when that time is more than 10% away.",
+    "Each run’s t0 peak is compared with the middle t0 peak of the other runs. A run is left out when that time is more than 10% away.",
   ];
   for (const check of checks) {
     const sample = samples[check.index];
@@ -867,7 +842,7 @@ function t0ComparisonParagraph(
       lines.push(`${label}. ${t0KeepSentence(check)}`);
     } else {
       lines.push(
-        `${label}. Its first-peak time is ${formatMinutes(check.t0)} min, ${formatRelative(check.relative)} from the middle of the other runs (${formatMinutes(check.medianOthers)} min), so it is not left out for that.`,
+        `${label}. Its t0 peak is ${formatMinutes(check.t0)} min, ${formatRelative(check.relative)} from the middle t0 peak of the other runs (${formatMinutes(check.medianOthers)} min), so it is not left out for that.`,
       );
     }
   }
@@ -875,11 +850,11 @@ function t0ComparisonParagraph(
 }
 
 function t0LeaveOutSentence(check: T0Check): string {
-  return `It is left out because its first-peak time (${formatMinutes(check.t0!)} min) does not match the other runs. The middle first-peak time of the other runs is ${formatMinutes(check.medianOthers!)} min, and this one is ${formatRelative(check.relative!)} away, past the 10% cutoff.`;
+  return `It is left out because its t0 peak (${formatMinutes(check.t0!)} min) does not match the other runs. The middle t0 peak of the other runs is ${formatMinutes(check.medianOthers!)} min, and this one is ${formatRelative(check.relative!)} away, past the 10% cutoff.`;
 }
 
 function t0KeepSentence(check: T0Check): string {
-  return `It is kept. Its first-peak time is ${formatMinutes(check.t0!)} min, ${formatRelative(check.relative!)} from the middle of the other runs (${formatMinutes(check.medianOthers!)} min).`;
+  return `It is kept. Its t0 peak is ${formatMinutes(check.t0!)} min, ${formatRelative(check.relative!)} from the middle t0 peak of the other runs (${formatMinutes(check.medianOthers!)} min).`;
 }
 
 function formatRelative(value: number): string {
@@ -994,18 +969,6 @@ function formatTypedMinutes(value: number): string {
 
 function formatResolution(value: number): string {
   return value.toFixed(3);
-}
-
-function formatK(value: number): string {
-  return value.toFixed(3);
-}
-
-function formatLogK(value: number): string {
-  return value.toFixed(4);
-}
-
-export function formatSlope(value: number): string {
-  return value.toFixed(6);
 }
 
 function roundHalfAwayFromZero(value: number, decimals: number): number {

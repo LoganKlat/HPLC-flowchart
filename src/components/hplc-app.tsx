@@ -512,6 +512,8 @@ function RunPane({
           requiredPeaks: checks.requiredPeaks,
           minResolution: checks.minResolution,
           declinedThrough,
+          lastPeakTimeMin: run.read.lastPeakTimeMin,
+          specifiedRunTimeMin: checks.lastPeakTimeMin,
         })
       : null;
   const ifNo =
