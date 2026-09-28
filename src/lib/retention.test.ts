@@ -580,13 +580,12 @@ describe("first-peak time outliers", () => {
     expect(decision.fit!.rows.map((row) => row.percentB)).toEqual([70, 60, 50, 40]);
     expect(decision.fit!.rows.map((row) => row.runNumber)).toEqual([2, 3, 4, 5]);
     expect(decision.fit!.excluded.map((row) => row.percentB)).toEqual([90]);
-    expect(decision.why).toContain("1.296");
-    expect(decision.why).toContain("1.101");
-    expect(decision.why).toContain("does not match the other runs");
-    expect(decision.why).toContain("10%");
-    expect(decision.why).toContain("Run 2 at 70% B");
-    expect(decision.why).toContain("It is kept");
-    expect(decision.why).not.toContain("Run 1 at 90% B. It is kept");
+    expect(decision.why).toContain("The Q-test left out Run 1 at 90% B (t0 peak 1.296 min).");
+    expect(decision.why).toContain(
+      "The calculation uses Run 2 at 70% B, Run 3 at 60% B, Run 4 at 50% B, Run 5 at 40% B.",
+    );
+    expect(decision.why).not.toContain("middle t0");
+    expect(decision.why).not.toContain("10% cutoff");
   });
 
   it("leaves out a separated 90% run because its first-peak time is off, and keeps 70%", () => {
@@ -633,25 +632,70 @@ describe("first-peak time outliers", () => {
     expect(decision.move).toBe("calculated");
     expect(decision.fit!.rows.map((row) => row.percentB)).toEqual([70, 60, 50, 40]);
     expect(decision.fit!.excluded.map((row) => row.percentB)).toEqual([90]);
-    expect(decision.why).toContain("does not match the other runs");
-    expect(decision.why).toContain("Run 2 at 70% B. It is kept");
+    expect(decision.why).toContain("The Q-test left out Run 1 at 90% B (t0 peak 1.296 min).");
+    expect(decision.why).toContain("The calculation uses Run 2 at 70% B");
+    expect(decision.why).not.toContain("middle t0");
   });
 
-  it("drops a far first-peak time even when there are only three runs", () => {
+  it("leaves out only the 90% run when its t0 peak is 1.190 min", () => {
     const decision = decideRetention(
       [
-        sample({ percentB: 90, peakCount: 2, firstPeakTimeMin: 1.296, lastPeakTimeMin: 2 }),
-        sample({ percentB: 70, peakCount: 2, firstPeakTimeMin: 1.101, lastPeakTimeMin: 4 }),
-        sample({ percentB: 60, peakCount: 2, firstPeakTimeMin: 1.088, lastPeakTimeMin: 9 }),
+        sample({ percentB: 90, peakCount: 2, firstPeakTimeMin: 1.19, lastPeakTimeMin: 2 }),
+        sample({ percentB: 80, peakCount: 2, firstPeakTimeMin: 1.11, lastPeakTimeMin: 3 }),
+        sample({ percentB: 70, peakCount: 2, firstPeakTimeMin: 1.075, lastPeakTimeMin: 4 }),
+        sample({ percentB: 60, peakCount: 2, firstPeakTimeMin: 1.064, lastPeakTimeMin: 5.5 }),
+        sample({ percentB: 50, peakCount: 2, firstPeakTimeMin: 1.068, lastPeakTimeMin: 7 }),
+        sample({ percentB: 40, peakCount: 2, firstPeakTimeMin: 1.08, lastPeakTimeMin: 9 }),
       ],
       { requiredPeaks: 8, lastPeakTimeMin: 10, maxBackPressurePsi: 500 },
     );
     expect(decision.move).toBe("calculated");
-    expect(decision.fit!.rows.map((row) => row.percentB)).toEqual([70, 60]);
+    expect(decision.fit!.rows.map((row) => row.t0)).toEqual([1.11, 1.075, 1.064, 1.068, 1.08]);
     expect(decision.fit!.excluded.map((row) => row.percentB)).toEqual([90]);
+    expect(decision.why).toContain("The Q-test left out Run 1 at 90% B (t0 peak 1.190 min).");
+    expect(decision.why).toContain(
+      "The calculation uses Run 2 at 80% B, Run 3 at 70% B, Run 4 at 60% B, Run 5 at 50% B, Run 6 at 40% B.",
+    );
+    expect(decision.why).not.toContain("middle t0");
+    expect(decision.why).not.toContain("10% cutoff");
   });
 
-  it("does not fit when dropping the far first-peak times would leave fewer than two runs", () => {
+  it("says the t0 peaks passed the Q-test when none is an outlier", () => {
+    const decision = decideRetention(
+      [
+        sample({ percentB: 80, peakCount: 2, firstPeakTimeMin: 1.064, lastPeakTimeMin: 7 }),
+        sample({ percentB: 60, peakCount: 2, firstPeakTimeMin: 1.068, lastPeakTimeMin: 8 }),
+        sample({ percentB: 40, peakCount: 2, firstPeakTimeMin: 1.08, lastPeakTimeMin: 9 }),
+      ],
+      { requiredPeaks: 8, lastPeakTimeMin: 10, maxBackPressurePsi: 500 },
+    );
+    expect(decision.move).toBe("calculated");
+    expect(decision.fit!.excluded).toEqual([]);
+    expect(decision.fit!.rows.map((row) => row.t0)).toEqual([1.064, 1.068, 1.08]);
+    expect(decision.why).toContain(
+      "The t0 peaks passed the Q-test. The calculation uses Run 1 at 80% B, Run 2 at 60% B, Run 3 at 40% B.",
+    );
+    expect(decision.why).not.toContain("middle t0");
+    expect(decision.why).not.toContain("The Q-test left out");
+  });
+
+  it("leaves out one extreme t0 peak when there are only three runs", () => {
+    const decision = decideRetention(
+      [
+        sample({ percentB: 80, peakCount: 2, firstPeakTimeMin: 1, lastPeakTimeMin: 7 }),
+        sample({ percentB: 60, peakCount: 2, firstPeakTimeMin: 1.01, lastPeakTimeMin: 8 }),
+        sample({ percentB: 40, peakCount: 2, firstPeakTimeMin: 1.5, lastPeakTimeMin: 9 }),
+      ],
+      { requiredPeaks: 8, lastPeakTimeMin: 10, maxBackPressurePsi: 500 },
+    );
+    expect(decision.move).toBe("calculated");
+    expect(decision.fit!.rows.map((row) => row.percentB)).toEqual([80, 60]);
+    expect(decision.fit!.excluded.map((row) => row.percentB)).toEqual([40]);
+    expect(decision.why).toContain("The Q-test left out Run 3 at 40% B (t0 peak 1.500 min).");
+    expect(decision.why).toContain("The calculation uses Run 1 at 80% B, Run 2 at 60% B.");
+  });
+
+  it("does not run the Q-test on two runs", () => {
     const decision = decideRetention(
       [
         sample({ percentB: 90, peakCount: 2, firstPeakTimeMin: 1.296, lastPeakTimeMin: 8 }),
@@ -659,12 +703,13 @@ describe("first-peak time outliers", () => {
       ],
       { requiredPeaks: 8, lastPeakTimeMin: 10, maxBackPressurePsi: 500 },
     );
-    expect(decision.move).toBeNull();
-    expect(decision.reason).toBe("fit-unavailable");
-    expect(decision.fit).toBeNull();
-    expect(decision.why.toLowerCase()).toContain("fewer than two");
-    expect(decision.why).toContain("1.296");
-    expect(decision.why).toContain("1.101");
+    expect(decision.move).toBe("calculated");
+    expect(decision.fit!.rows.map((row) => row.percentB)).toEqual([90, 70]);
+    expect(decision.fit!.excluded).toEqual([]);
+    expect(decision.why).toContain("The calculation uses Run 1 at 90% B, Run 2 at 70% B.");
+    expect(decision.why).not.toContain("Q-test");
+    expect(decision.why).not.toContain("middle t0");
+    expect(decision.why.toLowerCase()).not.toContain("fewer than two");
   });
 });
 

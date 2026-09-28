@@ -6,9 +6,9 @@ import { formatDecimal, resolutionForDecision } from "@/lib/evaluate";
  * decide whether the first run, or the highest-%B run, can be left out of the
  * line once there are more than three chromatograms.
  *
- * A run is also left out when its t0 peak is more than 10% away
- * from the middle t0 peak of the other runs. That check runs even when
- * the peaks look separated, and even when there are three or fewer runs.
+ * A run is also left out when Dixon's Q-test at 95% confidence flags its
+ * t0 peak. That test needs at least three t0 peaks, and it never leaves
+ * fewer than two runs. Poor separation is a separate reason to leave a run out.
  */
 
 export type RetentionSample = {
@@ -419,15 +419,6 @@ function calculatePercentB(samples: RetentionSample[], rules: CompleteRules): Re
 
   const spec = separationSpecFrom(rules);
   const picked = selectForLine(samples, spec);
-  if (picked.t0Blocked) {
-    return blocked(
-      "fit-unavailable",
-      "Do not recommend a %B. Leaving out the runs whose t0 peak does not match the others would leave fewer than two chromatograms, so the line is not fit.",
-      [...intro, t0ComparisonParagraph(samples, picked.checks, new Set()), "Leaving those runs out would leave fewer than two chromatograms, so the line is not fit."].join(
-        "\n\n",
-      ),
-    );
-  }
   const rows: RetentionFitRow[] = [];
   const skipped: string[] = [];
   for (const item of picked.kept) {
@@ -594,27 +585,29 @@ function fitMembershipSentence(
   const used = fit.rows
     .map((row) => `Run ${row.runNumber} at ${formatPercentB(row.percentB)}% B`)
     .join(", ");
-  const far = checks.some((check) => check.far);
-  if (!far && samples.length <= 3) {
-    const howMany =
-      samples.length === 2 ? "Both chromatograms are used" : "All three chromatograms are used";
-    return `${howMany}. ${used}.`;
-  }
-
   const parts: string[] = [];
-  if (far) {
-    const keptRunNumbers = new Set(fit.rows.map((row) => row.runNumber));
-    parts.push(t0ComparisonParagraph(samples, checks, keptRunNumbers));
-    if (samples.length > 3) {
-      const separation = separationMembershipSentence(samples, spec, checks);
-      if (separation) parts.push(separation);
-    }
-  } else {
-    parts.push(`There are ${formatCount(samples.length)} chromatograms.`);
-    parts.push(separationMembershipSentence(samples, spec, checks));
+  const tested = checks.filter((check) => check.t0 != null).length >= 3;
+  const leftOut = checks.filter((check) => check.far);
+  if (tested) {
+    parts.push(leftOut.length > 0 ? qTestLeftOutSentence(samples, leftOut) : "The t0 peaks passed the Q-test.");
+  }
+  if (samples.length > 3) {
+    const separation = separationMembershipSentence(samples, spec, checks);
+    if (separation) parts.push(separation);
   }
   parts.push(`The calculation uses ${used}.`);
   return parts.join(" ");
+}
+
+function qTestLeftOutSentence(samples: RetentionSample[], leftOut: T0Check[]): string {
+  const labels = leftOut.map((check) => {
+    const sample = samples[check.index];
+    const percent = sample.percentB == null ? "" : ` at ${formatPercentB(sample.percentB)}% B`;
+    return `Run ${check.index + 1}${percent} (t0 peak ${formatMinutes(check.t0!)} min)`;
+  });
+  if (labels.length === 1) return `The Q-test left out ${labels[0]}.`;
+  const last = labels[labels.length - 1];
+  return `The Q-test left out ${labels.slice(0, -1).join(", ")} and ${last}.`;
 }
 
 function separationMembershipSentence(
@@ -726,14 +719,48 @@ function separationVerdict(
   };
 }
 
-/** A run is far when its t0 is more than this fraction from the leave-one-out median. */
-const T0_RELATIVE_CUTOFF = 0.1;
+/**
+ * Dixon r10 critical values at 95% confidence. Index is n.
+ * Values through n=10 are the ones used in class. n=11 through n=30 are the
+ * published r10 95% table (0.342 at n=20, 0.298 at n=30). Past n=30, use n=30.
+ */
+const DIXON_Q95 = [
+  Number.NaN,
+  Number.NaN,
+  Number.NaN,
+  0.97,
+  0.829,
+  0.71,
+  0.625,
+  0.568,
+  0.526,
+  0.493,
+  0.466,
+  0.444,
+  0.426,
+  0.41,
+  0.396,
+  0.384,
+  0.374,
+  0.365,
+  0.356,
+  0.349,
+  0.342,
+  0.337,
+  0.331,
+  0.326,
+  0.321,
+  0.317,
+  0.312,
+  0.308,
+  0.305,
+  0.301,
+  0.298,
+];
 
 type T0Check = {
   index: number;
   t0: number | null;
-  medianOthers: number | null;
-  relative: number | null;
   far: boolean;
 };
 
@@ -741,30 +768,12 @@ type LineSelection = {
   kept: IndexedSample[];
   excluded: RetentionExclusion[];
   checks: T0Check[];
-  /** True when dropping the far t0 runs would leave fewer than two chromatograms. */
-  t0Blocked: boolean;
 };
 
 function selectForLine(samples: RetentionSample[], spec: SeparationSpec): LineSelection {
   const indexed = samples.map((sample, index) => ({ runNumber: index + 1, sample }));
   const checks = t0Checks(samples);
-  const t0Drop = new Set(checks.filter((check) => check.far).map((check) => check.index));
-  if (t0Drop.size > 0 && samples.length - t0Drop.size < 2) {
-    return {
-      kept: [],
-      excluded: indexed
-        .filter((item) => t0Drop.has(item.runNumber - 1))
-        .map((item) => ({
-          runNumber: item.runNumber,
-          percentB: item.sample.percentB,
-          reason: t0LeaveOutSentence(checks[item.runNumber - 1]),
-        })),
-      checks,
-      t0Blocked: true,
-    };
-  }
-
-  const dropIndexes = new Set(t0Drop);
+  const dropIndexes = new Set(checks.filter((check) => check.far).map((check) => check.index));
   if (samples.length > 3) {
     const highest = highestPercentIndex(samples);
     for (const index of [0, highest]) {
@@ -785,80 +794,55 @@ function selectForLine(samples: RetentionSample[], spec: SeparationSpec): LineSe
       runNumber: item.runNumber,
       percentB: item.sample.percentB,
       reason: check.far
-        ? t0LeaveOutSentence(check)
+        ? `The Q-test left out this run (t0 peak ${formatMinutes(check.t0!)} min).`
         : separationVerdict(item.sample, spec).sentence,
     });
   });
-  return { kept, excluded, checks, t0Blocked: false };
+  return { kept, excluded, checks };
 }
 
 function t0Checks(samples: RetentionSample[]): T0Check[] {
+  const dropped = dixonOutliers(samples);
   return samples.map((sample, index) => {
-    const others = samples
-      .filter((_, other) => other !== index)
-      .map((item) => item.firstPeakTimeMin)
-      .filter((time): time is number => time != null && time > 0);
-    const medianOthers = median(others);
-    const t0 = sample.firstPeakTimeMin != null && sample.firstPeakTimeMin > 0 ? sample.firstPeakTimeMin : null;
-    const relative =
-      t0 != null && medianOthers != null && medianOthers > 0
-        ? Math.abs(t0 - medianOthers) / medianOthers
-        : null;
-    return {
-      index,
-      t0,
-      medianOthers,
-      relative,
-      far: relative != null && relative > T0_RELATIVE_CUTOFF,
-    };
+    const time = sample.firstPeakTimeMin;
+    const t0 = time != null && time > 0 ? time : null;
+    return { index, t0, far: dropped.has(index) };
   });
 }
 
-function median(values: number[]): number | null {
-  if (values.length === 0) return null;
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  if (sorted.length % 2 === 1) return sorted[mid];
-  return (sorted[mid - 1] + sorted[mid]) / 2;
+function dixonCritical(n: number): number | null {
+  if (n < 3) return null;
+  if (n >= DIXON_Q95.length) return DIXON_Q95[DIXON_Q95.length - 1];
+  return DIXON_Q95[n];
 }
 
-function t0ComparisonParagraph(
-  samples: RetentionSample[],
-  checks: T0Check[],
-  keptRunNumbers: Set<number>,
-): string {
-  const lines = [
-    "Each run’s t0 peak is compared with the middle t0 peak of the other runs. A run is left out when that time is more than 10% away.",
-  ];
-  for (const check of checks) {
-    const sample = samples[check.index];
-    const label = runLabel(check.index, sample);
-    if (check.far) {
-      lines.push(`${label}. ${t0LeaveOutSentence(check)}`);
-      continue;
-    }
-    if (check.t0 == null || check.medianOthers == null || check.relative == null) continue;
-    if (keptRunNumbers.has(check.index + 1)) {
-      lines.push(`${label}. ${t0KeepSentence(check)}`);
-    } else {
-      lines.push(
-        `${label}. Its t0 peak is ${formatMinutes(check.t0)} min, ${formatRelative(check.relative)} from the middle t0 peak of the other runs (${formatMinutes(check.medianOthers)} min), so it is not left out for that.`,
-      );
-    }
+/** Leave out t0 peaks that fail Dixon's Q-test at 95%. Never leave fewer than two runs. */
+function dixonOutliers(samples: RetentionSample[]): Set<number> {
+  const pool = samples.flatMap((sample, index) => {
+    const t0 = sample.firstPeakTimeMin;
+    return t0 != null && t0 > 0 ? [{ index, t0 }] : [];
+  });
+  const dropped = new Set<number>();
+  while (pool.length >= 3 && samples.length - dropped.size > 2) {
+    const sorted = [...pool].sort((a, b) => a.t0 - b.t0);
+    const n = sorted.length;
+    const low = sorted[0];
+    const high = sorted[n - 1];
+    const range = high.t0 - low.t0;
+    if (!(range > 0)) break;
+    const lowGap = sorted[1].t0 - low.t0;
+    const highGap = high.t0 - sorted[n - 2].t0;
+    const critical = dixonCritical(n);
+    if (critical == null) break;
+    const testHigh = highGap >= lowGap;
+    const q = (testHigh ? highGap : lowGap) / range;
+    if (!(q > critical)) break;
+    const suspect = testHigh ? high : low;
+    dropped.add(suspect.index);
+    const removeAt = pool.findIndex((item) => item.index === suspect.index);
+    pool.splice(removeAt, 1);
   }
-  return lines.join(" ");
-}
-
-function t0LeaveOutSentence(check: T0Check): string {
-  return `It is left out because its t0 peak (${formatMinutes(check.t0!)} min) does not match the other runs. The middle t0 peak of the other runs is ${formatMinutes(check.medianOthers!)} min, and this one is ${formatRelative(check.relative!)} away, past the 10% cutoff.`;
-}
-
-function t0KeepSentence(check: T0Check): string {
-  return `It is kept. Its t0 peak is ${formatMinutes(check.t0!)} min, ${formatRelative(check.relative!)} from the middle t0 peak of the other runs (${formatMinutes(check.medianOthers!)} min).`;
-}
-
-function formatRelative(value: number): string {
-  return `${(Math.round(value * 1000) / 10).toFixed(1)}%`;
+  return dropped;
 }
 
 function retentionFactor(sample: RetentionSample): { k: number; logK: number } | null {
