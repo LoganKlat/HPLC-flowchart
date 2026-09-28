@@ -11,10 +11,9 @@ const name80 = "GR09-06-3-ACN-3-ISO-80-1.5-20-CP-0.1-C18aqP-150x4.6x5-amb-254.xl
 
 describe("run file names", () => {
   it("explains the pattern with the GR09 90% B name", () => {
-    expect(FILE_NAME_CHECKBOX_LABEL).toContain(name90.replace(/\.xlsx$/, ""));
-    expect(FILE_NAME_CHECKBOX_LABEL).toContain("solvent ACN");
-    expect(FILE_NAME_CHECKBOX_LABEL).toContain("method ISO");
-    expect(FILE_NAME_CHECKBOX_LABEL).not.toMatch(/group|injection number|HPLC number|particle physics/i);
+    expect(FILE_NAME_CHECKBOX_LABEL).toBe(
+      "Check this box to autofill details from file name. Structure must be group number-injection number-HPLC number-solvent-pH-method-%B-flow rate-injection volume-sample type-sample concentration-ligand-length x diameter x particle size-oven temperature-wavelength. For example, GR09-05-3-ACN-3-ISO-90-1.5-20-CP-0.1-C18aqP-150x4.6x5-amb-254.",
+    );
   });
 
   it("parses both workbook names, including the extra upload suffix", () => {

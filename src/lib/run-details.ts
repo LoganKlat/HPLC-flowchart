@@ -2,7 +2,6 @@ export type CoreShell = "" | "yes" | "no";
 
 export type RunDetails = {
   ligand: string;
-  beadType: string;
   coreShell: CoreShell;
   poreSize: string;
   carbonLoad: string;
@@ -31,7 +30,6 @@ export type RuleInputs = {
 export function emptyRunDetails(): RunDetails {
   return {
     ligand: "",
-    beadType: "",
     coreShell: "",
     poreSize: "",
     carbonLoad: "",

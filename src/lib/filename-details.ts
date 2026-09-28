@@ -6,9 +6,9 @@ export const FILE_NAME_EXAMPLE =
 
 /** Shown beside the Run 1 checkbox. One real name, broken into its pieces. */
 export const FILE_NAME_CHECKBOX_LABEL =
-  "Fill these details from the file name. Hyphens separate the pieces. Skip the first three, then read solvent, pH, method, %B, flow rate, injection volume, sample type, sample concentration, ligand, length x diameter x particle size, oven temperature, and wavelength. A shorter name fills only the pieces it includes. For example, " +
+  "Check this box to autofill details from file name. Structure must be group number-injection number-HPLC number-solvent-pH-method-%B-flow rate-injection volume-sample type-sample concentration-ligand-length x diameter x particle size-oven temperature-wavelength. For example, " +
   FILE_NAME_EXAMPLE +
-  " gives solvent ACN, pH 3, method ISO, 90% B, flow 1.5, injection volume 20, sample type CP, sample concentration 0.1, ligand C18aqP, length 150 mm, diameter 4.6 mm, particle size 5 µm, oven ambient, and wavelength 254.";
+  ".";
 
 export const FILE_NAME_MISMATCH =
   "This file name does not follow that pattern, so the details you typed were left as they are.";

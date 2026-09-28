@@ -92,11 +92,6 @@ export function RunForm({ details, rules, onDetails, onRules }: RunFormProps) {
             options={LIGANDS.map((name) => ({ value: name, label: name }))}
             onChange={(value) => setDetail("ligand", value)}
           />
-          <TextField
-            label="Bead type"
-            value={details.beadType}
-            onChange={(value) => setDetail("beadType", value)}
-          />
           <ChoiceField
             label="Core shell"
             value={details.coreShell}
