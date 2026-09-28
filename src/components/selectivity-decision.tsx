@@ -1,4 +1,5 @@
-import { LIGANDS, SOLVENTS, chartX, findSolvent, type SelectivityPlan } from "@/lib/selectivity";
+import { Button } from "@/components/ui/button";
+import { LIGANDS, SOLVENTS, chartX, findSolvent, type SelectivityPlan, type TempPath } from "@/lib/selectivity";
 
 const fieldClass =
   "h-10 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
@@ -9,29 +10,81 @@ export function SelectivityDecisionView({
   ligand,
   onSolvent,
   onLigand,
+  tempPath,
+  onTempPath,
 }: {
   plan: SelectivityPlan;
   solventId: string;
   ligand: string;
   onSolvent: (id: string) => void;
   onLigand: (name: string) => void;
+  tempPath: TempPath | null;
+  onTempPath: (path: TempPath) => void;
 }) {
   const ligandChoices = (LIGANDS as readonly string[]).includes(ligand)
     ? [...LIGANDS]
     : ligand.trim()
       ? [ligand, ...LIGANDS]
       : [...LIGANDS];
+  const choice = plan.tempChoice;
+  const nextChange =
+    choice == null
+      ? plan.nextChange
+      : tempPath === "heat"
+        ? choice.heatNextChange
+        : tempPath === "solvent"
+          ? choice.solventNextChange
+          : plan.nextChange;
+  const showSolvent = plan.showSolventChoices || (choice != null && tempPath === "solvent");
 
   return (
     <div className="flex flex-col gap-4" id="selectivity-decision">
       <section id="next-change" className="scroll-mt-16 rounded-xl bg-[#e7f3ee] px-4 py-4 text-[#144237]">
         <h2 className="font-heading text-base">Next change</h2>
-        <p className="mt-1 text-sm leading-relaxed">{plan.nextChange}</p>
+        <p className="mt-1 text-sm leading-relaxed">{nextChange}</p>
+        {choice ? (
+          <div id="temp-choice" className="mt-3 flex flex-col gap-2">
+            <Button
+              type="button"
+              id="choose-solvent"
+              aria-pressed={tempPath === "solvent"}
+              className="h-auto w-full flex-col items-start gap-1 whitespace-normal px-4 py-3 text-left"
+              style={{
+                height: "auto",
+                whiteSpace: "normal",
+                ...(tempPath === "solvent"
+                  ? { backgroundColor: "#0a5644", color: "#f7fffb", borderColor: "#144237" }
+                  : { backgroundColor: "#0f6b56", color: "#f7fffb", borderColor: "#0f6b56" }),
+              }}
+              onClick={() => onTempPath("solvent")}
+            >
+              <span className="text-xs tracking-[0.14em] uppercase">Recommended</span>
+              <span>{choice.recommendedSentence}</span>
+            </Button>
+            <Button
+              type="button"
+              id="choose-60"
+              variant="outline"
+              aria-pressed={tempPath === "heat"}
+              className="h-auto w-full whitespace-normal px-4 py-3 text-left"
+              style={{
+                height: "auto",
+                whiteSpace: "normal",
+                ...(tempPath === "heat"
+                  ? { backgroundColor: "#efe6c4", borderColor: "#b0893e", color: "#3d3416" }
+                  : {}),
+              }}
+              onClick={() => onTempPath("heat")}
+            >
+              {choice.heatLabel}
+            </Button>
+          </div>
+        ) : null}
       </section>
       <section className="rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10">
         <h2 className="font-heading text-base">Why</h2>
         <p className="mt-1 text-sm leading-relaxed text-foreground">{plan.why}</p>
-        {plan.nomograph ? (
+        {plan.nomograph && (plan.step !== "temp-choice" || tempPath === "solvent") ? (
           <div id="solvent-nomograph" className="mt-4 flex flex-col gap-3">
             {plan.oldSolvent && plan.anchorPercentB != null ? (
               <NomographSketch oldSolvent={plan.oldSolvent} percentB={plan.anchorPercentB} />
@@ -49,7 +102,7 @@ export function SelectivityDecisionView({
             </div>
           </div>
         ) : null}
-        {plan.showSolventChoices ? (
+        {showSolvent ? (
           <label className="mt-4 flex flex-col gap-1.5 text-sm" htmlFor="solvent-choice">
             New solvent
             <select

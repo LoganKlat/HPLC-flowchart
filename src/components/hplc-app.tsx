@@ -29,6 +29,7 @@ import {
   type SelectivityPlan,
   type SelectivityPrefill,
   type SelectivityRun,
+  type TempPath,
 } from "@/lib/selectivity";
 
 type RunState = {
@@ -98,6 +99,7 @@ export function HplcApp() {
   const [runs, setRuns] = useState<RunState[]>([emptyRun()]);
   const [declinedThrough, setDeclinedThrough] = useState<number | null>(null);
   const [leftSelectivity, setLeftSelectivity] = useState(false);
+  const [tempPathByRun, setTempPathByRun] = useState<Record<number, TempPath>>({});
   const [hoveredRun, setHoveredRun] = useState<number | null>(null);
   const [fillFromFileName, setFillFromFileName] = useState(false);
   const [fileNameNote, setFileNameNote] = useState<string | null>(null);
@@ -152,6 +154,37 @@ export function HplcApp() {
       if (!current[index]) return current;
       const copy = current.slice();
       copy[index] = { ...copy[index], ligand: value, ligandEdited: true };
+      return copy;
+    });
+  }
+
+  function chooseTempPath(decisionIndex: number, path: TempPath) {
+    setTempPathByRun((current) => ({ ...current, [decisionIndex]: path }));
+    setRuns((current) => {
+      const count = readyPrefix(current);
+      const history = planHistory(
+        current.slice(0, count).map((run, runIndex) => toSelectivityRun(run, runIndex, detailsRef.current)),
+        setupFrom(detailsRef.current, checks),
+      );
+      const choice = history.phase === "selectivity" ? history.plan.tempChoice : null;
+      if (!choice) return current;
+      const prefill = path === "heat" ? choice.heatPrefill : choice.solventPrefill;
+      const copy = current.slice();
+      const slot = decisionIndex + 1;
+      const existing = copy[slot];
+      if (existing && existing.status !== "empty") return current;
+      const base = existing ?? emptyRun();
+      copy[slot] = {
+        ...base,
+        percentB: prefill.percentB,
+        temperature: prefill.temperature,
+        solvent: prefill.solvent,
+        ligand: prefill.ligand,
+        percentEdited: path === "heat",
+        temperatureEdited: true,
+        solventEdited: path === "heat",
+        ligandEdited: true,
+      };
       return copy;
     });
   }
@@ -338,6 +371,8 @@ export function HplcApp() {
               onLigand={(value) => setRunLigand(index, value)}
               onChooseSolvent={(solventId) => chooseNextSolvent(index + 1, solventId)}
               onChooseLigand={(value) => setRunLigand(index + 1, value)}
+              tempPath={tempPathByRun[index] ?? null}
+              onTempPath={(path) => chooseTempPath(index, path)}
               onBegin={beginRead}
               onBuffer={acceptBuffer}
               onProblem={acceptProblem}
@@ -459,6 +494,8 @@ function RunPane({
   onLigand,
   onChooseSolvent,
   onChooseLigand,
+  tempPath,
+  onTempPath,
   onBegin,
   onBuffer,
   onProblem,
@@ -486,6 +523,8 @@ function RunPane({
   onLigand: (value: string) => void;
   onChooseSolvent: (solventId: string) => void;
   onChooseLigand: (value: string) => void;
+  tempPath: TempPath | null;
+  onTempPath: (path: TempPath) => void;
   onBegin: (index: number, fileName: string) => void;
   onBuffer: (index: number, fileName: string, buffer: ArrayBuffer) => void;
   onProblem: (index: number, fileName: string, message: string) => void;
@@ -601,6 +640,8 @@ function RunPane({
                     ligand={next?.ligand || selectivity.recommendedLigand || ""}
                     onSolvent={onChooseSolvent}
                     onLigand={onChooseLigand}
+                    tempPath={tempPath}
+                    onTempPath={onTempPath}
                   />
                 ) : null}
               </>

@@ -13,6 +13,7 @@ import {
   formatMatchedPercent,
   planHistory,
   recommendLigand,
+  TEMP_CHOICE_RECOMMENDED,
   solventChoicePercent,
   solventNomograph,
   type SelectivityRun,
@@ -301,7 +302,7 @@ describe("selectivity plan", () => {
     expect(history.plan.why.toLowerCase()).not.toContain("guess");
   });
 
-  it("skips 60°C and shows the nomograph when 40°C does not improve the run", () => {
+  it("offers solvent and 60°C when 40°C does not improve the run", () => {
     const history = planHistory(
       [
         run({ peakCount: 8, minResolutionExcludingFirst: 0.4 }),
@@ -312,17 +313,54 @@ describe("selectivity plan", () => {
     );
     expect(history.phase).toBe("selectivity");
     if (history.phase !== "selectivity") return;
-    expect(history.plan.step).toBe("solvent");
-    expect(history.plan.nextChange).toContain("Pick a new solvent you can actually use.");
-    expect(history.plan.nextChange.toLowerCase()).not.toContain("methanol");
-    expect(history.plan.nextChange).not.toContain("60°C");
+    expect(history.plan.step).toBe("temp-choice");
+    expect(history.plan.step).not.toBe("solvent");
+    expect(history.plan.nextChange).toBe(TEMP_CHOICE_RECOMMENDED);
+    expect(history.plan.why).toContain(TEMP_CHOICE_RECOMMENDED);
+    expect(history.plan.tempChoice?.heatLabel).toBe("Increase the temperature anyway, to 60°C at 75% B.");
+    expect(history.plan.tempChoice?.solventNextChange).toContain("Pick a new solvent you can actually use.");
+    expect(history.plan.tempChoice?.solventPrefill).toMatchObject({ percentB: "", temperature: "25", solvent: "" });
     expect(history.plan.nomograph?.map((row) => row.percentText)).toEqual(["85.9", "80.0", "59.7"]);
-    expect(history.plan.why).toContain("The old solvent is ACN at 80% B.");
-    expect(history.plan.why).toContain("MeOH 85.9% B, ACN 80.0% B, and THF 59.7% B");
-    expect(history.plan.why).not.toContain("The new solvent is");
-    expect(history.plan.why.toLowerCase()).not.toContain("guess");
-    expect(history.plan.recommendedSolventId).toBeNull();
-    expect(history.plan.prefill).toMatchObject({ percentB: "", temperature: "25", solvent: "" });
+    expect(history.plan.why).not.toContain("60°C is skipped");
+    expect(history.plan.showSolventChoices).toBe(false);
+  });
+
+  it("recommends 60°C only when the peak count went up", () => {
+    const history = planHistory(
+      [
+        run({ peakCount: 8, minResolutionExcludingFirst: 0.4 }),
+        run({ percentB: 80, temperatureC: 40, peakCount: 8, minResolutionExcludingFirst: 0.4, lastPeakTimeMin: 6 }),
+        run({ percentB: 70, temperatureC: 40, peakCount: 9, minResolutionExcludingFirst: 0.4, lastPeakTimeMin: 9 }),
+      ],
+      setup,
+    );
+    expect(history.phase).toBe("selectivity");
+    if (history.phase !== "selectivity") return;
+    expect(history.plan.step).toBe("temp-60");
+    expect(history.plan.tempChoice).toBeNull();
+    expect(history.plan.showSolventChoices).toBe(false);
+    expect(history.plan.nextChange).toContain("60°C");
+    expect(history.plan.nextChange.toLowerCase()).not.toContain("solvent");
+    expect(history.plan.why).toContain("The peak count went up");
+    expect(history.plan.why).toContain("A higher temperature is likely to increase separation further.");
+    expect(history.plan.prefill).toMatchObject({ percentB: "70", temperature: "60" });
+  });
+
+  it("still adjusts %B at 60°C after that path is chosen", () => {
+    const history = planHistory(
+      [
+        run({ peakCount: 8, minResolutionExcludingFirst: 0.4 }),
+        run({ percentB: 80, temperatureC: 40, peakCount: 8, minResolutionExcludingFirst: 0.4, lastPeakTimeMin: 6 }),
+        run({ percentB: 75, temperatureC: 40, peakCount: 8, minResolutionExcludingFirst: 0.3, lastPeakTimeMin: 8 }),
+        run({ percentB: 75, temperatureC: 60, peakCount: 8, minResolutionExcludingFirst: 0.3, lastPeakTimeMin: 5 }),
+      ],
+      setup,
+    );
+    expect(history.phase).toBe("selectivity");
+    if (history.phase !== "selectivity") return;
+    expect(history.plan.step).toBe("temp-adjust");
+    expect(history.plan.nextChange).toContain("60°C");
+    expect(history.plan.nextChange.toLowerCase()).not.toContain("solvent");
   });
 
   it("recommends 60°C at the adjusted %B when 40°C improves the separation", () => {
@@ -337,8 +375,13 @@ describe("selectivity plan", () => {
     expect(history.phase).toBe("selectivity");
     if (history.phase !== "selectivity") return;
     expect(history.plan.step).toBe("temp-60");
+    expect(history.plan.tempChoice).toBeNull();
+    expect(history.plan.showSolventChoices).toBe(false);
     expect(history.plan.prefill).toMatchObject({ percentB: "70", temperature: "60" });
     expect(history.plan.nextChange).toContain("60°C");
+    expect(history.plan.nextChange.toLowerCase()).not.toContain("solvent");
+    expect(history.plan.why).toContain("The minimum resolution went up");
+    expect(history.plan.why).toContain("A higher temperature is likely to increase separation further.");
   });
 
   it("changes the coating, returns to 100% B, and does not repeat a coating", () => {
@@ -502,17 +545,20 @@ describe("selectivity plan", () => {
     );
     expect(history.phase).toBe("selectivity");
     if (history.phase !== "selectivity") return;
-    expect(history.plan.step).toBe("solvent");
+    expect(history.plan.step).toBe("temp-choice");
     expect(history.plan.step).not.toBe("temp-60");
-    expect(history.plan.nextChange.toLowerCase()).not.toContain("60°c");
-    expect(history.plan.why).toContain("worse because it has fewer peaks");
-    expect(history.plan.why).toContain("minimum resolution is 0");
-    expect(history.plan.why).toContain("new solvent");
-    expect(history.plan.why).toContain("The old solvent is ACN at 40% B.");
-    expect(history.plan.why).toContain("MeOH 51.2% B, ACN 40.0% B, and THF 30.7% B");
-    expect(history.plan.why).not.toContain("The new solvent is");
+    expect(history.plan.step).not.toBe("solvent");
+    expect(history.plan.nextChange).toBe(TEMP_CHOICE_RECOMMENDED);
+    expect(history.plan.why).toContain(TEMP_CHOICE_RECOMMENDED);
+    expect(history.plan.why).toContain("7 peaks");
+    expect(history.plan.why).toContain("6 peaks");
+    expect(history.plan.why).toContain("minimum resolution 0.000");
     expect(history.plan.why).not.toContain("2.312");
-    expect(history.plan.nextChange).not.toMatch(/methanol|acetonitrile|tetrahydrofuran/i);
+    expect(history.plan.why).not.toContain("60°C is skipped");
+    expect(history.plan.tempChoice?.heatLabel).toContain("60°C at 38% B");
+    expect(history.plan.tempChoice?.solventNextChange).toContain("Pick a new solvent you can actually use.");
+    expect(history.plan.nomograph?.map((row) => row.percentText)).toEqual(["51.2", "40.0", "30.7"]);
+    expect(history.plan.showSolventChoices).toBe(false);
   });
 
   it("uses 25°C when Run 1 has no temperature", () => {
