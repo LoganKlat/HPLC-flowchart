@@ -297,13 +297,12 @@ export function efficiencyAsk(input: {
     question:
       resolutionMeets && lastPeakLate
         ? runtimeQuestion(lastPeak, specified)
-        : efficiencyQuestion(multiple, measured, input.minResolution),
+        : efficiencyQuestion(measured, input.minResolution),
     why: efficiencyWhy({
       peakCount: input.peakCount,
       requiredPeaks: input.requiredPeaks,
       measured,
       spec: input.minResolution,
-      multiple,
       lastPeakTimeMin: lastPeak,
       specifiedRunTimeMin: specified,
       maxBackPressurePsi: input.maxBackPressurePsi ?? null,
@@ -312,12 +311,20 @@ export function efficiencyAsk(input: {
   };
 }
 
-export function efficiencyQuestion(multiple: number, measured: number, spec: number): string {
-  return `Consider whether efficiency and gradient can still bring the resolution up to the spec. The minimum resolution is ${formatResolution(measured)}, which is at least ${formatMultiple(multiple)} times the ${formatResolution(spec)} you set. Move on to efficiency and be done with selectivity?`;
+export function efficiencyQuestion(measured: number, spec: number): string {
+  const comparison =
+    measured + 1e-9 >= spec
+      ? `Above the specification of ${formatResolution(spec)}.`
+      : `Under the specification of ${formatResolution(spec)}.`;
+  const lead =
+    measured + 1e-9 >= spec
+      ? "Consider moving on to efficiency."
+      : "Consider whether efficiency and gradient can still bring the resolution up to the specification.";
+  return `${lead} Minimum resolution: ${formatResolution(measured)}. ${comparison} Move on to efficiency and be done with selectivity?`;
 }
 
 function runtimeQuestion(lastPeakMin: number, specifiedMin: number): string {
-  return `Consider whether efficiency and gradient can still bring the last peak time to the run time you set. The last peak is at ${formatMinutes(lastPeakMin)} min, later than the ${formatTypedMinutes(specifiedMin)} min you set. Move on to efficiency and be done with selectivity?`;
+  return `Consider whether efficiency and gradient can still bring the last peak time to the specification. The last peak is at ${formatMinutes(lastPeakMin)} min, later than the specification of ${formatTypedMinutes(specifiedMin)} min. Move on to efficiency and be done with selectivity?`;
 }
 
 function efficiencyWhy(input: {
@@ -325,14 +332,12 @@ function efficiencyWhy(input: {
   requiredPeaks: number;
   measured: number;
   spec: number;
-  multiple: number;
   lastPeakTimeMin: number | null;
   specifiedRunTimeMin: number | null;
   maxBackPressurePsi: number | null;
   maxBackPressureSpec: number | null;
 }): string {
-  const benchmark = formatMultiple(input.multiple);
-  const fullSpecMet = input.measured + 1e-9 >= input.spec;
+  const resolutionMet = input.measured + 1e-9 >= input.spec;
   const lastPeakLate =
     input.lastPeakTimeMin != null &&
     input.specifiedRunTimeMin != null &&
@@ -345,61 +350,70 @@ function efficiencyWhy(input: {
     input.maxBackPressurePsi != null &&
     Number.isFinite(input.maxBackPressurePsi) &&
     !isOver(input.maxBackPressurePsi, input.maxBackPressureSpec!);
-  const everySetRuleMet = fullSpecMet && (!lastPeakChecked || lastPeakMet) && (!pressureChecked || pressureMet);
+  const everySpecificationMet =
+    resolutionMet && (!lastPeakChecked || lastPeakMet) && (!pressureChecked || pressureMet);
 
-  const resolutionLine = fullSpecMet
-    ? `It meets the full spec, which is 1 times ${formatResolution(input.spec)}.`
-    : `It does not meet the full spec, which is 1 times ${formatResolution(input.spec)}.`;
   const parts = [
     "Moving on to efficiency is a choice.",
-    `This run has ${formatCount(input.peakCount)} peaks, and you asked for ${formatCount(input.requiredPeaks)}. Peaks are met.`,
-    `The minimum resolution is ${formatResolution(input.measured)}. The spec is ${formatResolution(input.spec)}. This ask is the ${benchmark} times benchmark, and the measured resolution is at least ${benchmark} times that spec, so the benchmark is met. ${resolutionLine}`,
+    `Peaks: ${formatCount(input.peakCount)}. The specification is ${formatCount(input.requiredPeaks)}. ${input.peakCount >= input.requiredPeaks ? "Met." : "Not met."}`,
+    `Minimum resolution: ${formatResolution(input.measured)}. ${resolutionMet ? "Above" : "Under"} the specification of ${formatResolution(input.spec)}.`,
     lastPeakSentence(input.lastPeakTimeMin, input.specifiedRunTimeMin),
     pressureSentence(input.maxBackPressurePsi, input.maxBackPressureSpec),
   ];
-  if (!everySetRuleMet) parts.push("Not every rule you set is met.");
-  if (!fullSpecMet) {
+  if (!resolutionMet) {
     parts.push(
-      `Efficiency and gradient may still bring the resolution up to the ${formatResolution(input.spec)} you set.`,
+      "Not every specification is met. Efficiency and gradient may still bring the resolution up to the specification.",
     );
   } else if (lastPeakLate && input.specifiedRunTimeMin != null) {
     parts.push(
-      `Efficiency and gradient may still bring the last peak time to the ${formatTypedMinutes(input.specifiedRunTimeMin)} min you set.`,
+      "Not every specification is met. Efficiency and gradient may still bring the last peak time to the specification.",
     );
-  } else if (everySetRuleMet) {
-    parts.push("Every rule you set is met.");
+  } else if (!everySpecificationMet) {
+    parts.push("Not every specification is met.");
+  } else {
+    parts.push("Every specification is met.");
   }
   return parts.join("\n\n");
 }
 
 function lastPeakSentence(measured: number | null, spec: number | null): string {
-  if (spec == null) return "Last peak time is blank, so it is not being checked.";
+  if (spec == null) return "Last peak: the specification is blank, so it is not checked.";
   const typed = formatTypedMinutes(spec);
   if (measured == null || !Number.isFinite(measured)) {
-    return `You set ${typed} min. The last peak time is not in this file, so last peak time is not met.`;
+    return `Last peak: not in this file. The specification is ${typed} min. Not met.`;
   }
   if (isLater(measured, spec)) {
-    return `The last peak is at ${formatMinutes(measured)} min. You set ${typed} min. Longer than that is not met, so last peak time is not met.`;
+    return `Last peak: ${formatMinutes(measured)} min. Later than the specification of ${typed} min. Not met.`;
   }
-  return `The last peak is at ${formatMinutes(measured)} min. You set ${typed} min. That is at or before the time you set, so last peak time is met.`;
+  return `Last peak: ${formatMinutes(measured)} min. The specification is ${typed} min. Met.`;
 }
 
 function pressureSentence(measured: number | null, spec: number | null): string {
-  if (spec == null) return "Max back-pressure is blank, so it is not being checked.";
+  if (spec == null) return "Back-pressure: the specification is blank, so it is not checked.";
   const typed = formatTypedNumber(spec);
   if (measured == null || !Number.isFinite(measured)) {
-    return `You set a max of ${typed} psi. The highest back-pressure is not in this file, so back-pressure is not met.`;
+    return `Back-pressure: not in this file. The specification is ${typed} psi. Not met.`;
   }
+  const shown = formatPressure(measured);
   if (isOver(measured, spec)) {
-    return `The highest back-pressure is ${formatPressure(measured)} psi. You set a max of ${typed} psi. Higher than that is not met, so back-pressure is not met.`;
+    return `Back-pressure: ${shown} psi. Over the specification of ${typed} psi. Not met.`;
   }
-  return `The highest back-pressure is ${formatPressure(measured)} psi. You set a max of ${typed} psi. That is at or under the max, so back-pressure is met.`;
+  if (isUnder(measured, spec)) {
+    return `Back-pressure: ${shown} psi. Under the specification of ${typed} psi. Met.`;
+  }
+  return `Back-pressure: ${shown} psi. The specification is ${typed} psi. Met.`;
 }
 
 function isOver(measured: number, spec: number): boolean {
   const scale = Math.max(1, Math.abs(measured), Math.abs(spec));
   if (Math.abs(measured - spec) <= scale * 1e-9) return false;
   return measured > spec;
+}
+
+function isUnder(measured: number, spec: number): boolean {
+  const scale = Math.max(1, Math.abs(measured), Math.abs(spec));
+  if (Math.abs(measured - spec) <= scale * 1e-9) return false;
+  return measured < spec;
 }
 
 function formatPressure(value: number): string {
@@ -426,11 +440,6 @@ function highestMultiple(measured: number, spec: number): number | null {
     if (measured + 1e-9 >= multiple * spec) reached = multiple;
   }
   return reached;
-}
-
-function formatMultiple(value: number): string {
-  if (value === 1) return "1";
-  return value === 0.55 || value === 0.85 ? value.toFixed(2) : value.toFixed(1);
 }
 
 export function adjustedPercentB(input: {
