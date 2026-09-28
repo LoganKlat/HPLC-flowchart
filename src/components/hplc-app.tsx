@@ -514,11 +514,10 @@ function RunPane({
           declinedThrough,
           lastPeakTimeMin: run.read.lastPeakTimeMin,
           specifiedRunTimeMin: checks.lastPeakTimeMin,
+          maxBackPressurePsi: run.read.maxBackPressurePsi,
+          maxBackPressureSpec: checks.maxBackPressurePsi,
         })
       : null;
-  const ifNo =
-    selectivity?.nextChange ??
-    (explanation?.kind === "retention" ? explanation.decision.nextChange : "");
 
   return (
     <>
@@ -585,7 +584,6 @@ function RunPane({
             ) : ask ? (
               <LeaveSelectivityAsk
                 ask={ask}
-                ifNo={ifNo}
                 onYes={onLeave}
                 onNo={() => onDecline(ask.multiple)}
               />

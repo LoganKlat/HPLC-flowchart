@@ -5,12 +5,10 @@ const choiceClass =
 
 export function LeaveSelectivityAsk({
   ask,
-  ifNo,
   onYes,
   onNo,
 }: {
   ask: EfficiencyAsk;
-  ifNo: string;
   onYes: () => void;
   onNo: () => void;
 }) {
@@ -34,9 +32,11 @@ export function LeaveSelectivityAsk({
       </section>
       <section className="rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10">
         <h2 className="font-heading text-base">Why</h2>
-        <p className="mt-1 text-sm leading-relaxed text-foreground">
-          If you say no, the next chromatogram would be: {ifNo}
-        </p>
+        <div className="mt-1 flex flex-col gap-2 text-sm leading-relaxed text-foreground">
+          {ask.why.split("\n\n").map((paragraph, index) => (
+            <p key={index}>{paragraph}</p>
+          ))}
+        </div>
       </section>
     </div>
   );

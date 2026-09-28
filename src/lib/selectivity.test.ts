@@ -167,11 +167,24 @@ describe("selectivity checks", () => {
       declinedThrough: null,
       lastPeakTimeMin: read.lastPeakTimeMin,
       specifiedRunTimeMin: rules.lastPeakTimeMin,
+      maxBackPressurePsi: read.maxBackPressurePsi,
+      maxBackPressureSpec: rules.maxBackPressurePsi,
     });
     expect(ask?.question).toBe(
       "Consider whether efficiency and gradient can still bring the last peak time to the run time you set. The last peak is at 19.854 min, later than the 15 min you set. Move on to efficiency and be done with selectivity?",
     );
     expect(ask?.question).not.toContain("bring the resolution");
+    expect(ask?.why).toBe(
+      [
+        "Moving on to efficiency is a choice.",
+        "This run has 7 peaks, and you asked for 7. Peaks are met.",
+        "The minimum resolution is 1.453. The spec is 1.400. This ask is the 1 times benchmark, and the measured resolution is at least 1 times that spec, so the benchmark is met. It meets the full spec, which is 1 times 1.400.",
+        "The last peak is at 19.854 min. You set 15 min. Longer than that is not met, so last peak time is not met.",
+        "The highest back-pressure is 1180.5 psi. You set a max of 2000 psi. That is at or under the max, so back-pressure is met.",
+        "Not every rule you set is met.",
+        "Efficiency and gradient may still bring the last peak time to the 15 min you set.",
+      ].join("\n\n"),
+    );
 
     const stillShort = efficiencyAsk({
       peakCount: read.peakCount,
@@ -181,9 +194,30 @@ describe("selectivity checks", () => {
       declinedThrough: null,
       lastPeakTimeMin: read.lastPeakTimeMin,
       specifiedRunTimeMin: rules.lastPeakTimeMin,
+      maxBackPressurePsi: read.maxBackPressurePsi,
+      maxBackPressureSpec: rules.maxBackPressurePsi,
     });
     expect(stillShort?.question).toContain("bring the resolution up to the spec");
     expect(stillShort?.question).not.toContain("last peak time");
+    expect(stillShort?.why).toContain("0.55 times benchmark");
+    expect(stillShort?.why).toContain("It does not meet the full spec, which is 1 times 1.400.");
+    expect(stillShort?.why).toContain(
+      "Efficiency and gradient may still bring the resolution up to the 1.400 you set.",
+    );
+    expect(stillShort?.why).not.toContain("bring the last peak time");
+
+    const blankPressure = efficiencyAsk({
+      peakCount: read.peakCount,
+      foundResolution: read.minResolutionExcludingFirst,
+      requiredPeaks: rules.requiredPeaks,
+      minResolution: rules.minResolution,
+      declinedThrough: null,
+      lastPeakTimeMin: read.lastPeakTimeMin,
+      specifiedRunTimeMin: rules.lastPeakTimeMin,
+      maxBackPressurePsi: read.maxBackPressurePsi,
+      maxBackPressureSpec: null,
+    });
+    expect(blankPressure?.why).toContain("Max back-pressure is blank, so it is not being checked.");
   });
 
   it("does not ask when peaks are short or the resolution spec is blank", () => {
