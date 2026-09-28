@@ -314,7 +314,11 @@ describe("retention rule edges", () => {
     );
     expect(under.move).toBe("drop-10");
     expect(under.nextPercentB).toBe(60);
-    expect(under.why).toContain("66%");
+    expect(under.why).toContain(
+      "The last peak is at 6.500 min, still significantly under the specified run time of 10 min. 70% B minus 10 percentage points is 60% B.",
+    );
+    expect(under.why).not.toContain("66%");
+    expect(under.why).not.toContain("0.66");
 
     const over = decideRetention(
       [sample({ percentB: 70, peakCount: 2, lastPeakTimeMin: 7, maxBackPressurePsi: 100 })],

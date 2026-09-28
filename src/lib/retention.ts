@@ -381,7 +381,7 @@ function dropPoints(
   const whyParts = situationSentences(samples, rules);
   if (reason === "drop-10") {
     whyParts.push(
-      `The last peak is at ${formatMinutes(current.lastPeakTimeMin!)} min, under ${formatMinutes(line)} min (${retentionPercent()} of the ${formatMinutes(rules.lastPeakTimeMin)} min you set). ${from}% B minus 10 percentage points is ${to}% B.`,
+      `The last peak is at ${formatMinutes(current.lastPeakTimeMin!)} min, still significantly under the specified run time of ${formatTypedMinutes(rules.lastPeakTimeMin)} min. ${from}% B minus 10 percentage points is ${to}% B.`,
     );
   } else {
     whyParts.push(
@@ -986,6 +986,10 @@ function formatCount(value: number): string {
 
 function formatMinutes(value: number): string {
   return value.toFixed(3);
+}
+
+function formatTypedMinutes(value: number): string {
+  return String(value);
 }
 
 function formatResolution(value: number): string {
