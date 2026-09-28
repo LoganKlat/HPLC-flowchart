@@ -61,26 +61,32 @@ const setups: Setup[] = [
     width: 1094,
     height: 508,
     parts: [
-      { id: "solvents", label: "Solvents", body: solvents, box: box(286, 108, 82, 17, 1094, 508) },
-      { id: "degasser", label: "Degasser", body: degasser, box: box(277, 190, 88, 20, 1094, 508) },
-      { id: "uv", label: "UV detector", body: uvDetector, box: box(278, 265, 119, 18, 1094, 508) },
+      { id: "solvents", label: "Solvents", body: solvents, box: box(408, 48, 180, 118, 1094, 508) },
+      { id: "degasser", label: "Degasser", body: degasser, box: box(408, 166, 180, 64, 1094, 508) },
+      { id: "uv", label: "UV detector", body: uvDetector, box: box(408, 228, 185, 100, 1094, 508) },
       {
         id: "pump",
         label: "Pump with quaternary valve",
         body: pumpQuaternary,
-        box: box(102, 373, 287, 24, 1094, 508),
+        box: box(408, 330, 180, 110, 1094, 508),
+      },
+      {
+        id: "controller",
+        label: "Controller or fluorescence detector",
+        body: controller,
+        box: box(592, 158, 175, 100, 1094, 508),
       },
       {
         id: "oven",
         label: "Oven and column",
         body: ovenAndColumn,
-        box: box(829, 322, 173, 17, 1094, 508),
+        box: box(592, 290, 180, 85, 1094, 508),
       },
       {
         id: "injector",
         label: "Manual injector",
         body: manualInjector,
-        box: box(830, 383, 156, 21, 1094, 508),
+        box: box(592, 370, 180, 70, 1094, 508),
       },
     ],
   },
@@ -91,29 +97,29 @@ const setups: Setup[] = [
     width: 1264,
     height: 660,
     parts: [
-      { id: "solvents", label: "Solvents", body: solvents, box: box(314, 104, 82, 18, 1264, 660) },
-      { id: "degasser", label: "Degasser", body: degasser, box: box(299, 155, 88, 21, 1264, 660) },
-      { id: "pump-1", label: "Pump 1", body: pumps12, box: box(315, 222, 73, 21, 1264, 660) },
-      { id: "pump-2", label: "Pump 2", body: pumps12, box: box(321, 327, 73, 21, 1264, 660) },
+      { id: "solvents", label: "Solvents", body: solvents, box: box(440, 20, 190, 120, 1264, 660) },
+      { id: "degasser", label: "Degasser", body: degasser, box: box(440, 140, 190, 50, 1264, 660) },
+      { id: "pump-1", label: "Pump 1", body: pumps12, box: box(440, 185, 190, 95, 1264, 660) },
+      { id: "pump-2", label: "Pump 2", body: pumps12, box: box(440, 278, 190, 95, 1264, 660) },
       {
         id: "controller",
         label: "Controller or fluorescence detector",
         body: controller,
-        box: box(840, 213, 349, 52, 1264, 660),
+        box: box(640, 185, 185, 95, 1264, 660),
       },
       {
         id: "detector",
         label: "UV or PDA detector",
         body: uvOrPda,
-        box: box(841, 310, 193, 18, 1264, 660),
+        box: box(640, 280, 185, 95, 1264, 660),
       },
       {
         id: "oven",
         label: "Oven and column",
         body: ovenAndColumn,
-        box: box(842, 513, 173, 18, 1264, 660),
+        box: box(640, 455, 185, 195, 1264, 660),
       },
-      { id: "autosampler", label: "Autosampler", body: autosampler, box: box(300, 521, 129, 22, 1264, 660) },
+      { id: "autosampler", label: "Autosampler", body: autosampler, box: box(440, 375, 190, 270, 1264, 660) },
     ],
   },
   {
@@ -123,33 +129,33 @@ const setups: Setup[] = [
     width: 1228,
     height: 582,
     parts: [
-      { id: "solvents", label: "Solvents", body: solvents, box: box(314, 85, 82, 17, 1228, 582) },
-      { id: "degasser", label: "Degasser", body: degasser, box: box(286, 175, 88, 20, 1228, 582) },
+      { id: "solvents", label: "Solvents", body: solvents, box: box(435, 35, 190, 125, 1228, 582) },
+      { id: "degasser", label: "Degasser", body: degasser, box: box(435, 155, 190, 55, 1228, 582) },
       {
         id: "pump",
         label: "Pump with quaternary valve",
         body: pumpQuaternary,
-        box: box(151, 249, 286, 21, 1228, 582),
+        box: box(435, 205, 190, 180, 1228, 582),
       },
       {
         id: "controller",
         label: "Controller or fluorescence detector",
         body: controller,
-        box: box(838, 137, 349, 51, 1228, 582),
+        box: box(635, 110, 185, 95, 1228, 582),
       },
       {
         id: "detector",
         label: "UV or PDA detector",
         body: uvOrPda,
-        box: box(839, 234, 193, 17, 1228, 582),
+        box: box(635, 200, 185, 140, 1228, 582),
       },
       {
         id: "oven",
         label: "Oven and column",
         body: ovenAndColumn,
-        box: box(840, 437, 173, 17, 1228, 582),
+        box: box(635, 375, 185, 195, 1228, 582),
       },
-      { id: "autosampler", label: "Autosampler", body: autosampler, box: box(299, 445, 128, 21, 1228, 582) },
+      { id: "autosampler", label: "Autosampler", body: autosampler, box: box(435, 400, 190, 170, 1228, 582) },
     ],
   },
 ];
@@ -187,12 +193,14 @@ export function EquipmentPanel({ onOpenNav }: { onOpenNav: () => void }) {
           Sections
         </Button>
       </div>
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
+      <div className="flex min-w-0 flex-col gap-5">
       <header>
         <p className="text-xs tracking-[0.16em] text-[#0f6b56] uppercase">Lab setups</p>
         <h1 className="mt-1 font-heading text-3xl text-foreground sm:text-4xl">Equipment</h1>
         <p className="mt-2 max-w-2xl text-base text-muted-foreground">
-          Pick the HPLC in the lab. Hover or tap a label to see what that part does and which setting
-          it controls.
+          Pick the HPLC in the lab. Hover or tap a part to see what it does and which setting it
+          controls.
         </p>
       </header>
       <div id="equipment-choices" className="flex flex-wrap gap-2">
@@ -218,11 +226,11 @@ export function EquipmentPanel({ onOpenNav }: { onOpenNav: () => void }) {
           );
         })}
       </div>
-      <figure className="overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10">
+      <figure className="rounded-xl bg-card ring-1 ring-foreground/10">
         <div className="relative">
           <img
             src={setup.src}
-            alt={`Labeled diagram of ${setup.label}`}
+            alt={`Diagram of ${setup.label}`}
             width={setup.width}
             height={setup.height}
             className="block h-auto w-full"
@@ -259,20 +267,22 @@ export function EquipmentPanel({ onOpenNav }: { onOpenNav: () => void }) {
             );
           })}
         </div>
+      </figure>
+      </div>
+      <aside
+        id="equipment-note"
+        className="rounded-xl bg-card px-4 py-4 text-sm leading-relaxed text-foreground ring-1 ring-foreground/10 lg:sticky lg:top-4"
+      >
         {open ? (
-          <figcaption
-            id="equipment-note"
-            className="border-t border-border px-4 py-3 text-sm leading-relaxed text-foreground"
-          >
+          <>
             <p className="font-medium">{open.label}</p>
             <p className="mt-1">{open.body}</p>
-          </figcaption>
+          </>
         ) : (
-          <figcaption className="border-t border-border px-4 py-3 text-sm text-muted-foreground">
-            Hover or tap a label on the diagram.
-          </figcaption>
+          <p className="text-muted-foreground">Hover or tap a part of the instrument.</p>
         )}
-      </figure>
+      </aside>
+      </div>
     </div>
   );
 }
