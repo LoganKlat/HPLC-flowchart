@@ -8,6 +8,7 @@ import { LaterChangeNote, RetentionDecisionView, StartHighBNote } from "@/compon
 import { ResultsPanel } from "@/components/results-panel";
 import { RunForm } from "@/components/run-form";
 import { SelectivityDecisionView } from "@/components/selectivity-decision";
+import { EquipmentPanel } from "@/components/equipment-panel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -66,6 +67,7 @@ function emptyRun(): RunState {
 
 const sections = [
   { id: "decision-engine", label: "Decision engine" },
+  { id: "equipment", label: "Equipment" },
   { id: "about", label: "About" },
 ] as const;
 
@@ -275,6 +277,8 @@ export function HplcApp() {
           </Button>
         </div>
       ) : null}
+
+      {section === "equipment" ? <EquipmentPanel onOpenNav={() => setNavOpen(true)} /> : null}
 
       {section === "decision-engine" ? (
       <>
