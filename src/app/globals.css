@@ -117,6 +117,17 @@
   --sidebar-ring: oklch(0.556 0 0);
 }
 
+.column-slider {
+  accent-color: #0f6b56;
+  height: 1.75rem;
+  width: 100%;
+  cursor: pointer;
+}
+
+.column-slider[aria-disabled="true"] {
+  cursor: default;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, type CSSProperties } from "react";
+import { BeadDiagram } from "@/components/bead-diagram";
+import { ColumnDiagram } from "@/components/column-diagram";
 import { Button } from "@/components/ui/button";
 
 type Box = { left: number; top: number; width: number; height: number };
@@ -178,7 +180,15 @@ function choiceStyle(selected: boolean, hovered: boolean): CSSProperties {
   };
 }
 
+const equipmentTabs = [
+  { id: "hplc", label: "HPLC" },
+  { id: "column", label: "Column" },
+  { id: "beads", label: "Beads" },
+] as const;
+
 export function EquipmentPanel({ onOpenNav }: { onOpenNav: () => void }) {
+  const [view, setView] = useState<(typeof equipmentTabs)[number]["id"]>("hplc");
+  const [hoveredView, setHoveredView] = useState<string | null>(null);
   const [setupId, setSetupId] = useState(setups[0].id);
   const [hoveredChoice, setHoveredChoice] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -193,11 +203,35 @@ export function EquipmentPanel({ onOpenNav }: { onOpenNav: () => void }) {
           Sections
         </Button>
       </div>
-      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
-      <div className="flex min-w-0 flex-col gap-5">
       <header>
         <p className="text-xs tracking-[0.16em] text-[#0f6b56] uppercase">Lab setups</p>
         <h1 className="mt-1 font-heading text-3xl text-foreground sm:text-4xl">Equipment</h1>
+      </header>
+      <div id="equipment-tabs" className="flex flex-wrap gap-2">
+        {equipmentTabs.map((tab) => {
+          const selected = tab.id === view;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              aria-pressed={selected}
+              className="h-10 rounded-md border border-solid px-4 text-sm transition-none"
+              style={choiceStyle(selected, hoveredView === tab.id)}
+              onMouseEnter={() => setHoveredView(tab.id)}
+              onMouseLeave={() => setHoveredView((current) => (current === tab.id ? null : current))}
+              onClick={() => setView(tab.id)}
+            >
+              {tab.label}
+            </button>
+          );
+        })}
+      </div>
+      {view === "column" ? <ColumnDiagram /> : null}
+      {view === "beads" ? <BeadDiagram /> : null}
+      {view === "hplc" ? (
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
+      <div className="flex min-w-0 flex-col gap-5">
+      <header>
         <p className="mt-2 max-w-2xl text-base text-muted-foreground">
           Pick the HPLC in the lab. Hover or tap a part to see what it does and which setting it
           controls.
@@ -283,6 +317,7 @@ export function EquipmentPanel({ onOpenNav }: { onOpenNav: () => void }) {
         )}
       </aside>
       </div>
+      ) : null}
     </div>
   );
 }
