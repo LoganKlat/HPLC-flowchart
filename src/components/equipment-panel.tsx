@@ -3,6 +3,7 @@
 import { useState, type CSSProperties } from "react";
 import { BeadDiagram } from "@/components/bead-diagram";
 import { ColumnDiagram } from "@/components/column-diagram";
+import { ColumnRetentionAnimation } from "@/components/column-retention-animation";
 import { Button } from "@/components/ui/button";
 
 type Box = { left: number; top: number; width: number; height: number };
@@ -226,7 +227,12 @@ export function EquipmentPanel({ onOpenNav }: { onOpenNav: () => void }) {
           );
         })}
       </div>
-      {view === "column" ? <ColumnDiagram /> : null}
+      {view === "column" ? (
+        <>
+          <ColumnDiagram />
+          <ColumnRetentionAnimation />
+        </>
+      ) : null}
       {view === "beads" ? <BeadDiagram /> : null}
       {view === "hplc" ? (
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
