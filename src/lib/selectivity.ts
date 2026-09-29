@@ -414,9 +414,13 @@ function efficiencyWhy(input: {
       "The peaks are already there and the worst pair is already far enough apart. Not every specification is met because the last peak is late. Efficiency can shorten the run without changing the separation you already have.",
     );
   } else if (!everySpecificationMet) {
-    parts.push("Not every specification is met. The measurements above are what still has to be brought inside the specification.");
+    parts.push(
+      "Not every specification is met. The measurements above are what still has to be brought inside the specification. Moving on would use efficiency, which narrows peaks or shortens the run, instead of another selectivity change.",
+    );
   } else {
-    parts.push("Every specification is met. Another selectivity change is not needed.");
+    parts.push(
+      "Every specification is met. Another selectivity change is not needed. Efficiency is not required either, because the peaks are already far enough apart and the run is already inside the time.",
+    );
   }
   return parts.join("\n\n");
 }
@@ -821,7 +825,7 @@ function planTempChoice(
       TEMP_CHOICE_RECOMMENDED,
       heatLabel,
       compareSentence(args.baseline, args.baselineNumber, heated, args.setup.requiredPeaks),
-      "40°C did not pull the peaks apart. More heat at the same %B is unlikely to help, because the compounds already had a chance to spend less time on the coating and the separation did not improve. The other button changes the solvent. A different solvent changes which compounds prefer the coating, which can separate a pair that heat did not.",
+      "40°C did not pull the peaks apart. More heat at the same %B is unlikely to help, because the compounds already had a chance to spend less time on the coating and the separation did not improve. The other button changes the solvent. A different solvent changes which compounds prefer the coating, which can separate a pair that heat did not. That solvent change is a selectivity change, not an efficiency change. The matched %B keeps the retention time similar.",
     ].join(" "),
     prefill: null,
     nomograph: solventStep.nomograph,
@@ -882,7 +886,7 @@ function planLigandHeatChoice(
       LIGAND_CHOICE_RECOMMENDED,
       heatLabel,
       compareSentence(args.baseline, args.baselineNumber, heated, args.setup.requiredPeaks),
-      "40°C on this solvent did not pull the peaks apart. More heat is unlikely to help, because the warmer column was already tried and the separation did not improve. The other button changes the column coating. The coating is last, because temperature and solvent were already tried. A new coating starts the %B ladder again.",
+      "40°C on this solvent did not pull the peaks apart. More heat is unlikely to help, because the warmer column was already tried and the separation did not improve. The other button changes the column coating. The coating is last, because temperature and solvent were already tried. A new coating starts the %B ladder again. A new ligand is a selectivity change: peaks can pull apart or change order.",
     ].join(" "),
     prefill: null,
     nomograph: null,
@@ -968,7 +972,7 @@ function plan60(
     why: [
       `${what} at 40°C compared with Run ${args.baselineNumber}, the run from before the temperature change.`,
       compareSentence(args.baseline, args.baselineNumber, heated, args.setup.requiredPeaks),
-      `Heat helped, so 60°C at the same ${percent}% B is next. Staying at the same %B keeps the solvent strength the same, so the retention time stays in the same neighborhood. A warmer column already improved the separation, and 60°C continues that change.`,
+      `Heat helped, so 60°C at the same ${percent}% B is next. Staying at the same %B keeps the solvent strength the same, so the retention time stays in the same neighborhood. A warmer column already improved the separation, and 60°C continues that change. Going to 60°C is still a selectivity change. Efficiency is not the step being taken.`,
       "A higher temperature is likely to increase separation further.",
     ].join(" "),
     prefill: { percentB: percent, temperature: "60", solvent, ligand },
@@ -1012,7 +1016,7 @@ function solventPlan(args: {
     why: [
       solventLead(args),
       [oldSentence, pick, readings].filter(Boolean).join(" ") + cap,
-      "The matched %B is there so the retention time stays similar when the solvent changes. Pick the solvent you can actually use. The chart does not choose it.",
+      "The matched %B is there so the retention time stays similar when the solvent changes. Pick the solvent you can actually use. The chart does not choose it. Changing the solvent is a selectivity change: peaks can pull apart or change order. It is not an efficiency change.",
       args.ambient.sentence,
     ].join(" "),
     prefill: {
@@ -1045,7 +1049,7 @@ function ligandPlan(args: {
   if (!unused) {
     return blockedPlan(
       "Every column coating in the list has already been tried.",
-      `Temperature and a solvent change still do not meet the selectivity checks. Stop here. Every coating in the list has already been used: ${triedText}. There is no further coating to try, so the method is not changed again from this list.`,
+      `Temperature and a solvent change still do not meet the selectivity checks. Stop here. Every coating in the list has already been used: ${triedText}. There is no further coating to try, so the method is not changed again from this list. With no coating left, there is no further selectivity change from this list, so retention and efficiency are left as they are.`,
     );
   }
   const pick = "Pick a new column coating from the dropdown.";
@@ -1054,7 +1058,7 @@ function ligandPlan(args: {
     step: "ligand",
     nextChange: `${pick} Go back to 100% B, ${args.ambient.celsius}°C, and ${solventWords}, then start the %B steps over.`,
     why: [
-      "The coating is last. Temperature is tried first, then a new solvent, because a new coating means starting over. The temperature steps and the solvent change still do not meet the peak count and the resolution check.",
+      "The coating is last. Temperature is tried first, then a new solvent, because a new coating means starting over. The temperature steps and the solvent change still do not meet the peak count and the resolution check. A new ligand is a selectivity change: peaks can pull apart or change order. It is the last one.",
       `${pick} Already used: ${triedText}.`,
       `The ladder starts again at 100% B, the starting temperature (${args.ambient.celsius}°C), and the original solvent (${solventWords}). A strong solvent brings the compounds off the new coating quickly, and the %B steps bring the last peak back toward the specified time.`,
       args.ambient.sentence,

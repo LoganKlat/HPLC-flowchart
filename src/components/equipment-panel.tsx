@@ -4,6 +4,7 @@ import { useState, type CSSProperties } from "react";
 import { BeadDiagram } from "@/components/bead-diagram";
 import { ColumnDiagram } from "@/components/column-diagram";
 import { ColumnRetentionAnimation } from "@/components/column-retention-animation";
+import { FunctionNoteView, type FunctionNote } from "@/components/function-note";
 import { Button } from "@/components/ui/button";
 
 type Box = { left: number; top: number; width: number; height: number };
@@ -11,7 +12,7 @@ type Box = { left: number; top: number; width: number; height: number };
 type Part = {
   id: string;
   label: string;
-  body: string;
+  note: FunctionNote;
   box: Box;
 };
 
@@ -24,24 +25,82 @@ type Setup = {
   parts: Part[];
 };
 
-const solvents =
-  "Bottles of the liquids that carry the sample. One is usually water, sometimes with a set pH. The other is the organic solvent, such as acetonitrile or methanol. The mix is the %B.";
-const degasser =
-  "Takes dissolved air out of the solvents before the pump. Bubbles would upset the flow and the detector. There is no setting to type.";
-const pumpQuaternary =
-  "Pushes the liquid at a flow rate in mL/min. The valve can blend up to four solvents. That blend is the %B.";
-const pumps12 =
-  "Two pumps. Each pushes its own solvent, and they mix after the pumps. Together they set the flow rate and the %B.";
-const uvDetector =
-  "Shines UV light through the liquid leaving the column. The chromatogram is how much light the sample absorbs, over time. The setting is the wavelength, in nm.";
-const uvOrPda =
-  "A UV detector reads one wavelength. A PDA reads many wavelengths at once, so a spectrum can be kept. The setting is the wavelength, in nm.";
-const ovenAndColumn =
-  "The column is where the peaks separate. Its ligand (such as C18 or C18aq), length, diameter, and particle size are part of the column. The oven holds that column at the temperature you set, in °C. Temperature changes how long the peaks take and how well they separate.";
-const manualInjector =
-  "The sample is loaded by hand with a syringe. The amount loaded is the injection volume.";
-const autosampler = "Injects the sample from a vial. The setting is the injection volume.";
-const controller = "Not used in this class.";
+const solvents: FunctionNote = {
+  does: "Bottles of the liquids that carry the sample. One is usually water, sometimes with a set pH. The other is the organic solvent, such as acetonitrile or methanol. The mix of organic solvent is the %B.",
+  sets: "The solvent bottles hold the liquids. The pump blends them into %B. In this class the organic solvent is ACN, MeOH, or THF.",
+  range: "%B is a percent of organic solvent, from 0% to 100%. The bottles themselves have no number to type.",
+  changes:
+    "A higher %B lowers retention (k), so compounds come off sooner. A lower %B raises retention, quickly. Changing which organic solvent is in the bottle is a selectivity change: peaks can pull apart or change order. The bottles do not change efficiency (how narrow the peaks are) by themselves.",
+};
+const degasser: FunctionNote = {
+  does: "Takes dissolved air out of the solvents before the pump. Bubbles would upset the flow and the detector.",
+  sets: "The degasser. It sits between the solvent bottles and the pump. There is no setting to type.",
+  range: "No range and no units. It runs with the instrument. This page does not ask for a degasser number.",
+  changes:
+    "It does not change retention (k), selectivity, or efficiency. It keeps bubbles out so the flow and the chromatogram stay steady.",
+};
+const pumpChanges =
+  "The pump sets flow and %B. A higher %B lowers retention (k). A lower %B raises retention, quickly. Flow changes the clock time of the run and the back-pressure. It does not change k, because the unretained peak and the retained peaks speed up together. It does not change selectivity. Efficiency (how narrow the peaks are) does change with flow: far from a usual flow for that column width, peaks get wider.";
+const pumpRange =
+  "Flow is in mL/min. A usual range for these columns is about 0.2–2 mL/min on a 4.6 mm column, and lower on a 2.1 mm column. %B is 0–100%. This diagram does not enforce a pump maximum.";
+const pumpQuaternary: FunctionNote = {
+  does: "Pushes the liquid through the column and blends the solvents. That blend is the %B.",
+  sets: "The pump, through its quaternary valve. The valve can blend up to four solvents. Flow rate and %B are the settings.",
+  range: pumpRange,
+  changes: pumpChanges,
+};
+const pumps12: FunctionNote = {
+  does: "Two pumps. Each pushes its own solvent, and they mix after the pumps. Together they set the flow rate and the %B.",
+  sets: "Pump 1 and Pump 2. Each pump has its own flow. The mix of the two flows is the %B.",
+  range: pumpRange,
+  changes: pumpChanges,
+};
+const detectorChanges =
+  "Detector wavelength does not change retention (k), selectivity, or efficiency. It changes whether the peak is visible.";
+const detectorRange =
+  "Wavelength is in nm. The page does not enforce a detector maximum. The wavelength box on Run 1 accepts what is typed.";
+const uvDetector: FunctionNote = {
+  does: "Shines UV light through the liquid leaving the column. The chromatogram is how much light the sample absorbs, over time.",
+  sets: "The UV detector. The setting is the wavelength.",
+  range: detectorRange,
+  changes: detectorChanges,
+};
+const uvOrPda: FunctionNote = {
+  does: "A UV detector reads one wavelength. A PDA reads many wavelengths at once, so a spectrum can be kept.",
+  sets: "The UV or PDA detector. The setting is the wavelength.",
+  range: detectorRange,
+  changes: detectorChanges,
+};
+const ovenAndColumn: FunctionNote = {
+  does: "The column is where the peaks separate. The oven holds that column at a temperature.",
+  sets: "The oven sets the temperature. The column carries the ligand, the length, the internal diameter, and the particle size. Those column parts are chosen with the column, not with the oven knob.",
+  range:
+    "Temperature is in °C. This class uses about 25°C, then 40°C and 60°C. The temperature box on Run 1 accepts what is typed. The page does not enforce an oven maximum. Length on the Column tab is 50–250 mm. Width there is 2.1–4.6 mm internal diameter.",
+  changes:
+    "Temperature changes selectivity (peaks can pull apart or change order) and usually shortens retention. The same %B is kept after a temperature change. Length, width, and particle size change retention and efficiency, as on the Column and Beads tabs. The ligand is the coating and is the last selectivity change. The oven does not change efficiency by itself.",
+};
+const injectionChanges =
+  "Injection volume does not change retention (k) or selectivity. A small injection does not change efficiency. A very large injection can widen peaks, which lowers efficiency.";
+const injectionRange =
+  "Injection volume is in µL. The page does not enforce a maximum. The injection-volume box on Run 1 accepts what is typed.";
+const manualInjector: FunctionNote = {
+  does: "The sample is loaded by hand with a syringe into the flow.",
+  sets: "The manual injector. The amount loaded is the injection volume.",
+  range: injectionRange,
+  changes: injectionChanges,
+};
+const autosampler: FunctionNote = {
+  does: "Injects the sample from a vial, without a hand syringe.",
+  sets: "The autosampler. The setting is the injection volume.",
+  range: injectionRange,
+  changes: injectionChanges,
+};
+const controller: FunctionNote = {
+  does: "A controller can start runs and store methods on some instruments. The controller is not used in this class.",
+  sets: "The controller on the instrument. This class does not set anything there.",
+  range: "No range and no units in this class. Nothing is typed on the controller.",
+  changes: "It does not change retention (k), selectivity, or efficiency. The controller is not used in this class.",
+};
 
 function box(x: number, y: number, w: number, h: number, imgW: number, imgH: number, pad = 2): Box {
   const left = Math.max(0, x - pad);
@@ -64,31 +123,31 @@ const setups: Setup[] = [
     width: 387,
     height: 422,
     parts: [
-      { id: "solvents", label: "Solvents", body: solvents, box: box(21, 20, 171, 111, 387, 422) },
-      { id: "degasser", label: "Degasser", body: degasser, box: box(29, 141, 161, 47, 387, 422) },
-      { id: "uv", label: "UV detector", body: uvDetector, box: box(30, 201, 162, 89, 387, 422) },
+      { id: "solvents", label: "Solvents", note: solvents, box: box(21, 20, 171, 111, 387, 422) },
+      { id: "degasser", label: "Degasser", note: degasser, box: box(29, 141, 161, 47, 387, 422) },
+      { id: "uv", label: "UV detector", note: uvDetector, box: box(30, 201, 162, 89, 387, 422) },
       {
         id: "pump",
         label: "Pump with quaternary valve",
-        body: pumpQuaternary,
+        note: pumpQuaternary,
         box: box(20, 307, 169, 93, 387, 422),
       },
       {
         id: "controller",
         label: "Controller or fluorescence detector",
-        body: controller,
+        note: controller,
         box: box(205, 127, 162, 92, 387, 422),
       },
       {
         id: "oven",
         label: "Oven and column",
-        body: ovenAndColumn,
+        note: ovenAndColumn,
         box: box(205, 219, 162, 118, 387, 422),
       },
       {
         id: "injector",
         label: "Manual injector",
-        body: manualInjector,
+        note: manualInjector,
         box: box(205, 337, 162, 65, 387, 422),
       },
     ],
@@ -100,29 +159,29 @@ const setups: Setup[] = [
     width: 399,
     height: 655,
     parts: [
-      { id: "solvents", label: "Solvents", body: solvents, box: box(20, 20, 164, 114, 399, 655) },
-      { id: "degasser", label: "Degasser", body: degasser, box: box(20, 134, 164, 49, 399, 655) },
-      { id: "pump-1", label: "Pump 1", body: pumps12, box: box(23, 183, 158, 89, 399, 655) },
-      { id: "pump-2", label: "Pump 2", body: pumps12, box: box(23, 277, 158, 89, 399, 655) },
+      { id: "solvents", label: "Solvents", note: solvents, box: box(20, 20, 164, 114, 399, 655) },
+      { id: "degasser", label: "Degasser", note: degasser, box: box(20, 134, 164, 49, 399, 655) },
+      { id: "pump-1", label: "Pump 1", note: pumps12, box: box(23, 183, 158, 89, 399, 655) },
+      { id: "pump-2", label: "Pump 2", note: pumps12, box: box(23, 277, 158, 89, 399, 655) },
       {
         id: "controller",
         label: "Controller or fluorescence detector",
-        body: controller,
+        note: controller,
         box: box(221, 187, 158, 87, 399, 655),
       },
       {
         id: "detector",
         label: "UV or PDA detector",
-        body: uvOrPda,
+        note: uvOrPda,
         box: box(221, 277, 158, 93, 399, 655),
       },
       {
         id: "oven",
         label: "Oven and column",
-        body: ovenAndColumn,
+        note: ovenAndColumn,
         box: box(221, 370, 158, 269, 399, 655),
       },
-      { id: "autosampler", label: "Autosampler", body: autosampler, box: box(23, 369, 163, 270, 399, 655) },
+      { id: "autosampler", label: "Autosampler", note: autosampler, box: box(23, 369, 163, 270, 399, 655) },
     ],
   },
   {
@@ -132,33 +191,33 @@ const setups: Setup[] = [
     width: 400,
     height: 565,
     parts: [
-      { id: "solvents", label: "Solvents", body: solvents, box: box(21, 20, 164, 116, 400, 565) },
-      { id: "degasser", label: "Degasser", body: degasser, box: box(21, 137, 164, 47, 400, 565) },
+      { id: "solvents", label: "Solvents", note: solvents, box: box(21, 20, 164, 116, 400, 565) },
+      { id: "degasser", label: "Degasser", note: degasser, box: box(21, 137, 164, 47, 400, 565) },
       {
         id: "pump",
         label: "Pump with quaternary valve",
-        body: pumpQuaternary,
+        note: pumpQuaternary,
         box: box(20, 184, 168, 90, 400, 565),
       },
       {
         id: "controller",
         label: "Controller or fluorescence detector",
-        body: controller,
+        note: controller,
         box: box(222, 93, 158, 88, 400, 565),
       },
       {
         id: "detector",
         label: "UV or PDA detector",
-        body: uvOrPda,
+        note: uvOrPda,
         box: box(222, 183, 158, 93, 400, 565),
       },
       {
         id: "oven",
         label: "Oven and column",
-        body: ovenAndColumn,
+        note: ovenAndColumn,
         box: box(222, 276, 158, 268, 400, 565),
       },
-      { id: "autosampler", label: "Autosampler", body: autosampler, box: box(24, 275, 164, 271, 400, 565) },
+      { id: "autosampler", label: "Autosampler", note: autosampler, box: box(24, 275, 164, 271, 400, 565) },
     ],
   },
 ];
@@ -272,8 +331,8 @@ export function EquipmentPanel({ onOpenNav }: { onOpenNav: () => void }) {
       <div className="flex min-w-0 flex-col gap-5">
       <header>
         <p className="mt-2 max-w-2xl text-base text-muted-foreground">
-          Pick the HPLC in the lab. Hover or tap a part to see what it does and which setting it
-          controls.
+          Pick the HPLC in the lab.           Hover or tap a part. The note gives what it does, the part that sets it, the range
+          and units, and what it changes.
         </p>
       </header>
       <div id="equipment-choices" className="flex flex-wrap gap-2">
@@ -391,10 +450,7 @@ export function EquipmentPanel({ onOpenNav }: { onOpenNav: () => void }) {
         className="rounded-xl bg-card px-4 py-4 text-sm leading-relaxed text-foreground ring-1 ring-foreground/10 lg:sticky lg:top-4"
       >
         {open ? (
-          <>
-            <p className="font-medium">{open.label}</p>
-            <p className="mt-1">{open.body}</p>
-          </>
+          <FunctionNoteView title={open.label} note={open.note} />
         ) : (
           <p className="text-muted-foreground">Hover or tap a part of the instrument.</p>
         )}

@@ -262,7 +262,7 @@ export function decideRetention(
     return blocked(
       "pressure",
       `Do not lower %B. The highest back-pressure is ${measured} psi, already at or above the specification of ${limit} psi.`,
-      `The pressure is already too high to lower %B. This run reached ${measured} psi. The specification is ${limit} psi. A lower %B is a weaker solvent, so the compounds stay on the column longer and the back-pressure usually rises.`,
+      `The pressure is already too high to lower %B. This run reached ${measured} psi. The specification is ${limit} psi. A lower %B is a weaker solvent, so the compounds stay on the column longer and the back-pressure usually rises. That longer stay is higher retention. Selectivity and efficiency are not why this step stops.`,
     );
   }
 
@@ -346,7 +346,7 @@ export function formatPercentB(value: number): string {
 }
 
 const INVESTIGATE_COPY =
-  "This run has more peaks than the specification. Stop and investigate before changing %B, temperature, solvent, or the column. An extra peak can be a breakdown product, a peak that split in two, or sample left over from an earlier injection. Changing the method now would chase a peak that may not be one of the compounds. Compare the area and the height of the extra peak with the peaks from a 0.1 mg/mL injection. If it is nowhere near that size, it is probably not one of the compounds. You decide.";
+  "This run has more peaks than the specification. Stop and investigate before changing %B, temperature, solvent, or the column. An extra peak can be a breakdown product, a peak that split in two, or sample left over from an earlier injection. Changing the method now would chase a peak that may not be one of the compounds. Compare the area and the height of the extra peak with the peaks from a 0.1 mg/mL injection. If it is nowhere near that size, it is probably not one of the compounds. You decide. Leave retention, selectivity, and efficiency as they are until that extra peak is checked. Changing them would move how long compounds stay, pull peaks apart, or narrow them for a peak that may not belong.";
 
 function investigateDecision(sample: RetentionSample, rules: CompleteRules): RetentionDecision {
   const peaks = sample.peaks ?? [];
@@ -461,8 +461,8 @@ function specsMet(sample: RetentionSample, rules: CompleteRules, judged: EqualJu
     why: [
       ...ruleLines(sample, rules, judged),
       rules.minResolution != null && rules.minResolution > 0
-        ? "The specifications are met. Do not keep going. The peaks are there, the worst pair is far enough apart, the last peak is inside the specified time, and the back-pressure is inside the specification."
-        : "The specifications are met. Do not keep going. The peaks are there, the last peak is inside the specified time, and the back-pressure is inside the specification.",
+        ? "The specifications are met. Do not keep going. The peaks are there, the worst pair is far enough apart, the last peak is inside the specified time, and the back-pressure is inside the specification. Retention, selectivity, and efficiency already meet the specification, so none of them is changed."
+        : "The specifications are met. Do not keep going. The peaks are there, the last peak is inside the specified time, and the back-pressure is inside the specification. Retention is already inside the specified time, so it is not changed. Selectivity is not the next step either.",
     ].join("\n\n"),
     fit: null,
   };
@@ -531,7 +531,7 @@ function minimumPercentOnce(
       nextChange: "The minimum %B cannot be calculated yet. Do not change %B, temperature, solvent, or the column.",
       why: [
         ...ruleLines(current, rules, judgeEqualPeaks(current, rules)),
-        "There are not enough runs to calculate the minimum %B. The peak count matches the specification, so %B is not dropped by 10%. The next %B has to come from more than one chromatogram, and this series does not have enough usable runs yet.",
+        "There are not enough runs to calculate the minimum %B. The peak count matches the specification, so %B is not dropped by 10%. The next %B has to come from more than one chromatogram, and this series does not have enough usable runs yet. Lowering %B would raise retention. That is not the next step until more runs can show the %B for the specified time.",
       ].join("\n\n"),
       fit: null,
     };
@@ -617,10 +617,10 @@ function lookDecision(
   const sourceIndex = samples.length - 1;
   const why =
     mode === "picker"
-      ? "The peak count is still under the specification, so some peaks are still overlapping. Pick which uploaded run to heat. Heat is the next change. It can pull overlapping peaks apart while the solvent strength stays the same."
+      ? "The peak count is still under the specification, so some peaks are still overlapping. Pick which uploaded run to heat. Heat is the next change. It can pull overlapping peaks apart while the solvent strength stays the same. Heat is a selectivity change. Retention stays similar because %B is not dropped."
       : mode === "between"
-        ? "Compare the runs. The calculated %B matches a run already uploaded, so another drop is not the next step. An in-between %B uses the same temperature, solvent, and ligand as this run, and it sits between %B values already tried. A no does not start temperature, solvent, or a column."
-        : "Compare the runs before the next change. An in-between %B uses the same temperature, solvent, and ligand as the minimum %B run, and it fills a gap between %B values already tried. If that is not useful, pick which uploaded run to heat. Heat can pull overlapping peaks apart without dropping %B again.";
+        ? "Compare the runs. The calculated %B matches a run already uploaded, so another drop is not the next step. An in-between %B uses the same temperature, solvent, and ligand as this run, and it sits between %B values already tried. A no does not start temperature, solvent, or a column. An in-between %B changes retention. It does not change selectivity, because temperature, solvent, and ligand stay the same."
+        : "Compare the runs before the next change. An in-between %B uses the same temperature, solvent, and ligand as the minimum %B run, and it fills a gap between %B values already tried. If that is not useful, pick which uploaded run to heat. Heat can pull overlapping peaks apart without dropping %B again. An in-between %B changes retention only. Heat is a selectivity change.";
   return {
     status: "look",
     reason: "look",
@@ -858,7 +858,7 @@ function calculatePercentB(
       "Do not recommend a %B. The %B that would hit the last-peak time cannot be calculated from these runs.",
       [
         ...intro,
-        "At least two usable chromatograms are needed, each with a last peak after the t0 peak. There are not enough left, so a next %B is not recommended.",
+        "At least two usable chromatograms are needed, each with a last peak after the t0 peak. There are not enough left, so a next %B is not recommended. The missing piece is the %B that would set retention to the specified last-peak time. Selectivity and efficiency are not the next step.",
       ].join(
         "\n\n",
       ),
@@ -981,7 +981,7 @@ function equalIntro(samples: RetentionSample[], rules: CompleteRules): string[] 
     );
   } else {
     lines.push(
-      "The peak count matches the specification, so %B is not lowered by 10%. The peaks are there. The next %B is calculated for the specified run time.",
+      "The peak count matches the specification, so %B is not lowered by 10%. The peaks are there. The next %B is calculated for the specified run time. That calculation sets retention so the last peak lands on the specified time. It does not change selectivity or efficiency.",
     );
   }
   return lines;

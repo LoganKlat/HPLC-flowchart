@@ -2,6 +2,7 @@
 
 import { useState, type CSSProperties } from "react";
 import { ChoiceSelect } from "@/components/choice-select";
+import { FunctionNoteView, type FunctionNote } from "@/components/function-note";
 import { beadSurface } from "@/lib/bead-surface";
 import { porousSpots, shellSpots } from "@/lib/bead-spots";
 import { LIGANDS } from "@/lib/selectivity";
@@ -18,41 +19,83 @@ const ligandSentences: Record<(typeof LIGANDS)[number], string> = {
   IBD: "A polar group built in. It holds bases and polar compounds differently from C18.",
 };
 
-const carbonLoadNote = [
-  "Carbon load is the share of the bead that is carbon from the bonded ligands. A higher percent means more of the surface is coated and fewer free SiOH groups are left. On this picture, the percent is that share out of 100 spots. At 10%, 10 spots are ligands and 90 are still SiOH.",
-  "A higher carbon load holds oily compounds longer on a coating such as C18, and bases tail less because fewer free silanols are left to grab them. A lower carbon load leaves more SiOH. Polar compounds and bases can stick to those silanols, so peaks can tail, and oily compounds are usually held less strongly.",
-] as const;
+const carbonLoadDoes =
+  "Carbon load is the share of the bead that is carbon from the bonded ligands. A higher percent means more of the surface is coated and fewer free SiOH groups are left. On this picture, the percent is that share out of 100 spots. At 10%, 10 spots are ligands and 90 are still SiOH.";
+const carbonLoadChanges =
+  "A higher carbon load holds oily compounds longer on a coating such as C18, and bases tail less because fewer free silanols are left to grab them. A lower carbon load leaves more SiOH. Polar compounds and bases can stick to those silanols, so peaks can tail, and oily compounds are usually held less strongly. Holding longer is retention. Tailing is wider peaks, which is lower efficiency. Bases and polar compounds sticking to free SiOH, instead of the ligand, is a selectivity change.";
 
-const notes: Record<NoteId, { label: string; body: string }> = {
+const notes: Record<Exclude<NoteId, "ligand">, { label: string; note: FunctionNote }> = {
   porous: {
     label: "Fully porous",
-    body: "Compounds travel through the whole bead. More surface means more retention. Peaks can be wider because compounds wander deep inside.",
+    note: {
+      does: "Compounds travel through the whole bead. The particle is porous all the way through.",
+      sets: "The column particle. The Fully porous button on this tab selects it. On Run 1, Core shell set to No is the same choice.",
+      range: "A choice, not a number. Fully porous or core shell. No units.",
+      changes:
+        "Fully porous means more surface, so more retention. Peaks can be wider, which is lower efficiency, because compounds wander deep inside. Selectivity does not change from this choice. The ligand still decides which compounds stick.",
+    },
   },
   shell: {
     label: "Core shell",
-    body: "Compounds only travel a short way, so peaks are narrower. Less surface, so retention is often lower. You can often run faster.",
-  },
-  ligand: {
-    label: "Ligand",
-    body: "The ligand is the group bonded on the silica. The mark on each ligand spot changes with the ligand you pick. A C18 tail is longer than a C8 tail. Biphenyl uses a ring-like mark.",
+    note: {
+      does: "A solid core with a thin porous layer. Compounds only travel a short way into the bead.",
+      sets: "The column particle. The Core shell button on this tab selects it. On Run 1, Core shell set to Yes is the same choice.",
+      range: "A choice, not a number. Fully porous or core shell. No units.",
+      changes:
+        "Core shell means a shorter path, narrower peaks, and often less retention. Narrower peaks are higher efficiency. Selectivity does not change from the shell alone. The ligand still decides which compounds stick.",
+    },
   },
   load: {
     label: "Carbon load",
-    body: carbonLoadNote.join("\n\n"),
+    note: {
+      does: carbonLoadDoes,
+      sets: "The column packing. The carbon-load slider on this tab sets the picture. The Carbon load field on Run 1 records the same percent.",
+      range: "0–100% on this slider. It starts at 10%. The percent is the share of ligand spots out of 100.",
+      changes: carbonLoadChanges,
+    },
   },
   drawing: {
     label: "Bead",
-    body: "The spots are the surface. Ligands replace SiOH in proportion to the carbon load.",
+    note: {
+      does: "A cut through one bead. The spots are the surface. Ligands replace SiOH in proportion to the carbon load. The line across one pore is the pore width.",
+      sets: "The drawing follows the controls on this tab: fully porous or core shell, ligand, carbon load, particle size, and pore size.",
+      range: "Particle size is 1.5–10 µm. Pore size is 60–300 Å. Carbon load is 0–100%. The drawing uses those slider values. It is not a measured bead.",
+      changes:
+        "The drawing itself does not change a run. Fully porous means more retention, and peaks can be wider. Core shell means a shorter path, narrower peaks, and often less retention. The ligand is the selectivity change. Carbon load changes how many spots are ligands, which changes retention.",
+    },
   },
   particle: {
     label: "Particle size",
-    body: "Particle size is the diameter of the bead. Bigger particles usually mean lower back-pressure and wider peaks. Smaller particles usually mean higher back-pressure and narrower peaks.",
+    note: {
+      does: "Particle size is the diameter of the bead.",
+      sets: "The column packing. The particle-size slider on this tab sets how large the drawing is. The Particle size field on Run 1 records it.",
+      range: "1.5–10 µm on this slider. It starts at 5 µm.",
+      changes:
+        "Smaller particles give narrower peaks and higher back-pressure. Narrower peaks are higher efficiency. Larger particles give wider peaks and lower back-pressure. Selectivity does not change. Retention factor k does not change from particle size alone.",
+    },
   },
   pore: {
     label: "Pore size",
-    body: "Pore size is the width of the channels. A wider pore lets larger compounds in. A narrower pore has more surface for small compounds. This line is the width only. The picture does not reshape.",
+    note: {
+      does: "Pore size is the width of the channels inside the bead. A wider pore lets larger compounds in. A narrower pore has more surface for small compounds. This line is the width only. The picture does not reshape the bead.",
+      sets: "The column packing. The pore-size slider sets the line on the picture. The Pore size field on Run 1 records it.",
+      range: "60–300 Å on this slider. It starts at 100 Å.",
+      changes:
+        "If a compound is too big for the pore, it cannot reach the coating inside, so retention and selectivity can change. For small compounds that fit, a narrower pore means more surface and often more retention. Pore size does not change efficiency the way particle size does.",
+    },
   },
 };
+
+function ligandNote(name: (typeof LIGANDS)[number] | undefined): FunctionNote {
+  const picked = name ? ` ${ligandSentences[name]}` : "";
+  return {
+    does: `The ligand is the coating bonded on the silica.${picked} The mark on each ligand spot changes with the ligand. A C18 tail is longer than a C8 tail. Biphenyl uses a ring-like mark.`,
+    sets: "The column coating. The ligand menu on this tab sets the mark. The Ligand field on Run 1 records the same choice.",
+    range: "The choices are C18, C18aq, PFPP, C8, biphenyl, and IBD. A name, not a number. No units.",
+    changes:
+      "The ligand is the coating and is the last selectivity change. Peaks can pull apart or change order. Retention also changes, because a different coating holds compounds more or less strongly. It does not by itself change efficiency (how narrow the peaks are).",
+  };
+}
 
 function formatMicrons(value: number) {
   const rounded = Math.round(value * 10) / 10;
@@ -270,8 +313,13 @@ export function BeadDiagram() {
   const [openId, setOpenId] = useState<NoteId | null>(null);
   const [pinnedId, setPinnedId] = useState<NoteId | null>(null);
   const surface = beadSurface(carbonLoad);
-  const open = openId ? notes[openId] : null;
   const sentence = LIGANDS.find((name) => name === ligand);
+  const open =
+    openId === "ligand"
+      ? { label: "Ligand", note: ligandNote(sentence) }
+      : openId
+        ? notes[openId]
+        : null;
 
   function bind(id: NoteId) {
     return {
@@ -333,9 +381,12 @@ export function BeadDiagram() {
             </button>
           ))}
         </div>
-        <p id="bead-standing" className="rounded-xl bg-[#e7f3ee] px-4 py-3 text-sm leading-relaxed text-[#144237]">
-          {kind === "porous" ? notes.porous.body : notes.shell.body}
-        </p>
+        <div id="bead-standing" className="rounded-xl bg-[#e7f3ee] px-4 py-3 text-sm leading-relaxed text-[#144237]">
+          <FunctionNoteView
+            title={kind === "porous" ? notes.porous.label : notes.shell.label}
+            note={kind === "porous" ? notes.porous.note : notes.shell.note}
+          />
+        </div>
         <figure
           className="flex justify-center rounded-xl bg-card px-3 py-3 ring-1 ring-foreground/10 sm:px-4"
           {...bind("drawing")}
@@ -404,10 +455,8 @@ export function BeadDiagram() {
             aria-valuetext={`${carbonLoad} percent`}
             onChange={(event) => setCarbonLoad(Number(event.target.value))}
           />
-          <div id="carbon-load-note" className="mt-2 flex flex-col gap-2 text-sm leading-relaxed text-foreground">
-            {carbonLoadNote.map((paragraph) => (
-              <p key={paragraph}>{paragraph}</p>
-            ))}
+          <div id="carbon-load-note" className="mt-2 text-sm leading-relaxed text-foreground">
+            <FunctionNoteView title={notes.load.label} note={notes.load.note} />
           </div>
         </div>
         <div className="rounded-lg px-1 py-2" {...bind("particle")}>
@@ -452,14 +501,7 @@ export function BeadDiagram() {
         className="rounded-xl bg-card px-4 py-4 text-sm leading-relaxed text-foreground ring-1 ring-foreground/10 lg:sticky lg:top-4 lg:col-start-2 lg:row-start-1"
       >
         {open ? (
-          <>
-            <p className="font-medium">{open.label}</p>
-            <div className="mt-1 flex flex-col gap-2">
-              {open.body.split("\n\n").map((paragraph) => (
-                <p key={paragraph}>{paragraph}</p>
-              ))}
-            </div>
-          </>
+          <FunctionNoteView title={open.label} note={open.note} />
         ) : (
           <p className="text-muted-foreground">Hover or tap a control, or the bead.</p>
         )}

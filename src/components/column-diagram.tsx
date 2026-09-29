@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { FunctionNoteView, type FunctionNote } from "@/components/function-note";
 import { columnMultiples } from "@/lib/column-shape";
 
 const LENGTH_MIN = 50;
@@ -10,26 +11,59 @@ const WIDTH_MAX = 4.6;
 
 type NoteId = "length" | "width" | "resolution" | "retention" | "pressure";
 
-const notes: Record<NoteId, { label: string; body: string }> = {
+const notes: Record<NoteId, { label: string; note: FunctionNote }> = {
   length: {
     label: "Length",
-    body: "Resolution rises about with the square root of length. Retention time and back-pressure rise in line with length. Shorter does the opposite.",
+    note: {
+      does: "Length is how long the column tube is. A longer tube gives the compounds more packing to travel through.",
+      sets: "The column. The length slider on this tab sets the drawing. The oven does not change the length.",
+      range: "50–250 mm on this slider. It starts at 150 mm.",
+      changes:
+        "A longer column: retention and back-pressure rise in line with length, and resolution rises about with the square root of length. Selectivity does not change. A shorter column does the opposite.",
+    },
   },
   width: {
     label: "Width",
-    body: "A wider internal diameter drops resolution a lot, raises retention time a lot (with the square of the width), and lowers back-pressure. Narrower does the opposite, until system peaks. Back-pressure at a fixed flow uses 1 over the square of the width. The source table also lists 1/ID to the fourth.",
+    note: {
+      does: "Width is the internal diameter of the column, the width of the tube inside.",
+      sets: "The column. The width slider on this tab sets the drawing. The pump flow is chosen to suit that width.",
+      range: "2.1–4.6 mm internal diameter on this slider. It starts at 4.6 mm.",
+      changes:
+        "A wider column: retention time rises with the square of the width, resolution drops a lot, and back-pressure falls with 1 over the square of the width. Selectivity does not change. A narrower column does the opposite, until system peaks, when the instrument itself widens the peaks. The source table also lists 1/ID to the fourth for some pressure comparisons.",
+    },
   },
   resolution: {
     label: "Resolution",
-    body: "Resolution follows the square root of length. Width changes it strongly: a narrower column raises it, and a wider column drops it a lot. The gain stops at the system-peak limit, when the instrument itself widens the peaks.",
+    note: {
+      does: "Resolution is how far apart the peaks are compared with how wide they are. This slider shows that result. It is not a setting to drag.",
+      sets: "Column length and column width set it. Those are the sliders above. This result slider does not set them.",
+      range:
+        "Shown as a multiple of a 150 mm × 4.6 mm column, written as ×. It moves only when length or width changes. It is not a number that is typed.",
+      changes:
+        "Resolution here follows length and width. It rises about with the square root of length. Width changes it strongly: a narrower column raises it, and a wider column drops it a lot. Selectivity does not change when only length or width changes. Dragging this result does nothing. Efficiency is part of resolution, because narrower peaks raise it, but this slider does not set efficiency on its own.",
+    },
   },
   retention: {
     label: "Retention time",
-    body: "Retention time scales with length, and with the square of the width. It is times the length, and times the square of the width.",
+    note: {
+      does: "Retention time is how long a compound stays on the column. This slider shows that result for length and width. It is not a setting to drag.",
+      sets: "Column length and column width set this result. On a real run, %B, temperature, solvent, and ligand also change retention. Those are not on this slider.",
+      range:
+        "Shown as a multiple of a 150 mm × 4.6 mm column, written as ×. It moves only when length or width changes.",
+      changes:
+        "Retention time rises in line with length, and with the square of the width. That is retention (k, how long compounds stay), scaled for this drawing. Selectivity does not change from length or width alone. Efficiency, how narrow the peaks are, is a separate result. This slider does not show it.",
+    },
   },
   pressure: {
     label: "Back-pressure",
-    body: "Back-pressure scales with length, and with 1 over the square of the width. It is times the length, and times 1 over the square of the width.",
+    note: {
+      does: "Back-pressure is how hard the pump has to push. This slider shows that result for length and width. It is not a setting to drag.",
+      sets: "Column length and column width set this result. Particle size also changes back-pressure on the Beads tab. The pump feels the pressure. It is not typed as a method setting.",
+      range:
+        "Shown as a multiple of a 150 mm × 4.6 mm column, written as ×. A real run compares the pressure, in psi, with the max back-pressure in the specification. This slider is not that psi limit.",
+      changes:
+        "Back-pressure rises in line with length, and falls with 1 over the square of the width. It does not itself change retention (k), selectivity, or efficiency. It is the cost of a longer or narrower column. If the pressure is already at the specification, %B is not lowered, because a lower %B usually raises the pressure further while it raises retention.",
+    },
   },
 };
 
@@ -285,10 +319,7 @@ export function ColumnDiagram() {
         className="rounded-xl bg-card px-4 py-4 text-sm leading-relaxed text-foreground ring-1 ring-foreground/10 lg:sticky lg:top-4 lg:col-start-2 lg:row-span-3 lg:row-start-1"
       >
         {open ? (
-          <>
-            <p className="font-medium">{open.label}</p>
-            <p className="mt-1">{open.body}</p>
-          </>
+          <FunctionNoteView title={open.label} note={open.note} />
         ) : (
           <p className="text-muted-foreground">Hover or tap a slider.</p>
         )}
