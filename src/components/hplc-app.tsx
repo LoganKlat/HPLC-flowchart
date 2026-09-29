@@ -133,11 +133,12 @@ export function HplcApp() {
     [declinedEfficiencyNow, runs, inBetween],
   );
   const readyCount = readyPrefix(runs);
+  const latestFlags = selectivityFlags(readyCount - 1, heatChoice, continuedSelectivity);
   const syncedRuns = syncNextRun(runs, details, checks, {
     leftSelectivity: leftSelectivity || efficiencyChosen,
-    choice,
+    choice: { ...choice, continueToLook: latestFlags.continueToLook },
     heat: heatChoice,
-    continuePastEfficiency: continuedSelectivity[readyCount - 1] === true,
+    continuePastEfficiency: latestFlags.continuePast,
   });
   if (syncedRuns !== runs) {
     setRuns(syncedRuns);
@@ -194,7 +195,10 @@ export function HplcApp() {
       const history = planHistory(
         current.slice(0, count).map((run, runIndex) => toSelectivityRun(run, runIndex, detailsRef.current)),
         setupFrom(detailsRef.current, checks),
-        { heat: heatChoice, continuePastEfficiency: continuedSelectivity[decisionIndex] === true },
+        {
+          heat: heatChoice,
+          continuePastEfficiency: selectivityFlags(count - 1, heatChoice, continuedSelectivity).continuePast,
+        },
       );
       const choice = history.phase === "selectivity" ? history.plan.tempChoice : null;
       if (!choice) return current;
@@ -225,7 +229,10 @@ export function HplcApp() {
       const history = planHistory(
         current.slice(0, count).map((run, runIndex) => toSelectivityRun(run, runIndex, details)),
         setupFrom(details, checks),
-        { heat: heatChoice, continuePastEfficiency: continuedSelectivity[count - 1] === true },
+        {
+          heat: heatChoice,
+          continuePastEfficiency: selectivityFlags(count - 1, heatChoice, continuedSelectivity).continuePast,
+        },
       );
       const solvent = solventId ? solventById(solventId) : null;
       const matched =
@@ -406,8 +413,19 @@ export function HplcApp() {
               leftSelectivity={leftSelectivity || efficiencyChosen}
               efficiencyContinued={continuedSelectivity[index] === true}
               onContinueSelectivity={() => {
+                const flags = selectivityFlags(index, heatChoice, continuedSelectivity);
+                const explanation = explainRun(syncedRuns, index, details, checks, {
+                  choice,
+                  heat: heatChoice,
+                  continuePastEfficiency: flags.continuePast,
+                  continueToLook: flags.continueToLook,
+                });
+                const showsLook =
+                  explanation?.kind === "retention" && explanation.decision.continueShowsLook === true;
                 setContinuedSelectivity((current) => ({ ...current, [index]: true }));
-                setHeatChoice((current) => current ?? { carryIndex: index, seriesLength: index + 1 });
+                if (!showsLook) {
+                  setHeatChoice((current) => current ?? { carryIndex: index, seriesLength: index + 1 });
+                }
               }}
               onLeave={() => setEfficiencyChosen(true)}
               onDeclineEfficiency={() => setDeclinedEfficiencyNow(true)}
@@ -418,7 +436,16 @@ export function HplcApp() {
                 setBetweenAnswer(answer);
                 setBetweenError(null);
                 if (answer === "no") {
-                  const explanation = explainRun(syncedRuns, index, details, checks, { choice, heat: heatChoice });
+                  const flags = selectivityFlags(index, heatChoice, {
+                    ...continuedSelectivity,
+                    [index]: true,
+                  });
+                  const explanation = explainRun(syncedRuns, index, details, checks, {
+                    choice: { ...choice, continueToLook: flags.continueToLook },
+                    heat: heatChoice,
+                    continuePastEfficiency: flags.continuePast,
+                    continueToLook: flags.continueToLook,
+                  });
                   const look = explanation?.kind === "retention" ? explanation.decision.look : null;
                   if (look?.mode === "between") setEfficiencyChosen(true);
                 }
@@ -428,7 +455,13 @@ export function HplcApp() {
                 setBetweenError(null);
               }}
               onUseBetween={() => {
-                const explanation = explainRun(syncedRuns, index, details, checks, { choice, heat: heatChoice });
+                const flags = selectivityFlags(index, heatChoice, continuedSelectivity);
+                const explanation = explainRun(syncedRuns, index, details, checks, {
+                  choice: { ...choice, continueToLook: true },
+                  heat: heatChoice,
+                  continuePastEfficiency: flags.continuePast,
+                  continueToLook: true,
+                });
                 const decision = explanation?.kind === "retention" ? explanation.decision : null;
                 const used = syncedRuns
                   .filter((run) => run.status === "ready")
@@ -653,10 +686,12 @@ function RunPane({
     return <LaterChangeNote decision={prior?.kind === "retention" ? prior.decision : null} />;
   }
 
+  const flags = selectivityFlags(index, heat, efficiencyContinued ? { [index]: true } : {});
   const explanation = explainRun(runs, index, details, checks, {
-    choice,
+    choice: { ...choice, continueToLook: flags.continueToLook },
     heat,
-    continuePastEfficiency: efficiencyContinued,
+    continuePastEfficiency: flags.continuePast,
+    continueToLook: flags.continueToLook,
   });
   const rows = run.read ? evaluateRun(run.read, checks) : null;
   const next = runs[index + 1];
@@ -920,7 +955,12 @@ function explainRun(
   index: number,
   details: RunDetails,
   checks: RuleNumbers,
-  options: { choice: RetentionChoice; heat: HeatStart | null; continuePastEfficiency?: boolean },
+  options: {
+    choice: RetentionChoice;
+    heat: HeatStart | null;
+    continuePastEfficiency?: boolean;
+    continueToLook?: boolean;
+  },
 ): Explanation | null {
   const run = runs[index];
   if (!run || run.status !== "ready" || !run.read) return null;
@@ -938,7 +978,11 @@ function explainRun(
   const onLatest = index === prefix.length - 1;
   return {
     kind: "retention",
-    decision: decideRetention(segment.map(toSample), checks, onLatest ? options.choice : undefined),
+    decision: decideRetention(
+      segment.map(toSample),
+      checks,
+      onLatest ? { ...options.choice, continueToLook: options.continueToLook } : undefined,
+    ),
   };
 }
 
@@ -1097,6 +1141,25 @@ function runSettingLine(run: RunState): string {
   ]
     .filter(Boolean)
     .join(", ");
+}
+
+function selectivityFlags(
+  runIndex: number,
+  heat: HeatStart | null,
+  continued: Record<number, boolean>,
+): { continueToLook: boolean; continuePast: boolean } {
+  const heatApplies =
+    heat != null &&
+    runIndex >= 0 &&
+    heat.carryIndex >= 0 &&
+    heat.carryIndex <= runIndex &&
+    heat.seriesLength > heat.carryIndex &&
+    heat.seriesLength <= runIndex + 1;
+  const continuedHere = continued[runIndex] === true;
+  return {
+    continueToLook: continuedHere && !heatApplies,
+    continuePast: continuedHere && heatApplies,
+  };
 }
 
 function readyPrefix(runs: RunState[]): number {

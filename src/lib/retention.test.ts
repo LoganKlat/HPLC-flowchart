@@ -836,6 +836,25 @@ describe("which run to carry forward after the calculated %B", () => {
     expect(followed.why).not.toContain("Carry forward");
     expect(followed.nextChange).toContain("Move on to efficiency");
     expect(followed.efficiencyChoice?.continueLabel).toBe("Continue selectivity.");
+    expect(followed.continueShowsLook).toBe(true);
+    expect(followed.nextChange).not.toContain("40°C");
+    const looked = decideRetention(
+      [
+        ...series,
+        {
+          ...sampleFromRead(calculated.nextPercentB!, read37),
+          lastPeakTimeMin: 18.258,
+          peakCount: 7,
+          minResolutionExcludingFirst: 2,
+        },
+      ],
+      rules,
+      { continueToLook: true },
+    );
+    expect(looked.status).toBe("look");
+    expect(looked.look?.mode).toBe("between-then-heat");
+    expect(looked.nextChange).toBe("Look at the runs.");
+    expect(looked.nextChange).not.toContain("40°C");
     expect(followed.nextChange).not.toContain("Carry forward");
     expect(followed.nextPercentB).toBeNull();
   });
@@ -942,7 +961,19 @@ describe("extra peaks and the in-between choice", () => {
       { afterInBetween: true },
     );
     expect(decision.status).toBe("efficiency");
+    expect(decision.continueShowsLook).toBe(true);
     expect(decision.nextChange).not.toContain("40°C");
     expect(decision.why).toContain("Efficiency is next for the resolution.");
+    const looked = decideRetention(
+      [
+        sample({ percentB: 70, peakCount: 4, lastPeakTimeMin: 2, firstPeakTimeMin: 1 }),
+        sample({ percentB: 55, peakCount: 8, lastPeakTimeMin: 12, minResolutionExcludingFirst: 0.4, firstPeakTimeMin: 1 }),
+      ],
+      { requiredPeaks: 8, lastPeakTimeMin: 10, minResolution: 1, maxBackPressurePsi: 500 },
+      { afterInBetween: true, continueToLook: true },
+    );
+    expect(looked.status).toBe("look");
+    expect(looked.look?.mode).toBe("between-then-heat");
+    expect(looked.nextChange).toBe("Look at the runs.");
   });
 });

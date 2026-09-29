@@ -28,6 +28,8 @@ export type RetentionChoice = {
   afterInBetween?: boolean;
   /** The user said no to moving on, so show the minimum %B. */
   declinedEfficiencyNow?: boolean;
+  /** Continue selectivity on this run, before a run has been picked to heat. */
+  continueToLook?: boolean;
 };
 
 export type LookMark = "met" | "not-met" | "blank";
@@ -136,6 +138,8 @@ export type RetentionDecision = {
   efficiencyNow?: EfficiencyNow | null;
   /** Two buttons when efficiency would be next. Absent when the chemistry is locked. */
   efficiencyChoice?: EfficiencyChoice | null;
+  /** Continue on this run opens Look at the runs instead of heating immediately. */
+  continueShowsLook?: boolean;
 };
 
 type CompleteRules = {
@@ -184,7 +188,7 @@ export function decideRetention(
   }
 
   if (choice?.afterInBetween) {
-    return afterInBetweenFile(samples, complete);
+    return afterInBetweenFile(samples, complete, choice);
   }
 
   if (current.percentB == null) {
@@ -202,7 +206,7 @@ export function decideRetention(
       prior.nextPercentB != null &&
       nearly(current.percentB, prior.nextPercentB)
     ) {
-      return afterCalculatedFile(samples, complete);
+      return afterCalculatedFile(samples, complete, choice);
     }
   }
 
@@ -314,7 +318,11 @@ function investigateDecision(sample: RetentionSample, rules: CompleteRules): Ret
   };
 }
 
-function afterCalculatedFile(samples: RetentionSample[], rules: CompleteRules): RetentionDecision {
+function afterCalculatedFile(
+  samples: RetentionSample[],
+  rules: CompleteRules,
+  choice: RetentionChoice | undefined,
+): RetentionDecision {
   const current = samples[samples.length - 1];
   if (current.peakCount != null && current.peakCount > rules.requiredPeaks) {
     return investigateDecision(current, rules);
@@ -322,14 +330,18 @@ function afterCalculatedFile(samples: RetentionSample[], rules: CompleteRules): 
   if (current.peakCount === rules.requiredPeaks) {
     const judged = judgeEqualPeaks(current, rules);
     if (judged.resolutionMeets && !judged.timeLate) return specsMet(current, rules, judged);
-    if (judged.timeLate && judged.resolutionPositive) return efficiencyStop(current, rules, judged);
-    if (judged.timeLate) return holdLate(current, rules, judged);
-    return lookDecision(samples, rules, "between");
+    if (judged.timeLate && !judged.resolutionPositive) return holdLate(current, rules, judged);
+    if (choice?.continueToLook) return lookDecision(samples, rules, "between-then-heat");
+    return efficiencyStop(current, rules, judged, true);
   }
   return lookDecision(samples, rules, "between-then-heat");
 }
 
-function afterInBetweenFile(samples: RetentionSample[], rules: CompleteRules): RetentionDecision {
+function afterInBetweenFile(
+  samples: RetentionSample[],
+  rules: CompleteRules,
+  choice: RetentionChoice | undefined,
+): RetentionDecision {
   const current = samples[samples.length - 1];
   if (current.peakCount != null && current.peakCount > rules.requiredPeaks) {
     return investigateDecision(current, rules);
@@ -337,7 +349,8 @@ function afterInBetweenFile(samples: RetentionSample[], rules: CompleteRules): R
   if (current.peakCount === rules.requiredPeaks) {
     const judged = judgeEqualPeaks(current, rules);
     if (judged.resolutionMeets && !judged.timeLate) return specsMet(current, rules, judged);
-    return efficiencyStop(current, rules, judged);
+    if (choice?.continueToLook) return lookDecision(samples, rules, "between-then-heat");
+    return efficiencyStop(current, rules, judged, true);
   }
   return lookDecision(samples, rules, "picker");
 }
@@ -388,7 +401,12 @@ function specsMet(sample: RetentionSample, rules: CompleteRules, judged: EqualJu
   };
 }
 
-function efficiencyStop(sample: RetentionSample, rules: CompleteRules, judged: EqualJudgment): RetentionDecision {
+function efficiencyStop(
+  sample: RetentionSample,
+  rules: CompleteRules,
+  judged: EqualJudgment,
+  continueShowsLook = false,
+): RetentionDecision {
   const nextLine = judged.resolutionMeets
     ? "Efficiency is next to bring the last peak time to the specification."
     : "Efficiency is next for the resolution.";
@@ -404,6 +422,7 @@ function efficiencyStop(sample: RetentionSample, rules: CompleteRules, judged: E
       recommendedSentence: EFFICIENCY_MOVE_ON,
       continueLabel: EFFICIENCY_CONTINUE,
     },
+    continueShowsLook,
   };
 }
 
