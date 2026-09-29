@@ -18,6 +18,11 @@ const ligandSentences: Record<(typeof LIGANDS)[number], string> = {
   IBD: "A polar group built in. It holds bases and polar compounds differently from C18.",
 };
 
+const carbonLoadNote = [
+  "Carbon load is the share of the bead that is carbon from the bonded ligands. A higher percent means more of the surface is coated and fewer free SiOH groups are left. On this picture, the percent is that share out of 100 spots. At 10%, 10 spots are ligands and 90 are still SiOH.",
+  "A higher carbon load holds oily compounds longer on a coating such as C18, and bases tail less because fewer free silanols are left to grab them. A lower carbon load leaves more SiOH. Polar compounds and bases can stick to those silanols, so peaks can tail, and oily compounds are usually held less strongly.",
+] as const;
+
 const notes: Record<NoteId, { label: string; body: string }> = {
   porous: {
     label: "Fully porous",
@@ -33,7 +38,7 @@ const notes: Record<NoteId, { label: string; body: string }> = {
   },
   load: {
     label: "Carbon load",
-    body: "Carbon load is the percent of the surface spots that are ligands. The rest stay SiOH. At 10, the drawing shows 10 ligands and 90 SiOH.",
+    body: carbonLoadNote.join("\n\n"),
   },
   drawing: {
     label: "Bead",
@@ -399,6 +404,11 @@ export function BeadDiagram() {
             aria-valuetext={`${carbonLoad} percent`}
             onChange={(event) => setCarbonLoad(Number(event.target.value))}
           />
+          <div id="carbon-load-note" className="mt-2 flex flex-col gap-2 text-sm leading-relaxed text-foreground">
+            {carbonLoadNote.map((paragraph) => (
+              <p key={paragraph}>{paragraph}</p>
+            ))}
+          </div>
         </div>
         <div className="rounded-lg px-1 py-2" {...bind("particle")}>
           <div className="flex items-baseline justify-between gap-3">
@@ -444,7 +454,11 @@ export function BeadDiagram() {
         {open ? (
           <>
             <p className="font-medium">{open.label}</p>
-            <p className="mt-1">{open.body}</p>
+            <div className="mt-1 flex flex-col gap-2">
+              {open.body.split("\n\n").map((paragraph) => (
+                <p key={paragraph}>{paragraph}</p>
+              ))}
+            </div>
           </>
         ) : (
           <p className="text-muted-foreground">Hover or tap a control, or the bead.</p>
