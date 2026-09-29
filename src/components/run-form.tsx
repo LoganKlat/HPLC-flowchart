@@ -247,16 +247,21 @@ export function RunForm({ details, rules, onDetails, onRules }: RunFormProps) {
             onChange={(value) => setDetail("injectionVolume", value)}
             explain={explain(runNotes.injection)}
           />
-          <TextField
+          <ChoiceField
             label="Sample type"
-            value={details.sampleType}
-            onChange={(value) => setDetail("sampleType", value)}
+            value={details.sampleType === "CP" || details.sampleType === "BLANK" ? details.sampleType : ""}
+            placeholder="select a sample type"
+            placeholderInList={false}
+            options={[
+              { value: "CP", label: "CP" },
+              { value: "BLANK", label: "BLANK" },
+            ]}
+            onChange={(value) => setDetail("sampleType", value === "CP" || value === "BLANK" ? value : "")}
           />
           <TextField
-            label="Sample concentration"
+            label="Sample concentration (mg/mL)"
             value={details.sampleConcentration}
             onChange={(value) => setDetail("sampleConcentration", value)}
-            hint="Text is fine. Include the units if you want, such as 20 µM."
           />
           <ChoiceField
             label="Ligand"

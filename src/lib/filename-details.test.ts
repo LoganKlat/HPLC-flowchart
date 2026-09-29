@@ -102,6 +102,21 @@ describe("run file names", () => {
 
     const mismatch = parseRunFileName("notes.csv");
     expect(mismatch).toEqual({ ok: false, message: FILE_NAME_MISMATCH });
+
+    const blank = parseRunFileName(
+      "GR09-05-3-ACN-3-ISO-90-1.5-20-blank-0.1-C18-150x4.6x5-amb-254.xlsx",
+    );
+    expect(blank.ok).toBe(true);
+    if (!blank.ok) return;
+    expect(blank.fields.sampleType).toBe("BLANK");
+
+    const other = parseRunFileName(
+      "GR09-05-3-ACN-3-ISO-90-1.5-20-STD-0.1-C18-150x4.6x5-amb-254.xlsx",
+    );
+    expect(other.ok).toBe(true);
+    if (!other.ok) return;
+    expect(other.fields.sampleType).toBeUndefined();
+    expect(other.fields.sampleConcentration).toBe("0.1");
   });
 
   it("reads both workbooks the same way as a LabSolutions export", () => {

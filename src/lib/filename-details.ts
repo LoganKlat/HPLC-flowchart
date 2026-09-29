@@ -102,7 +102,6 @@ function parseFull(parts: string[]): Partial<RunDetails> | null {
     percentB,
     flowRate: flow,
     injectionVolume,
-    sampleType,
     sampleConcentration: concentration,
     lengthMm: size[1],
     diameterMm: size[2],
@@ -112,6 +111,8 @@ function parseFull(parts: string[]): Partial<RunDetails> | null {
   };
   const methodName = methodLabel(method);
   if (methodName) fields.method = methodName;
+  const sample = sampleTypeLabel(sampleType);
+  if (sample) fields.sampleType = sample;
   const solventLabel = solventLabelFor(solvent);
   if (solventLabel) fields.solvent = solventLabel;
   const ligandName = LIGAND_NAMES.get(ligand.toLowerCase());
@@ -122,6 +123,12 @@ function parseFull(parts: string[]): Partial<RunDetails> | null {
 function methodLabel(token: string): "GRA" | "ISO" | null {
   if (/^gra$/i.test(token)) return "GRA";
   if (/^iso$/i.test(token)) return "ISO";
+  return null;
+}
+
+function sampleTypeLabel(token: string): "CP" | "BLANK" | null {
+  if (/^cp$/i.test(token)) return "CP";
+  if (/^blank$/i.test(token)) return "BLANK";
   return null;
 }
 
