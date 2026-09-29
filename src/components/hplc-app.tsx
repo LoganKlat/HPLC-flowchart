@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { Gauge, GitBranch, Info, type LucideIcon } from "lucide-react";
 import { ChoiceSelect } from "@/components/choice-select";
 import { FileDrop } from "@/components/file-drop";
 import { AboutPanel } from "@/components/about-panel";
@@ -75,11 +76,11 @@ function emptyRun(): RunState {
   };
 }
 
-const sections = [
-  { id: "decision-engine", label: "Decision engine" },
-  { id: "equipment", label: "Equipment" },
-  { id: "about", label: "About" },
-] as const;
+const sections: readonly { id: "decision-engine" | "equipment" | "about"; label: string; icon: LucideIcon }[] = [
+  { id: "decision-engine", label: "Decision engine", icon: GitBranch },
+  { id: "equipment", label: "Equipment", icon: Gauge },
+  { id: "about", label: "About", icon: Info },
+];
 
 function runTabStyle(selected: boolean, hovered: boolean): CSSProperties {
   if (selected && hovered) {
@@ -346,6 +347,7 @@ export function HplcApp() {
         }}
       />
       <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 py-6 sm:px-6 sm:py-8">
+      <Watermark />
       {section === "about" ? <AboutPanel onOpenNav={() => setNavOpen(true)} /> : null}
 
       {section === "equipment" ? <EquipmentPanel onOpenNav={() => setNavOpen(true)} /> : null}
@@ -528,6 +530,26 @@ export function HplcApp() {
   );
 }
 
+function Watermark() {
+  return (
+    <div id="watermark" className="pointer-events-none mb-3 flex justify-end">
+      <div className="flex items-center gap-1.5 text-[#144237]/40">
+        <svg viewBox="0 0 64 28" className="h-5 w-11" aria-hidden="true">
+          <path
+            d="M2 22 H8 C11 22 12 14 15 14 C18 14 19 22 22 22 H26 C29 22 30 6 35 6 C40 6 41 22 44 22 H48 C51 22 52 16 55 16 C58 16 59 22 62 22"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+        <span className="font-heading text-sm tracking-wide">Logan Klat</span>
+      </div>
+    </div>
+  );
+}
+
 function sectionTabStyle(selected: boolean, hovered: boolean): CSSProperties {
   if (selected && hovered) {
     return { backgroundColor: "#b7d8cb", borderColor: "#0f6b56", color: "#144237", fontWeight: 600 };
@@ -568,13 +590,14 @@ function AppSidebar({
             key={item.id}
             type="button"
             aria-current={selected ? "page" : undefined}
-            className="rounded-lg border border-solid px-3 py-2 text-left text-sm transition-none"
+            className="flex items-center gap-2 rounded-lg border border-solid px-3 py-2 text-left text-sm transition-none"
             style={sectionTabStyle(selected, hovered === item.id)}
             onMouseEnter={() => setHovered(item.id)}
             onMouseLeave={() => setHovered((current) => (current === item.id ? null : current))}
             onClick={() => onSelect(item.id)}
           >
-            {item.label}
+            <item.icon className="size-4 shrink-0" aria-hidden="true" />
+            <span>{item.label}</span>
           </button>
         );
       })}
