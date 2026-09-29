@@ -202,11 +202,11 @@ describe("selectivity checks", () => {
         "Minimum resolution: 0.324. Under the specification of 1.000.",
         "Last peak: 11.593 min. The specification is 15 min. Met.",
         "Back-pressure: 1516.2 psi. Under the specification of 4000 psi. Met.",
-        "Not every specification is met. Efficiency and gradient may still bring the resolution up to the specification.",
+        "The peaks are there, but the worst pair is still too close. Not every specification is met. The next change is meant to pull them apart. Efficiency and gradient may still bring the resolution up to the specification.",
       ].join("\n\n"),
     );
     expect(decision.efficiencyNow?.question).toBe(
-      "Consider whether efficiency and gradient can still bring the resolution up to the specification. Minimum resolution: 0.324. Under the specification of 1.000. Move on to efficiency and be done with selectivity?",
+      "The peaks are there, but the worst pair is still too close. Consider whether efficiency and gradient can still bring the resolution up to the specification. Minimum resolution: 0.324. Under the specification of 1.000. The next change is meant to pull them apart. Move on to efficiency and be done with selectivity?",
     );
     expect(decision.efficiencyNow?.why).not.toContain("you set");
     expect(decision.efficiencyNow?.why).not.toContain("benchmark");

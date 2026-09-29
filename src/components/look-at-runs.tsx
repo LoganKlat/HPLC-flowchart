@@ -36,7 +36,8 @@ export function LookAtRuns({
       <section id="next-change" className="scroll-mt-16 rounded-xl bg-[#e7f3ee] px-4 py-4 text-[#144237]">
         <h2 className="font-heading text-base">Look at the runs.</h2>
         <p className="mt-1 text-sm leading-relaxed">
-          Each row is one uploaded run. Met means that rule passed. Not met means it did not.
+          Each row is one uploaded run. Met means that measurement is inside the specification. Not met means it is not.
+          Compare the peak count, the worst resolution, the last peak, and the back-pressure before choosing the next change.
         </p>
       </section>
       <div className="overflow-x-auto rounded-xl bg-card ring-1 ring-foreground/10">
@@ -78,7 +79,11 @@ export function LookAtRuns({
       {showBetween ? (
         <section className="rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10">
           <h2 className="font-heading text-base">In-between %B</h2>
-          <p className="mt-1 text-sm leading-relaxed text-foreground">Do you want an in-between %B?</p>
+          <p className="mt-1 text-sm leading-relaxed text-foreground">
+            Do you want an in-between %B? It uses the same temperature, solvent, and column coating, and it sits
+            between %B values already tried. That can land the last peak closer to the specified time without starting
+            heat yet.
+          </p>
           <div className="mt-3 grid grid-cols-2 gap-2">
             <button
               type="button"
@@ -129,7 +134,9 @@ export function LookAtRuns({
         <section id="pick-run" className="rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10">
           <h2 className="font-heading text-base">Which run to heat</h2>
           <p className="mt-1 text-sm leading-relaxed text-foreground">
-            Pick one uploaded run. It goes to 40°C. A late run can be picked. Not met on time means the last peak is late.
+            Pick one uploaded run. The next change is heat, to 40°C, at that run’s %B. Heat can pull overlapping peaks
+            apart while the solvent strength stays the same. A late run can be picked. Not met on time means the last
+            peak is later than the specification.
           </p>
           <div className="mt-3 flex flex-col gap-2">
             {look.runs.map((run) => (

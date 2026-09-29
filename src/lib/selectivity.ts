@@ -353,13 +353,17 @@ export function efficiencyQuestion(measured: number, spec: number): string {
       : `Under the specification of ${formatResolution(spec)}.`;
   const lead =
     measured + 1e-9 >= spec
-      ? "Consider moving on to efficiency."
-      : "Consider whether efficiency and gradient can still bring the resolution up to the specification.";
-  return `${lead} Minimum resolution: ${formatResolution(measured)}. ${comparison} Move on to efficiency and be done with selectivity?`;
+      ? "The worst pair already meets the specification. Consider moving on to efficiency."
+      : "The peaks are there, but the worst pair is still too close. Consider whether efficiency and gradient can still bring the resolution up to the specification.";
+  const follow =
+    measured + 1e-9 >= spec
+      ? "Efficiency can shorten the run without changing the separation you already have."
+      : "The next change is meant to pull them apart.";
+  return `${lead} Minimum resolution: ${formatResolution(measured)}. ${comparison} ${follow} Move on to efficiency and be done with selectivity?`;
 }
 
 function runtimeQuestion(lastPeakMin: number, specifiedMin: number): string {
-  return `Consider whether efficiency and gradient can still bring the last peak time to the specification. The last peak is at ${formatMinutes(lastPeakMin)} min, later than the specification of ${formatTypedMinutes(specifiedMin)} min. Move on to efficiency and be done with selectivity?`;
+  return `The peaks are already there and there is a real separation. Consider whether efficiency and gradient can still bring the last peak time to the specification. The last peak is at ${formatMinutes(lastPeakMin)} min, later than the specification of ${formatTypedMinutes(specifiedMin)} min. Efficiency can shorten the run without changing the separation you already have. Move on to efficiency and be done with selectivity?`;
 }
 
 function efficiencyWhy(input: {
@@ -403,16 +407,16 @@ function efficiencyWhy(input: {
   ];
   if (!resolutionMet) {
     parts.push(
-      "Not every specification is met. Efficiency and gradient may still bring the resolution up to the specification.",
+      "The peaks are there, but the worst pair is still too close. Not every specification is met. The next change is meant to pull them apart. Efficiency and gradient may still bring the resolution up to the specification.",
     );
   } else if (lastPeakLate && input.specifiedRunTimeMin != null) {
     parts.push(
-      "Not every specification is met. Efficiency and gradient may still bring the last peak time to the specification.",
+      "The peaks are already there and the worst pair is already far enough apart. Not every specification is met because the last peak is late. Efficiency can shorten the run without changing the separation you already have.",
     );
   } else if (!everySpecificationMet) {
-    parts.push("Not every specification is met.");
+    parts.push("Not every specification is met. The measurements above are what still has to be brought inside the specification.");
   } else {
-    parts.push("Every specification is met.");
+    parts.push("Every specification is met. Another selectivity change is not needed.");
   }
   return parts.join("\n\n");
 }
@@ -817,6 +821,7 @@ function planTempChoice(
       TEMP_CHOICE_RECOMMENDED,
       heatLabel,
       compareSentence(args.baseline, args.baselineNumber, heated, args.setup.requiredPeaks),
+      "40°C did not pull the peaks apart. More heat at the same %B is unlikely to help, because the compounds already had a chance to spend less time on the coating and the separation did not improve. The other button changes the solvent. A different solvent changes which compounds prefer the coating, which can separate a pair that heat did not.",
     ].join(" "),
     prefill: null,
     nomograph: solventStep.nomograph,
@@ -877,6 +882,7 @@ function planLigandHeatChoice(
       LIGAND_CHOICE_RECOMMENDED,
       heatLabel,
       compareSentence(args.baseline, args.baselineNumber, heated, args.setup.requiredPeaks),
+      "40°C on this solvent did not pull the peaks apart. More heat is unlikely to help, because the warmer column was already tried and the separation did not improve. The other button changes the column coating. The coating is last, because temperature and solvent were already tried. A new coating starts the %B ladder again.",
     ].join(" "),
     prefill: null,
     nomograph: null,
@@ -913,11 +919,11 @@ function plan40(
   return {
     status: "recommend",
     step: "temp-40",
-    nextChange: `Run the next chromatogram at 40°C, still at ${percent}% B.`,
+    nextChange: `Run the next chromatogram at 40°C, still at ${percent}% B. Heat comes first, at the same %B, so the retention time stays similar while the peaks have a chance to pull apart.`,
     why: [
       `Selectivity starts from Run ${args.baselineNumber} at ${percent}% B.`,
       checksSentence(args.baseline, args.baselineNumber, args.setup),
-      `The next run stays at ${percent}% B and the column temperature goes to 40°C.`,
+      `The peaks are not separated well enough to stop. Heat is the first selectivity change. The next run stays at ${percent}% B so the solvent strength, and the retention time, stay similar. The column temperature goes to 40°C. A warmer column lets the compounds spend less time stuck to the coating, which can pull overlapping peaks apart.`,
       args.ambient.sentence,
     ].join(" "),
     prefill: {
@@ -958,11 +964,11 @@ function plan60(
   return {
     status: "recommend",
     step: "temp-60",
-    nextChange: `Run the next chromatogram at 60°C, at ${percent}% B.`,
+    nextChange: `Run the next chromatogram at 60°C, at ${percent}% B. Stay at this %B because heat already helped.`,
     why: [
       `${what} at 40°C compared with Run ${args.baselineNumber}, the run from before the temperature change.`,
       compareSentence(args.baseline, args.baselineNumber, heated, args.setup.requiredPeaks),
-      `The next run stays at ${percent}% B and the column temperature goes to 60°C.`,
+      `Heat helped, so 60°C at the same ${percent}% B is next. Staying at the same %B keeps the solvent strength the same, so the retention time stays in the same neighborhood. A warmer column already improved the separation, and 60°C continues that change.`,
       "A higher temperature is likely to increase separation further.",
     ].join(" "),
     prefill: { percentB: percent, temperature: "60", solvent, ligand },
@@ -1003,7 +1009,12 @@ function solventPlan(args: {
     status: "recommend",
     step: "solvent",
     nextChange: `Go back to ${args.ambient.celsius}°C and change the solvent. ${pick}`,
-    why: [solventLead(args), [oldSentence, pick, readings].filter(Boolean).join(" ") + cap, args.ambient.sentence].join(" "),
+    why: [
+      solventLead(args),
+      [oldSentence, pick, readings].filter(Boolean).join(" ") + cap,
+      "The matched %B is there so the retention time stays similar when the solvent changes. Pick the solvent you can actually use. The chart does not choose it.",
+      args.ambient.sentence,
+    ].join(" "),
     prefill: {
       percentB: "",
       temperature: String(args.ambient.celsius),
@@ -1034,7 +1045,7 @@ function ligandPlan(args: {
   if (!unused) {
     return blockedPlan(
       "Every column coating in the list has already been tried.",
-      `Temperature and a solvent change still do not meet the selectivity checks. Every coating in the list has already been used: ${triedText}.`,
+      `Temperature and a solvent change still do not meet the selectivity checks. Stop here. Every coating in the list has already been used: ${triedText}. There is no further coating to try, so the method is not changed again from this list.`,
     );
   }
   const pick = "Pick a new column coating from the dropdown.";
@@ -1043,9 +1054,9 @@ function ligandPlan(args: {
     step: "ligand",
     nextChange: `${pick} Go back to 100% B, ${args.ambient.celsius}°C, and ${solventWords}, then start the %B steps over.`,
     why: [
-      "The temperature steps and the solvent change still do not meet the peak count and the resolution check.",
+      "The coating is last. Temperature is tried first, then a new solvent, because a new coating means starting over. The temperature steps and the solvent change still do not meet the peak count and the resolution check.",
       `${pick} Already used: ${triedText}.`,
-      `Go back to 100% B, the starting temperature (${args.ambient.celsius}°C), and the original solvent (${solventWords}), then start the %B steps over.`,
+      `The ladder starts again at 100% B, the starting temperature (${args.ambient.celsius}°C), and the original solvent (${solventWords}). A strong solvent brings the compounds off the new coating quickly, and the %B steps bring the last peak back toward the specified time.`,
       args.ambient.sentence,
     ].join(" "),
     prefill: {
@@ -1085,7 +1096,7 @@ function blockedPlan(nextChange: string, why: string): SelectivityPlan {
 
 function checksSentence(run: SelectivityRun, runNumber: number, setup: SelectivitySetup): string {
   const check = assessHappy(run, setup);
-  return `${peakSentence(run, setup, check)} ${resolutionSentence(run, setup, check)} Run ${runNumber} does not end selectivity on its own.`;
+  return `${peakSentence(run, setup, check)} ${resolutionSentence(run, setup, check)} Run ${runNumber} does not end selectivity on its own, because the peak count and the resolution are not both at the specification. The next change is meant to pull the peaks apart.`;
 }
 
 function peakSentence(run: SelectivityRun, setup: SelectivitySetup, check: HappyCheck): string {
@@ -1106,7 +1117,7 @@ function resolutionSentence(run: SelectivityRun, setup: SelectivitySetup, check:
     return "It has fewer peaks than the specification, so its minimum resolution is 0. Missing peaks are overlaps.";
   }
   if (check.missingResolutionRule || setup.minResolution == null) {
-    return "You did not type a minimum resolution, so resolution cannot be judged and the run is not treated as finished.";
+    return "You did not type a minimum resolution, so how close the worst pair is cannot be judged against the specification and the run is not treated as finished.";
   }
   const decision = resolutionForDecision(
     run.peakCount,
@@ -1125,7 +1136,7 @@ function solventLead(args: {
   heated: SelectivityRun[];
 }): string {
   if (!args.skipped60) {
-    return "The runs at 40°C and 60°C still do not meet both checks, so the solvent is changed.";
+    return "The runs at 40°C and 60°C still do not meet both checks, so the solvent is changed. More heat is not next, because 60°C was already tried and the separation still does not meet the specification. A new solvent changes which compounds prefer the coating.";
   }
   const hot = args.heated[args.heated.length - 1];
   const short =

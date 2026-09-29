@@ -103,8 +103,9 @@ export function LeaveSelectivityDone({ duringRetention }: { duringRetention: boo
       <section className="rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10">
         <h2 className="font-heading text-base">Why</h2>
         <p className="mt-1 text-sm leading-relaxed text-foreground">
-          You chose to move on to efficiency. No further solvent, temperature, or column change is recommended.
-          Efficiency and gradient are not built yet.
+          Moving on to efficiency was chosen. No further solvent, temperature, or column change is recommended.
+          Efficiency can make the peaks narrower without a new solvent or a new coating. Gradient changes %B
+          while the run is going. Those stages are not built yet.
         </p>
       </section>
     </div>

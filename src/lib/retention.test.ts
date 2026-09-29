@@ -105,7 +105,7 @@ describe("retention %B along the four lab files", () => {
     expect(decision.fit!.c).toBeCloseTo(2.5493876718280926, 8);
     expect(decision.fit!.rawPercentB).toBeCloseTo(41.420785, 3);
     expect(decision.why).toContain(
-      "The last peak is at 11.593 min, close to the specified run time of 10 min. Another 10% drop would make that retention time much longer, because retention grows exponentially as %B goes down. The next %B is calculated instead.",
+      "The last peak is at 11.593 min, close to the specified run time of 10 min. Another 10% drop would make retention much longer, because retention grows quickly as %B goes down. The next %B is calculated instead.",
     );
     expect(decision.why).not.toContain("66%");
     expect(decision.why).not.toContain("0.66");

@@ -13,38 +13,33 @@ export type CompoundPlan = {
   stops: readonly Stop[];
 };
 
+/** Each stop is a brief sit, long enough to see, then the compound lets go. */
+export const STOP_HOLD = 0.3;
+
+function stopsAt(beads: readonly number[]): Stop[] {
+  return beads.map((bead) => ({ bead, hold: STOP_HOLD }));
+}
+
 export const COMPOUNDS: readonly CompoundPlan[] = [
   { id: "uracil", label: "Uracil", note: "Not retained", stops: [] },
-  { id: "c2", label: "Compound 2", note: "Held a little", stops: [{ bead: 11, hold: 2 }] },
+  { id: "c2", label: "Compound 2", note: "Held a little", stops: stopsAt([5, 10, 14]) },
   {
     id: "c3",
     label: "Compound 3",
     note: "Held longer",
-    stops: [
-      { bead: 8, hold: 2.5 },
-      { bead: 13, hold: 2.5 },
-    ],
+    stops: stopsAt([3, 6, 9, 11, 13, 15]),
   },
   {
     id: "c4",
     label: "Compound 4",
     note: "Held longer still",
-    stops: [
-      { bead: 5, hold: 3 },
-      { bead: 10, hold: 3 },
-      { bead: 14, hold: 3 },
-    ],
+    stops: stopsAt([2, 4, 6, 8, 10, 12, 13, 14, 15]),
   },
   {
     id: "c5",
     label: "Compound 5",
     note: "Held the longest",
-    stops: [
-      { bead: 2, hold: 3.5 },
-      { bead: 6, hold: 3.5 },
-      { bead: 9, hold: 3.5 },
-      { bead: 15, hold: 3.5 },
-    ],
+    stops: stopsAt([1, 2, 4, 5, 7, 8, 9, 11, 12, 13, 14, 15]),
   },
 ];
 

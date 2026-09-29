@@ -3,6 +3,7 @@ import {
   BEAD_R,
   BEAD_X,
   COMPOUNDS,
+  STOP_HOLD,
   TRAVEL_SPEED,
   holdTotal,
   initialTravelers,
@@ -10,16 +11,29 @@ import {
 } from "@/lib/column-travel";
 
 describe("column travel", () => {
-  it("packs more beads, and each compound is held clearly longer than the one before", () => {
+  it("packs more beads, and a more retained compound stops more often for a brief moment", () => {
     expect(BEAD_X.length).toBeGreaterThan(12);
     for (let index = 1; index < BEAD_X.length; index++) {
       expect(BEAD_X[index]! - BEAD_X[index - 1]!).toBeGreaterThan(BEAD_R * 2);
     }
-    const totals = COMPOUNDS.map((compound) => holdTotal(compound.stops));
-    expect(totals[0]).toBe(0);
     expect(COMPOUNDS[0]?.label).toBe("Uracil");
+    expect(COMPOUNDS[0]?.stops).toHaveLength(0);
+    expect(holdTotal(COMPOUNDS[0]!.stops)).toBe(0);
+    expect(STOP_HOLD).toBeGreaterThanOrEqual(0.2);
+    expect(STOP_HOLD).toBeLessThanOrEqual(0.4);
+    const counts = COMPOUNDS.map((compound) => compound.stops.length);
+    for (let index = 1; index < counts.length; index++) {
+      expect(counts[index]!).toBeGreaterThan(counts[index - 1]!);
+    }
+    for (const compound of COMPOUNDS) {
+      for (const stop of compound.stops) {
+        expect(stop.hold).toBeGreaterThanOrEqual(0.2);
+        expect(stop.hold).toBeLessThan(1);
+      }
+    }
+    const totals = COMPOUNDS.map((compound) => holdTotal(compound.stops));
     for (let index = 1; index < totals.length; index++) {
-      expect(totals[index]! - (totals[index - 1] ?? 0)).toBeGreaterThanOrEqual(2);
+      expect(totals[index]!).toBeGreaterThan(totals[index - 1]!);
     }
   });
 
