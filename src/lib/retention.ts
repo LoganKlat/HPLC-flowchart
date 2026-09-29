@@ -57,6 +57,16 @@ export type EfficiencyNow = {
   why: string;
 };
 
+export const EFFICIENCY_MOVE_ON =
+  "Move on to efficiency. This is recommended because the peak count equals the specification.";
+
+export const EFFICIENCY_CONTINUE = "Continue selectivity.";
+
+export type EfficiencyChoice = {
+  recommendedSentence: string;
+  continueLabel: string;
+};
+
 export type RetentionRules = {
   requiredPeaks: number | null;
   lastPeakTimeMin: number | null;
@@ -124,6 +134,8 @@ export type RetentionDecision = {
   look?: LookStep;
   /** One question before the minimum %B, when the peak count already matches. */
   efficiencyNow?: EfficiencyNow | null;
+  /** Two buttons when efficiency would be next. Absent when the chemistry is locked. */
+  efficiencyChoice?: EfficiencyChoice | null;
 };
 
 type CompleteRules = {
@@ -380,18 +392,18 @@ function efficiencyStop(sample: RetentionSample, rules: CompleteRules, judged: E
   const nextLine = judged.resolutionMeets
     ? "Efficiency is next to bring the last peak time to the specification."
     : "Efficiency is next for the resolution.";
-  const nextChange =
-    sample.percentB == null
-      ? "Leave %B as it is. Efficiency is next. That stage is not built yet."
-      : `Leave %B at ${formatPercentB(sample.percentB)}% B. Efficiency is next. That stage is not built yet.`;
   return {
     status: "efficiency",
     reason: "efficiency",
     move: null,
     nextPercentB: null,
-    nextChange,
+    nextChange: EFFICIENCY_MOVE_ON,
     why: [...ruleLines(sample, rules, judged), nextLine, "Efficiency is not built yet."].join("\n\n"),
     fit: null,
+    efficiencyChoice: {
+      recommendedSentence: EFFICIENCY_MOVE_ON,
+      continueLabel: EFFICIENCY_CONTINUE,
+    },
   };
 }
 

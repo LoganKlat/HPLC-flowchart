@@ -1,5 +1,55 @@
+import { Button } from "@/components/ui/button";
+import { EFFICIENCY_CONTINUE, EFFICIENCY_MOVE_ON } from "@/lib/retention";
+
 const choiceClass =
   "flex h-10 min-w-0 cursor-pointer items-center justify-center rounded-lg border px-3 text-sm font-medium";
+
+export function EfficiencyChoiceView({ why, onEfficiency, onContinue }: { why: string; onEfficiency: () => void; onContinue: () => void }) {
+  return (
+    <div className="flex flex-col gap-4" id="efficiency-choice">
+      <section id="next-change" className="scroll-mt-16 rounded-xl bg-[#e7f3ee] px-4 py-4 text-[#144237]">
+        <h2 className="font-heading text-base">Next change</h2>
+        <p className="mt-1 text-sm leading-relaxed">{EFFICIENCY_MOVE_ON}</p>
+        <div id="efficiency-or-selectivity" className="mt-3 flex flex-col gap-2">
+          <Button
+            type="button"
+            id="choose-efficiency"
+            className="h-auto w-full flex-col items-start gap-1 whitespace-normal px-4 py-3 text-left"
+            style={{
+              height: "auto",
+              whiteSpace: "normal",
+              backgroundColor: "#0f6b56",
+              color: "#f7fffb",
+              borderColor: "#0f6b56",
+            }}
+            onClick={onEfficiency}
+          >
+            <span className="text-xs tracking-[0.14em] uppercase">Recommended</span>
+            <span>{EFFICIENCY_MOVE_ON}</span>
+          </Button>
+          <Button
+            type="button"
+            id="choose-continue"
+            variant="outline"
+            className="h-auto w-full whitespace-normal px-4 py-3 text-left"
+            style={{ height: "auto", whiteSpace: "normal" }}
+            onClick={onContinue}
+          >
+            {EFFICIENCY_CONTINUE}
+          </Button>
+        </div>
+      </section>
+      <section className="rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10">
+        <h2 className="font-heading text-base">Why</h2>
+        <div className="mt-1 flex flex-col gap-2 text-sm leading-relaxed text-foreground">
+          {why.split("\n\n").map((paragraph, index) => (
+            <p key={index}>{paragraph}</p>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
 
 export function LeaveSelectivityAsk({
   ask,

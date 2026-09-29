@@ -3,7 +3,8 @@
 import { useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { ChoiceSelect } from "@/components/choice-select";
 import { FileDrop } from "@/components/file-drop";
-import { LeaveSelectivityAsk, LeaveSelectivityDone } from "@/components/leave-selectivity";
+import { AboutPanel } from "@/components/about-panel";
+import { EfficiencyChoiceView, LeaveSelectivityAsk, LeaveSelectivityDone } from "@/components/leave-selectivity";
 import { LookAtRuns } from "@/components/look-at-runs";
 import { LaterChangeNote, RetentionDecisionView, StartHighBNote } from "@/components/retention-decision";
 import { ResultsPanel } from "@/components/results-panel";
@@ -107,6 +108,7 @@ export function HplcApp() {
   const [runs, setRuns] = useState<RunState[]>([emptyRun()]);
   const [declinedEfficiencyNow, setDeclinedEfficiencyNow] = useState(false);
   const [efficiencyChosen, setEfficiencyChosen] = useState(false);
+  const [continuedSelectivity, setContinuedSelectivity] = useState<Record<number, boolean>>({});
   const [inBetween, setInBetween] = useState<{ percent: number; sourceIndex: number } | null>(null);
   const [heatChoice, setHeatChoice] = useState<HeatStart | null>(null);
   const [betweenAnswer, setBetweenAnswer] = useState<"yes" | "no" | null>(null);
@@ -130,10 +132,12 @@ export function HplcApp() {
     }),
     [declinedEfficiencyNow, runs, inBetween],
   );
+  const readyCount = readyPrefix(runs);
   const syncedRuns = syncNextRun(runs, details, checks, {
     leftSelectivity: leftSelectivity || efficiencyChosen,
     choice,
     heat: heatChoice,
+    continuePastEfficiency: continuedSelectivity[readyCount - 1] === true,
   });
   if (syncedRuns !== runs) {
     setRuns(syncedRuns);
@@ -190,7 +194,7 @@ export function HplcApp() {
       const history = planHistory(
         current.slice(0, count).map((run, runIndex) => toSelectivityRun(run, runIndex, detailsRef.current)),
         setupFrom(detailsRef.current, checks),
-        { heat: heatChoice },
+        { heat: heatChoice, continuePastEfficiency: continuedSelectivity[decisionIndex] === true },
       );
       const choice = history.phase === "selectivity" ? history.plan.tempChoice : null;
       if (!choice) return current;
@@ -206,9 +210,9 @@ export function HplcApp() {
         temperature: prefill.temperature,
         solvent: prefill.solvent,
         ligand: prefill.ligand,
-        percentEdited: path === "heat",
+        percentEdited: path !== "solvent",
         temperatureEdited: true,
-        solventEdited: path === "heat",
+        solventEdited: path !== "solvent",
         ligandEdited: true,
       };
       return copy;
@@ -221,7 +225,7 @@ export function HplcApp() {
       const history = planHistory(
         current.slice(0, count).map((run, runIndex) => toSelectivityRun(run, runIndex, details)),
         setupFrom(details, checks),
-        { heat: heatChoice },
+        { heat: heatChoice, continuePastEfficiency: continuedSelectivity[count - 1] === true },
       );
       const solvent = solventId ? solventById(solventId) : null;
       const matched =
@@ -330,13 +334,7 @@ export function HplcApp() {
         }}
       />
       <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 py-6 sm:px-6 sm:py-8">
-      {section === "about" ? (
-        <div className="md:hidden">
-          <Button type="button" variant="outline" className="h-10 px-3" onClick={() => setNavOpen(true)}>
-            Sections
-          </Button>
-        </div>
-      ) : null}
+      {section === "about" ? <AboutPanel onOpenNav={() => setNavOpen(true)} /> : null}
 
       {section === "equipment" ? <EquipmentPanel onOpenNav={() => setNavOpen(true)} /> : null}
 
@@ -406,6 +404,11 @@ export function HplcApp() {
               onRemove={removeFile}
               onOpen={(next) => setActive(next)}
               leftSelectivity={leftSelectivity || efficiencyChosen}
+              efficiencyContinued={continuedSelectivity[index] === true}
+              onContinueSelectivity={() => {
+                setContinuedSelectivity((current) => ({ ...current, [index]: true }));
+                setHeatChoice((current) => current ?? { carryIndex: index, seriesLength: index + 1 });
+              }}
               onLeave={() => setEfficiencyChosen(true)}
               onDeclineEfficiency={() => setDeclinedEfficiencyNow(true)}
               betweenAnswer={betweenAnswer}
@@ -589,6 +592,8 @@ function RunPane({
   onRemove,
   onOpen,
   leftSelectivity,
+  efficiencyContinued,
+  onContinueSelectivity,
   onLeave,
   onDeclineEfficiency,
   betweenAnswer,
@@ -626,6 +631,8 @@ function RunPane({
   onRemove: (index: number) => void;
   onOpen: (index: number) => void;
   leftSelectivity: boolean;
+  efficiencyContinued: boolean;
+  onContinueSelectivity: () => void;
   onLeave: () => void;
   onDeclineEfficiency: () => void;
   betweenAnswer: "yes" | "no" | null;
@@ -646,7 +653,11 @@ function RunPane({
     return <LaterChangeNote decision={prior?.kind === "retention" ? prior.decision : null} />;
   }
 
-  const explanation = explainRun(runs, index, details, checks, { choice, heat });
+  const explanation = explainRun(runs, index, details, checks, {
+    choice,
+    heat,
+    continuePastEfficiency: efficiencyContinued,
+  });
   const rows = run.read ? evaluateRun(run.read, checks) : null;
   const next = runs[index + 1];
   const selectivity = explanation?.kind === "selectivity" ? explanation.plan : null;
@@ -723,6 +734,12 @@ function RunPane({
                 ask={ask}
                 onYes={onLeave}
                 onNo={() => onDeclineEfficiency()}
+              />
+            ) : retention?.status === "efficiency" && retention.efficiencyChoice && !efficiencyContinued ? (
+              <EfficiencyChoiceView
+                why={retention.why}
+                onEfficiency={onLeave}
+                onContinue={onContinueSelectivity}
               />
             ) : retention?.status === "look" && retention.look && !heat ? (
               <LookAtRuns
@@ -903,7 +920,7 @@ function explainRun(
   index: number,
   details: RunDetails,
   checks: RuleNumbers,
-  options: { choice: RetentionChoice; heat: HeatStart | null },
+  options: { choice: RetentionChoice; heat: HeatStart | null; continuePastEfficiency?: boolean },
 ): Explanation | null {
   const run = runs[index];
   if (!run || run.status !== "ready" || !run.read) return null;
@@ -914,7 +931,7 @@ function explainRun(
   const history = planHistory(
     prefix.map((item, itemIndex) => toSelectivityRun(item, itemIndex, details)),
     setupFrom(details, checks),
-    { heat: options.heat },
+    { heat: options.heat, continuePastEfficiency: options.continuePastEfficiency },
   );
   if (history.phase === "selectivity") return { kind: "selectivity", plan: history.plan };
   const segment = prefix.slice(history.segmentStart);
@@ -929,7 +946,12 @@ function syncNextRun(
   runs: RunState[],
   details: RunDetails,
   checks: RuleNumbers,
-  options: { leftSelectivity: boolean; choice: RetentionChoice; heat: HeatStart | null },
+  options: {
+    leftSelectivity: boolean;
+    choice: RetentionChoice;
+    heat: HeatStart | null;
+    continuePastEfficiency: boolean;
+  },
 ): RunState[] {
   const count = readyPrefix(runs);
   if (options.leftSelectivity) {
@@ -944,7 +966,7 @@ function syncNextRun(
   const history = planHistory(
     ready.map((run, index) => toSelectivityRun(run, index, details)),
     setupFrom(details, checks),
-    { heat: options.heat },
+    { heat: options.heat, continuePastEfficiency: options.continuePastEfficiency },
   );
   const next = runs[count];
   const prefill = prefillFor(ready, history, details, checks, options.choice);

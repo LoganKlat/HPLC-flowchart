@@ -27,15 +27,17 @@ export function SelectivityDecisionView({
       ? [ligand, ...LIGANDS]
       : [...LIGANDS];
   const choice = plan.tempChoice;
+  const recommendedPath = choice?.other ?? "solvent";
   const nextChange =
     choice == null
       ? plan.nextChange
       : tempPath === "heat"
         ? choice.heatNextChange
-        : tempPath === "solvent"
+        : tempPath === "solvent" || tempPath === "ligand"
           ? choice.solventNextChange
           : plan.nextChange;
   const showSolvent = plan.showSolventChoices || (choice != null && tempPath === "solvent");
+  const showLigand = plan.showLigandChoices || (choice != null && tempPath === "ligand");
 
   return (
     <div className="flex flex-col gap-4" id="selectivity-decision">
@@ -46,17 +48,17 @@ export function SelectivityDecisionView({
           <div id="temp-choice" className="mt-3 flex flex-col gap-2">
             <Button
               type="button"
-              id="choose-solvent"
-              aria-pressed={tempPath === "solvent"}
+              id={recommendedPath === "ligand" ? "choose-ligand" : "choose-solvent"}
+              aria-pressed={tempPath === recommendedPath}
               className="h-auto w-full flex-col items-start gap-1 whitespace-normal px-4 py-3 text-left"
               style={{
                 height: "auto",
                 whiteSpace: "normal",
-                ...(tempPath === "solvent"
+                ...(tempPath === recommendedPath
                   ? { backgroundColor: "#0a5644", color: "#f7fffb", borderColor: "#144237" }
                   : { backgroundColor: "#0f6b56", color: "#f7fffb", borderColor: "#0f6b56" }),
               }}
-              onClick={() => onTempPath("solvent")}
+              onClick={() => onTempPath(recommendedPath)}
             >
               <span className="text-xs tracking-[0.14em] uppercase">Recommended</span>
               <span>{choice.recommendedSentence}</span>
@@ -120,7 +122,7 @@ export function SelectivityDecisionView({
             </select>
           </label>
         ) : null}
-        {plan.showLigandChoices ? (
+        {showLigand ? (
           <label className="mt-4 flex flex-col gap-1.5 text-sm" htmlFor="ligand-choice">
             Column coating
             <select

@@ -109,7 +109,7 @@ export type SelectivityStep =
   | "finished"
   | "blocked";
 
-export type TempPath = "solvent" | "heat";
+export type TempPath = "solvent" | "heat" | "ligand";
 
 export type TempChoice = {
   recommendedSentence: string;
@@ -118,11 +118,17 @@ export type TempChoice = {
   heatPrefill: SelectivityPrefill;
   solventNextChange: string;
   solventPrefill: SelectivityPrefill;
+  /** The recommended button. Solvent on the first chemistry, ligand after a solvent change. */
+  other: "solvent" | "ligand";
 };
 
 /** Shown when 40°C did not improve separation. Solvent is the recommended path. */
 export const TEMP_CHOICE_RECOMMENDED =
   "Change the solvent. This is recommended because the temperature increase did not help, so a higher temperature is unlikely to increase separation.";
+
+/** Shown when 40°C on the new solvent did not improve separation. Ligand is the recommended path. */
+export const LIGAND_CHOICE_RECOMMENDED =
+  "Change the ligand. This is recommended because the temperature increase did not help, so a higher temperature is unlikely to increase separation.";
 
 export type SelectivityPlan = {
   status: "recommend" | "finished" | "blocked";
@@ -518,10 +524,11 @@ export type HeatStart = {
 export function planHistory(
   runs: SelectivityRun[],
   setup: SelectivitySetup,
-  options?: { heat?: HeatStart | null },
+  options?: { heat?: HeatStart | null; continuePastEfficiency?: boolean },
 ): HistoryPlan {
   const tried: string[] = [];
   if (setup.originalLigand.trim()) tried.push(setup.originalLigand);
+  const continuePast = options?.continuePastEfficiency === true;
 
   let start = 0;
   let forced: { finishedOffset: number; carryIndex: number } | null = null;
@@ -532,7 +539,7 @@ export function planHistory(
     heat.carryIndex < runs.length &&
     heat.seriesLength > heat.carryIndex &&
     heat.seriesLength <= runs.length &&
-    !peaksMatchSpec(runs[runs.length - 1], setup)
+    (continuePast || !peaksMatchSpec(runs[runs.length - 1], setup))
   ) {
     forced = { finishedOffset: heat.seriesLength - 1, carryIndex: heat.carryIndex };
   }
@@ -561,8 +568,11 @@ export function planHistory(
         carryIndex = carryForwardIndex(segment.slice(0, finishedOffset + 1).map(toRetentionSample), rules);
       }
     }
-    if (finishedOffset < 0) return { phase: "retention", segmentStart: start };
-    if (peaksMatchSpec(runs[runs.length - 1], setup)) {
+    if (finishedOffset < 0) {
+      if (continuePast) return heatLatest(runs, setup, tried);
+      return { phase: "retention", segmentStart: start };
+    }
+    if (peaksMatchSpec(runs[runs.length - 1], setup) && !continuePast) {
       return { phase: "retention", segmentStart: start };
     }
 
@@ -594,15 +604,34 @@ export function planHistory(
     if (
       nextSegment.length > 1 &&
       looksLikeHeat &&
-      !peaksMatchSpec(nextSegment[nextSegment.length - 1], setup)
+      (continuePast || !peaksMatchSpec(nextSegment[nextSegment.length - 1], setup))
     ) {
       forced = { finishedOffset: 0, carryIndex: 0 };
       start = nextStart;
       continue;
     }
+    if (continuePast) return heatLatest(runs, setup, tried);
     return { phase: "retention", segmentStart: nextStart };
   }
   return { phase: "retention", segmentStart: start };
+}
+
+function heatLatest(runs: SelectivityRun[], setup: SelectivitySetup, tried: string[]): HistoryPlan {
+  const index = runs.length - 1;
+  const carry = runs[index];
+  if (!carry || carry.percentB == null) return { phase: "retention", segmentStart: Math.max(0, index) };
+  const outcome = walkSelectivity({
+    carry,
+    later: [],
+    slope: slopeOf(runs, retentionRules(setup)),
+    usedPercentB: percentsOf(runs),
+    setup,
+    triedLigands: tried,
+    carryRunNumber: index + 1,
+    firstLaterRunNumber: index + 2,
+  });
+  if (outcome.kind !== "plan") return { phase: "retention", segmentStart: index };
+  return { phase: "selectivity", segmentStart: index, plan: outcome.plan };
 }
 
 function peaksMatchSpec(run: SelectivityRun | undefined, setup: SelectivitySetup): boolean {
@@ -657,6 +686,7 @@ function walkSelectivity(args: {
       ambient,
       solventName,
       ligandName: baseline.ligand || args.setup.originalLigand,
+      triedLigands: args.triedLigands,
       offerChoice: cycle === 0,
     });
     if (temperature.type === "plan") return { kind: "plan", plan: temperature.plan };
@@ -671,8 +701,8 @@ function walkSelectivity(args: {
             setup: args.setup,
             ambient,
             ligandName: baseline.ligand || args.setup.originalLigand,
-            skipped60: temperature.consumed === 2,
-            heated: pending.slice(0, 2),
+            skipped60: !temperature.did60,
+            heated: pending.slice(0, temperature.consumed),
           }),
         };
       }
@@ -715,8 +745,9 @@ function walkTemperature(args: {
   ambient: Ambient;
   solventName: string;
   ligandName: string;
+  triedLigands: string[];
   offerChoice: boolean;
-}): { type: "plan"; plan: SelectivityPlan } | { type: "advance"; consumed: number } {
+}): { type: "plan"; plan: SelectivityPlan } | { type: "advance"; consumed: number; did60: boolean } {
   const startPercent = args.baseline.percentB!;
   const solvent = args.solventName;
   const ligand = args.ligandName;
@@ -725,87 +756,34 @@ function walkTemperature(args: {
     return { type: "plan", plan: plan40(args, startPercent, solvent, ligand) };
   }
 
-  const step1 = args.pending[0];
-  const lowerTarget = lowerPercentTarget(args, step1);
-  const lowerNeeded =
-    step1.percentB != null && lowerTarget != null && lowerTarget < step1.percentB - 1e-9;
-
-  if (args.pending.length === 1 && (lowerTarget == null || lowerNeeded)) {
-    return { type: "plan", plan: planAdjust(args, step1, args.baseNumber, savedCelsius(step1, 40), solvent, ligand) };
-  }
-
-  const judgedOffset = lowerNeeded ? 1 : 0;
-  const judged = args.pending[judgedOffset];
-  const heated = args.pending.slice(0, judgedOffset + 1);
-  const better = separationImproved(args.baseline, judged, args.setup.requiredPeaks);
-  const percent = judged.percentB ?? startPercent;
-  const followed = judgedOffset + 1;
+  const hot = args.pending[0];
+  const heated = [hot];
+  const better = separationImproved(args.baseline, hot, args.setup.requiredPeaks);
+  const percent = hot.percentB ?? startPercent;
+  const at60 = args.pending[1] != null && isSixty(args.pending[1]);
 
   if (better.ok) {
-    if (args.pending.length === followed) {
+    if (!at60) {
       return { type: "plan", plan: plan60(args, percent, solvent, ligand, better, heated) };
     }
-    return continueAt60(args, solvent, ligand, followed);
+    return { type: "advance", consumed: 2, did60: true };
   }
 
-  if (!args.offerChoice) {
-    return { type: "advance", consumed: followed };
+  if (!at60) {
+    if (args.pending.length === 1) {
+      const plan = args.offerChoice
+        ? planTempChoice(args, percent, solvent, ligand, heated)
+        : planLigandHeatChoice(args, percent, solvent, ligand, heated);
+      return { type: "plan", plan };
+    }
+    return { type: "advance", consumed: 1, did60: false };
   }
 
-  if (args.pending.length === followed) {
-    return {
-      type: "plan",
-      plan: planTempChoice(args, percent, solvent, ligand, heated),
-    };
-  }
-
-  const chosen = args.pending[followed];
-  if (chosen.temperatureC != null && Math.abs(chosen.temperatureC - 60) < 0.51) {
-    return continueAt60(args, solvent, ligand, followed);
-  }
-  return { type: "advance", consumed: followed };
+  return { type: "advance", consumed: 2, did60: true };
 }
 
-function continueAt60(
-  args: {
-    slope: number | null;
-    usedPercentB: number[];
-    setup: SelectivitySetup;
-    pending: SelectivityRun[];
-    baseNumber: number;
-  },
-  solvent: string,
-  ligand: string,
-  sixtyOffset: number,
-): { type: "plan"; plan: SelectivityPlan } | { type: "advance"; consumed: number } {
-  const step60 = args.pending[sixtyOffset];
-  if (args.pending.length === sixtyOffset + 1) {
-    return {
-      type: "plan",
-      plan: planAdjust(args, step60, args.baseNumber + sixtyOffset, savedCelsius(step60, 60), solvent, ligand),
-    };
-  }
-  return { type: "advance", consumed: sixtyOffset + 2 };
-}
-
-function lowerPercentTarget(
-  args: {
-    slope: number | null;
-    usedPercentB: number[];
-    setup: SelectivitySetup;
-    pending: SelectivityRun[];
-  },
-  run: SelectivityRun,
-): number | null {
-  if (run.percentB == null || args.setup.lastPeakTimeMin == null) return null;
-  return adjustedPercentB({
-    slope: args.slope,
-    percentB: run.percentB,
-    t0: run.firstPeakTimeMin,
-    lastPeakMin: run.lastPeakTimeMin,
-    specMin: args.setup.lastPeakTimeMin,
-    usedPercentB: [...args.usedPercentB, ...percentsOf(args.pending)],
-  }).percentB;
+function isSixty(run: SelectivityRun): boolean {
+  return run.temperatureC != null && Math.abs(run.temperatureC - 60) < 0.51;
 }
 
 function planTempChoice(
@@ -860,6 +838,62 @@ function planTempChoice(
         solvent: "",
         ligand,
       },
+      other: "solvent",
+    },
+  };
+}
+
+function planLigandHeatChoice(
+  args: {
+    baseline: SelectivityRun;
+    baselineNumber: number;
+    setup: SelectivitySetup;
+    ambient: Ambient;
+    triedLigands: string[];
+  },
+  percentB: number,
+  solvent: string,
+  ligand: string,
+  heated: SelectivityRun[],
+): SelectivityPlan {
+  const percent = formatPercentB(percentB);
+  const heatLabel = `Go to 60°C anyway, at ${percent}% B.`;
+  const ligandStep = ligandPlan({
+    setup: args.setup,
+    ambient: args.ambient,
+    triedLigands: args.triedLigands,
+  });
+  const fallbackPrefill: SelectivityPrefill = {
+    percentB: "100",
+    temperature: String(args.ambient.celsius),
+    solvent: "",
+    ligand: "",
+  };
+  return {
+    status: "recommend",
+    step: "temp-choice",
+    nextChange: LIGAND_CHOICE_RECOMMENDED,
+    why: [
+      LIGAND_CHOICE_RECOMMENDED,
+      heatLabel,
+      compareSentence(args.baseline, args.baselineNumber, heated, args.setup.requiredPeaks),
+    ].join(" "),
+    prefill: null,
+    nomograph: null,
+    showSolventChoices: false,
+    showLigandChoices: false,
+    recommendedSolventId: null,
+    recommendedLigand: null,
+    anchorPercentB: null,
+    oldSolvent: null,
+    tempChoice: {
+      recommendedSentence: LIGAND_CHOICE_RECOMMENDED,
+      heatLabel,
+      heatNextChange: `Run the next chromatogram at 60°C, at ${percent}% B.`,
+      heatPrefill: { percentB: percent, temperature: "60", solvent, ligand },
+      solventNextChange: ligandStep.nextChange,
+      solventPrefill: ligandStep.prefill ?? fallbackPrefill,
+      other: "ligand",
     },
   };
 }
@@ -898,67 +932,6 @@ function plan40(
     recommendedSolventId: null,
     recommendedLigand: null,
     anchorPercentB: percentB,
-    oldSolvent: solvent,
-    tempChoice: null,
-  };
-}
-
-function planAdjust(
-  args: {
-    slope: number | null;
-    usedPercentB: number[];
-    setup: SelectivitySetup;
-    pending: SelectivityRun[];
-  },
-  run: SelectivityRun,
-  runNumber: number,
-  celsius: number,
-  solvent: string,
-  ligand: string,
-): SelectivityPlan {
-  const current = run.percentB;
-  if (current == null || args.setup.lastPeakTimeMin == null) {
-    return blockedPlan(
-      "Type the %B and the last-peak time before the next %B can be worked out.",
-      "The heated run needs a saved %B, and the last-peak time rule needs a number, before the next %B is chosen.",
-    );
-  }
-  const used = [...args.usedPercentB, ...percentsOf(args.pending)];
-  const adjusted = adjustedPercentB({
-    slope: args.slope,
-    percentB: current,
-    t0: run.firstPeakTimeMin,
-    lastPeakMin: run.lastPeakTimeMin,
-    specMin: args.setup.lastPeakTimeMin,
-    usedPercentB: used,
-  });
-  const from = formatPercentB(current);
-  const to = formatPercentB(adjusted.percentB);
-  const spec = formatMinutes(args.setup.lastPeakTimeMin);
-  const clamp =
-    adjusted.clamped === "high"
-      ? " The result was above 100, so it is held at 100."
-      : adjusted.clamped === "low"
-        ? " The result was below 0, so it is held at 0."
-        : "";
-  const method =
-    adjusted.method === "line"
-      ? `The earlier %B runs drew a line for how retention changes with %B. That line is shifted so it passes through this ${celsius}°C run at ${from}% B. The %B on the shifted line that should put the last peak at ${spec} min is ${to}% B.${clamp}`
-      : args.slope == null
-        ? `There is no earlier line of %B against retention, so %B is lowered by 5 points, from ${from}% B to ${to}% B.${clamp}`
-        : `This run cannot be placed on the earlier %B line, so %B is lowered by 5 points, from ${from}% B to ${to}% B.${clamp}`;
-  return {
-    status: "recommend",
-    step: "temp-adjust",
-    nextChange: `Stay at ${celsius}°C and run the next chromatogram at ${to}% B, so the last peak comes back to ${spec} min.`,
-    why: [`Run ${runNumber} is the ${celsius}°C chromatogram.`, method].join(" "),
-    prefill: { percentB: to, temperature: String(celsius), solvent, ligand },
-    nomograph: null,
-    showSolventChoices: false,
-    showLigandChoices: false,
-    recommendedSolventId: null,
-    recommendedLigand: null,
-    anchorPercentB: current,
     oldSolvent: solvent,
     tempChoice: null,
   };
@@ -1206,6 +1179,8 @@ function separationImproved(
 ): { ok: boolean; peaks: boolean; resolution: boolean } {
   const peaksUp =
     baseline.peakCount != null && hot.peakCount != null && hot.peakCount > baseline.peakCount;
+  const peaksDown =
+    baseline.peakCount != null && hot.peakCount != null && hot.peakCount < baseline.peakCount;
   const atSpec = requiredPeaks != null && hot.peakCount != null && hot.peakCount >= requiredPeaks;
   const baseRes = resolutionForDecision(
     baseline.peakCount,
@@ -1213,7 +1188,7 @@ function separationImproved(
     requiredPeaks,
   );
   const hotRes = resolutionForDecision(hot.peakCount, hot.minResolutionExcludingFirst, requiredPeaks);
-  const resolutionUp = atSpec && baseRes != null && hotRes != null && hotRes > baseRes;
+  const resolutionUp = !peaksDown && atSpec && baseRes != null && hotRes != null && hotRes > baseRes;
   return { ok: peaksUp || resolutionUp, peaks: peaksUp, resolution: resolutionUp };
 }
 

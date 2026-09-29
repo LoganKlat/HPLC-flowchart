@@ -232,7 +232,8 @@ describe("retention stops and keeps going", () => {
     expect(decision.status).toBe("efficiency");
     expect(decision.reason).toBe("efficiency");
     expect(decision.nextPercentB).toBeNull();
-    expect(decision.nextChange).toContain("Leave %B at 70% B");
+    expect(decision.nextChange).toContain("Move on to efficiency");
+    expect(decision.efficiencyChoice?.continueLabel).toBe("Continue selectivity.");
     expect(decision.nextChange).not.toContain("40°C");
   });
 
@@ -833,7 +834,8 @@ describe("which run to carry forward after the calculated %B", () => {
     expect(followed.why).toContain("18.258");
     expect(followed.why).toContain("Efficiency is next to bring the last peak time to the specification.");
     expect(followed.why).not.toContain("Carry forward");
-    expect(followed.nextChange).toContain("Leave %B");
+    expect(followed.nextChange).toContain("Move on to efficiency");
+    expect(followed.efficiencyChoice?.continueLabel).toBe("Continue selectivity.");
     expect(followed.nextChange).not.toContain("Carry forward");
     expect(followed.nextPercentB).toBeNull();
   });
