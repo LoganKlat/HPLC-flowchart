@@ -7,7 +7,7 @@ import { porousSpots, shellSpots } from "@/lib/bead-spots";
 import { LIGANDS } from "@/lib/selectivity";
 
 type BeadKind = "porous" | "shell";
-type NoteId = "porous" | "shell" | "ligand" | "load" | "drawing";
+type NoteId = "porous" | "shell" | "ligand" | "load" | "drawing" | "particle" | "pore";
 
 const ligandSentences: Record<(typeof LIGANDS)[number], string> = {
   C18: "An 18-carbon chain. It holds oily compounds strongly.",
@@ -39,7 +39,20 @@ const notes: Record<NoteId, { label: string; body: string }> = {
     label: "Bead",
     body: "The spots are the surface. Ligands replace SiOH in proportion to the carbon load.",
   },
+  particle: {
+    label: "Particle size",
+    body: "Particle size is the diameter of the bead. Bigger particles usually mean lower back-pressure and wider peaks. Smaller particles usually mean higher back-pressure and narrower peaks.",
+  },
+  pore: {
+    label: "Pore size",
+    body: "Pore size is the width of the channels. A wider pore lets larger compounds in. A narrower pore has more surface for small compounds. This line is the width only. The picture does not reshape.",
+  },
 };
+
+function formatMicrons(value: number) {
+  const rounded = Math.round(value * 10) / 10;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+}
 
 function choiceStyle(selected: boolean, hovered: boolean): CSSProperties {
   if (selected && hovered) {
@@ -75,6 +88,12 @@ const ligandPictures: Record<(typeof LIGANDS)[number], string> = {
 
 const drawCenter = 220;
 const drawRadius = 198;
+
+/** One pore in the picture, in drawing coordinates. The line never grows past this width. */
+const poreMarks = {
+  porous: { x: 144.3, y: 291.4, half: 12.1 },
+  shell: { x: 201, y: 82.8, half: 12.3 },
+} as const;
 
 function framePlacement(kind: BeadKind) {
   const frame = beadFrames[kind];
@@ -131,24 +150,35 @@ function BeadDrawing({
   kind,
   ligand,
   ligandAt,
+  particleUm,
+  poreAngstroms,
 }: {
   kind: BeadKind;
   ligand: string;
   ligandAt: boolean[];
+  particleUm: number;
+  poreAngstroms: number;
 }) {
   const spots = kind === "porous" ? porousSpots : shellSpots;
   const frame = framePlacement(kind);
+  const pore = poreMarks[kind];
+  const lineHalf = pore.half * (poreAngstroms / 300);
+  const labelY = pore.y < 130 ? pore.y + 22 : pore.y - 16;
 
   return (
     <svg
       id="bead-drawing"
       viewBox="0 0 440 440"
-      className="mx-auto block h-auto w-full max-w-[28rem]"
+      style={{ width: `min(100%, ${(particleUm / 5) * 28}rem)` }}
+      className="block h-auto max-w-full"
       role="img"
       aria-label={kind === "porous" ? "Cut through a fully porous bead" : "Cut through a core shell bead"}
       data-kind={kind}
       data-ligands={ligandAt.filter(Boolean).length}
       data-silanols={ligandAt.length - ligandAt.filter(Boolean).length}
+      data-particle={particleUm}
+      data-pore={poreAngstroms}
+      data-line={lineHalf * 2}
     >
       <defs>
         <clipPath id="bead-clip">
@@ -172,6 +202,55 @@ function BeadDrawing({
           </g>
         );
       })}
+      <g id="bead-pore-line">
+        <line
+          x1={pore.x - lineHalf}
+          x2={pore.x + lineHalf}
+          y1={pore.y}
+          y2={pore.y}
+          stroke="#ffffff"
+          strokeWidth="7"
+          strokeLinecap="butt"
+        />
+        <line
+          x1={pore.x - lineHalf}
+          x2={pore.x + lineHalf}
+          y1={pore.y}
+          y2={pore.y}
+          stroke="#0f6b56"
+          strokeWidth="3"
+          strokeLinecap="butt"
+        />
+        <line
+          x1={pore.x - lineHalf}
+          x2={pore.x - lineHalf}
+          y1={pore.y - 7}
+          y2={pore.y + 7}
+          stroke="#0f6b56"
+          strokeWidth="2.5"
+        />
+        <line
+          x1={pore.x + lineHalf}
+          x2={pore.x + lineHalf}
+          y1={pore.y - 7}
+          y2={pore.y + 7}
+          stroke="#0f6b56"
+          strokeWidth="2.5"
+        />
+        <text
+          x={pore.x}
+          y={labelY}
+          textAnchor="middle"
+          fontSize="16"
+          fill="#144237"
+          stroke="#ffffff"
+          strokeWidth="5"
+          paintOrder="stroke"
+          className="font-sans"
+        >
+          {poreAngstroms} Å
+        </text>
+      </g>
     </svg>
   );
 }
@@ -180,6 +259,8 @@ export function BeadDiagram() {
   const [kind, setKind] = useState<BeadKind>("porous");
   const [ligand, setLigand] = useState("");
   const [carbonLoad, setCarbonLoad] = useState(10);
+  const [particleUm, setParticleUm] = useState(5);
+  const [poreAngstroms, setPoreAngstroms] = useState(100);
   const [hoveredChoice, setHoveredChoice] = useState<BeadKind | null>(null);
   const [openId, setOpenId] = useState<NoteId | null>(null);
   const [pinnedId, setPinnedId] = useState<NoteId | null>(null);
@@ -251,10 +332,16 @@ export function BeadDiagram() {
           {kind === "porous" ? notes.porous.body : notes.shell.body}
         </p>
         <figure
-          className="rounded-xl bg-card px-3 py-3 ring-1 ring-foreground/10 sm:px-4"
+          className="flex justify-center rounded-xl bg-card px-3 py-3 ring-1 ring-foreground/10 sm:px-4"
           {...bind("drawing")}
         >
-          <BeadDrawing kind={kind} ligand={ligand} ligandAt={surface.ligandAt} />
+          <BeadDrawing
+            kind={kind}
+            ligand={ligand}
+            ligandAt={surface.ligandAt}
+            particleUm={particleUm}
+            poreAngstroms={poreAngstroms}
+          />
         </figure>
         <p id="bead-counts" className="px-1 font-heading text-xl text-[#144237]">
           {surface.ligands} ligands. {surface.silanols} SiOH.
@@ -311,6 +398,42 @@ export function BeadDiagram() {
             value={carbonLoad}
             aria-valuetext={`${carbonLoad} percent`}
             onChange={(event) => setCarbonLoad(Number(event.target.value))}
+          />
+        </div>
+        <div className="rounded-lg px-1 py-2" {...bind("particle")}>
+          <div className="flex items-baseline justify-between gap-3">
+            <p className="text-sm font-medium">Particle size</p>
+            <p className="font-heading text-lg text-[#144237] tabular-nums">
+              {formatMicrons(particleUm)} µm
+            </p>
+          </div>
+          <input
+            id="bead-particle-size"
+            className="column-slider mt-1"
+            type="range"
+            min={1.5}
+            max={10}
+            step={0.1}
+            value={particleUm}
+            aria-valuetext={`${formatMicrons(particleUm)} micrometers`}
+            onChange={(event) => setParticleUm(Number(event.target.value))}
+          />
+        </div>
+        <div className="rounded-lg px-1 py-2" {...bind("pore")}>
+          <div className="flex items-baseline justify-between gap-3">
+            <p className="text-sm font-medium">Pore size</p>
+            <p className="font-heading text-lg text-[#144237] tabular-nums">{poreAngstroms} Å</p>
+          </div>
+          <input
+            id="bead-pore-size"
+            className="column-slider mt-1"
+            type="range"
+            min={60}
+            max={300}
+            step={1}
+            value={poreAngstroms}
+            aria-valuetext={`${poreAngstroms} angstroms`}
+            onChange={(event) => setPoreAngstroms(Number(event.target.value))}
           />
         </div>
       </div>
