@@ -293,14 +293,67 @@ export function ColumnDiagram() {
           <p className="text-muted-foreground">Hover or tap a slider.</p>
         )}
       </aside>
-      <figure className="min-w-0 overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10 lg:col-start-1 lg:row-start-4">
-        <img
-          src="/equipment/column-relationships.png"
-          alt="Table of how resolution, retention factor, and back-pressure change with column length, internal diameter, particle size, and flow rate."
-          width={1424}
-          height={802}
-          className="block h-auto w-full"
-        />
+      <figure className="min-w-0 overflow-x-auto rounded-xl bg-card ring-1 ring-foreground/10 lg:col-start-1 lg:row-start-4">
+        <table className="w-full min-w-[36rem] border-collapse text-left text-sm">
+          <thead>
+            <tr className="text-xs tracking-wide text-muted-foreground uppercase">
+              <th className="px-4 py-3 font-medium" scope="col">
+                Dimension change
+              </th>
+              <th className="px-4 py-3 font-medium" scope="col">
+                Resolution (R<sub>s</sub>)
+              </th>
+              <th className="px-4 py-3 font-medium" scope="col">
+                Retention time (t<sub>R</sub>)
+              </th>
+              <th className="px-4 py-3 font-medium" scope="col">
+                Column backpressure (ΔP)
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr className="border-t border-border align-top">
+              <th className="px-4 py-3 font-medium text-foreground" scope="row">
+                Increase length (↑ L)
+              </th>
+              <td className="px-4 py-3">Increases (~ √L)</td>
+              <td className="px-4 py-3">Increases (linearly)</td>
+              <td className="px-4 py-3">Increases (linearly)</td>
+            </tr>
+            <tr className="border-t border-border align-top">
+              <th className="px-4 py-3 font-medium text-foreground" scope="row">
+                Decrease length (↓ L)
+              </th>
+              <td className="px-4 py-3">Decreases (~ √L)</td>
+              <td className="px-4 py-3">Decreases (linearly)</td>
+              <td className="px-4 py-3">Decreases (linearly)</td>
+            </tr>
+            <tr className="border-t border-border align-top">
+              <th className="px-4 py-3 font-medium text-foreground" scope="row">
+                Increase width (↑ ID)
+              </th>
+              <td className="px-4 py-3">Decreases (massively)</td>
+              <td className="px-4 py-3">Increases (massively)</td>
+              <td className="px-4 py-3">
+                Decreases (by 1/ID<sup>2</sup> or 1/ID<sup>4</sup>)
+              </td>
+            </tr>
+            <tr className="border-t border-border align-top">
+              <th className="px-4 py-3 font-medium text-foreground" scope="row">
+                Decrease width (↓ ID)
+              </th>
+              <td className="px-4 py-3">Increases (until system peaks)</td>
+              <td className="px-4 py-3">Decreases (massively)</td>
+              <td className="px-4 py-3">
+                Increases (by 1/ID<sup>2</sup> or 1/ID<sup>4</sup>)
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <p className="px-4 pt-1 pb-4 text-sm leading-relaxed text-muted-foreground">
+          At a fixed flow rate, back-pressure scales with 1 over the square of the width. The source table
+          also lists 1/ID to the fourth. This page uses 1/ID squared.
+        </p>
       </figure>
     </section>
   );
