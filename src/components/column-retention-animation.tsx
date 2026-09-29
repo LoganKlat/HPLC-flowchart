@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import {
+  BEAD_R,
   BEAD_X,
   COMPOUNDS,
   OUTLET_X,
@@ -13,8 +14,12 @@ import {
 const colors = ["#c9841a", "#2f6fdb", "#0e8a7d", "#7c3aed", "#d4522a"] as const;
 const laneOffset = [-16, -8, 0, 8, 16];
 
-const description =
-  "The compounds travel with the mobile phase at the same speed. They separate because some spend longer stopped on the stationary phase, which is the surface of the beads. Uracil does not stick, so it comes out first. That time is t0. A compound that pauses longer comes out later. Retention, k, is that extra time compared with t0.";
+const paragraphs = [
+  "A compound moves only while it is dissolved in the mobile phase, the solvent flowing between the beads. It stops when it prefers the stationary phase, the coating on the bead surface. While it is moving, every compound travels at the same speed, because they are all carried by the same flow. They separate because each one has a different affinity for the stationary phase compared with the mobile phase.",
+  "That affinity comes from the compound’s physical properties, and from how those properties match the coating. An oily compound is happier on a greasy C18 chain than in a water-rich solvent, so it sits on the beads for a long time. A very polar compound prefers the solvent, so it barely stops.",
+  "Uracil is the clear case. It is small and polar. On a typical C18 column it has almost no affinity for the stationary phase, so it stays in the mobile phase the whole way. It is not retained. The time it takes to come out is t0.",
+  "Compound 2 stops briefly. Compounds 3, 4, and 5 stop for longer and longer, because each has a stronger affinity for the stationary phase than the one before it. Retention, k, is that extra time spent on the stationary phase, compared with uracil.",
+];
 
 export function ColumnRetentionAnimation() {
   const [replay, setReplay] = useState(0);
@@ -31,7 +36,7 @@ export function ColumnRetentionAnimation() {
       let next = stepTravelers(frame, dt);
       if (next.every((traveler) => traveler.done)) {
         doneFor += dt;
-        if (doneFor > 1.6) {
+        if (doneFor > 3.2) {
           next = initialTravelers();
           doneFor = 0;
         }
@@ -51,8 +56,12 @@ export function ColumnRetentionAnimation() {
     <section id="column-animation" className="flex flex-col gap-4">
       <header>
         <p className="text-xs tracking-[0.16em] text-[#0f6b56] uppercase">Retention</p>
-        <h2 className="mt-1 font-heading text-2xl text-[#144237]">Same speed, longer stops</h2>
-        <p className="mt-2 max-w-2xl text-base text-muted-foreground">{description}</p>
+        <h2 className="mt-1 font-heading text-2xl text-[#144237]">Why they stop</h2>
+        <div className="mt-2 flex max-w-2xl flex-col gap-3 text-base text-muted-foreground">
+          {paragraphs.map((paragraph) => (
+            <p key={paragraph.slice(0, 24)}>{paragraph}</p>
+          ))}
+        </div>
       </header>
       <div className="rounded-xl bg-card px-3 py-3 ring-1 ring-foreground/10 sm:px-4">
         <svg
@@ -77,17 +86,18 @@ export function ColumnRetentionAnimation() {
             return (
               <circle
                 key={x}
+                data-bead=""
                 cx={x}
                 cy="94"
-                r="22"
+                r={BEAD_R}
                 fill="#e7f3ee"
                 stroke={color}
-                strokeWidth={sitting ? 3.5 : 1.5}
+                strokeWidth={sitting ? 3 : 1.5}
               />
             );
           })}
           {travelers.map((traveler, index) => {
-            const y = traveler.stopped ? 78 : 94 + (laneOffset[index] ?? 0);
+            const y = traveler.stopped ? 94 - BEAD_R * 0.65 : 94 + (laneOffset[index] ?? 0);
             const elapsed = traveler.done && traveler.x >= OUTLET_X;
             return (
               <g

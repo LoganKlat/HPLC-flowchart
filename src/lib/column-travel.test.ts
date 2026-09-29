@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  BEAD_R,
   BEAD_X,
   COMPOUNDS,
   TRAVEL_SPEED,
@@ -9,12 +10,16 @@ import {
 } from "@/lib/column-travel";
 
 describe("column travel", () => {
-  it("gives uracil no stop and holds compound 5 the longest", () => {
+  it("packs more beads, and each compound is held clearly longer than the one before", () => {
+    expect(BEAD_X.length).toBeGreaterThan(12);
+    for (let index = 1; index < BEAD_X.length; index++) {
+      expect(BEAD_X[index]! - BEAD_X[index - 1]!).toBeGreaterThan(BEAD_R * 2);
+    }
     const totals = COMPOUNDS.map((compound) => holdTotal(compound.stops));
     expect(totals[0]).toBe(0);
     expect(COMPOUNDS[0]?.label).toBe("Uracil");
     for (let index = 1; index < totals.length; index++) {
-      expect(totals[index]).toBeGreaterThan(totals[index - 1] ?? 0);
+      expect(totals[index]! - (totals[index - 1] ?? 0)).toBeGreaterThanOrEqual(2);
     }
   });
 
