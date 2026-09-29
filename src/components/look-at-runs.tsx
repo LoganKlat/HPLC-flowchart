@@ -82,14 +82,16 @@ export function LookAtRuns({
           <div className="mt-3 grid grid-cols-2 gap-2">
             <button
               type="button"
-              className={`${choiceClass} border-primary bg-accent text-foreground`}
+              aria-pressed={betweenAnswer === "yes"}
+              className={`${choiceClass} ${betweenAnswer === "yes" ? "border-primary bg-accent text-foreground" : "border-input bg-background text-foreground"}`}
               onClick={() => onAnswer("yes")}
             >
               Yes
             </button>
             <button
               type="button"
-              className={`${choiceClass} border-input bg-background text-foreground`}
+              aria-pressed={betweenAnswer === "no"}
+              className={`${choiceClass} ${betweenAnswer === "no" ? "border-primary bg-accent text-foreground" : "border-input bg-background text-foreground"}`}
               onClick={() => onAnswer("no")}
             >
               No
