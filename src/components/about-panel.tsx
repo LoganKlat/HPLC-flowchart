@@ -133,7 +133,7 @@ export function AboutPanel({ onOpenNav }: { onOpenNav: () => void }) {
             full time you set, and that is the next run.
           </p>
           <p>
-            That calculation uses a straight line through the runs. It does not use every run. A Q-test at 70%
+            That calculation uses a straight line through the runs. It does not use every run. A Q-test at 90%
             confidence looks at the t0 peak of each run. If one t0 sits too far from the others, that run is left out,
             and the test is run again. At least two runs stay in. The note names any run that was left out. If none
             were, it says the t0 peaks passed the Q-test. A first run that is poorly separated can also be left out

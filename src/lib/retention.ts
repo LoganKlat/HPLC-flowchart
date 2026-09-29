@@ -310,6 +310,31 @@ export function roundTargetPercent(
   return { value, clamped, oneDecimal };
 }
 
+/** Round a calculated minimum %B up to a whole percent that is not already a run. */
+export function roundMinimumPercent(
+  raw: number,
+  usedPercentB: readonly number[],
+): { value: number; clamped: "low" | "high" | null; oneDecimal: false } {
+  let clamped: "low" | "high" | null = null;
+  let working = raw;
+  if (working < 0) {
+    working = 0;
+    clamped = "low";
+  } else if (working > 100) {
+    working = 100;
+    clamped = "high";
+  }
+
+  const whole = roundHalfAwayFromZero(working, 0);
+  let value = nearly(working, whole) ? whole : Math.ceil(working);
+  if (value > 100) {
+    value = 100;
+    clamped = "high";
+  }
+  while (value < 100 && usedPercentB.some((percent) => nearly(percent, value))) value += 1;
+  return { value, clamped, oneDecimal: false };
+}
+
 export function formatPercentB(value: number): string {
   const whole = roundHalfAwayFromZero(value, 0);
   if (nearly(value, whole)) return String(whole);
@@ -875,7 +900,7 @@ function calculatePercentB(
   const usedPercentB = samples
     .map((sample) => sample.percentB)
     .filter((percent): percent is number => percent != null);
-  const rounded = roundTargetPercent(rawPercentB, usedPercentB);
+  const rounded = roundMinimumPercent(rawPercentB, usedPercentB);
   const fit: RetentionFit = {
     rows,
     excluded: picked.excluded,
@@ -1123,41 +1148,42 @@ function separationVerdict(
 }
 
 /**
- * Dixon r10 critical values at 70% confidence (α = 0.30). Index is n.
+ * Dixon r10 critical values at 90% confidence (α = 0.10). Index is n.
  * One-outlier test, n = 3 through n = 30. Past n = 30, use n = 30.
+ * Same form as the previous 70% table (Verma and Quiroz-Ruiz, test N7).
  */
-const DIXON_Q70 = [
+const DIXON_Q90 = [
   Number.NaN,
   Number.NaN,
   Number.NaN,
-  0.6836,
-  0.4704,
-  0.373,
-  0.3173,
-  0.2811,
-  0.255,
-  0.2361,
+  0.885,
+  0.6789,
+  0.5578,
+  0.484,
+  0.434,
+  0.3979,
+  0.3704,
+  0.3492,
+  0.3312,
+  0.317,
+  0.3045,
+  0.2938,
+  0.2848,
+  0.2765,
+  0.2691,
+  0.2626,
+  0.2564,
+  0.2511,
+  0.246,
+  0.2415,
+  0.2377,
+  0.2337,
+  0.2303,
+  0.2269,
+  0.2237,
   0.2208,
-  0.2086,
-  0.1983,
-  0.1898,
-  0.1826,
-  0.1764,
-  0.1707,
-  0.1656,
-  0.1613,
-  0.1572,
-  0.1535,
-  0.1504,
-  0.1474,
-  0.1446,
-  0.142,
-  0.1397,
-  0.1376,
-  0.1355,
-  0.1335,
-  0.1318,
-  0.13,
+  0.2182,
+  0.2155,
 ];
 
 type T0Check = {
@@ -1214,8 +1240,8 @@ function t0Checks(samples: RetentionSample[]): T0Check[] {
 
 function dixonCritical(n: number): number | null {
   if (n < 3) return null;
-  if (n >= DIXON_Q70.length) return DIXON_Q70[DIXON_Q70.length - 1];
-  return DIXON_Q70[n];
+  if (n >= DIXON_Q90.length) return DIXON_Q90[DIXON_Q90.length - 1];
+  return DIXON_Q90[n];
 }
 
 /** Leave out t0 peaks that fail Dixon's Q-test. Never leave fewer than two runs. */
@@ -1303,7 +1329,7 @@ export function refitMinimumPercent(
   const logKTarget = Math.log10(kTarget);
   const rawPercentB = (logKTarget - lineFit.c) / lineFit.m;
   if (!Number.isFinite(rawPercentB)) return null;
-  const rounded = roundTargetPercent(rawPercentB, [...usedPercentB]);
+  const rounded = roundMinimumPercent(rawPercentB, usedPercentB);
   return {
     rows,
     m: lineFit.m,

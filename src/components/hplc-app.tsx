@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { ChoiceSelect } from "@/components/choice-select";
 import { FileDrop } from "@/components/file-drop";
 import { AboutPanel } from "@/components/about-panel";
@@ -117,6 +117,10 @@ export function HplcApp() {
   const [leftSelectivity, setLeftSelectivity] = useState(false);
   const [tempPathByRun, setTempPathByRun] = useState<Record<number, TempPath>>({});
   const [hoveredRun, setHoveredRun] = useState<number | null>(null);
+  const [linePercent, setLinePercent] = useState<number | null>(null);
+  const reportLinePercent = useCallback((percent: number | null) => {
+    setLinePercent((current) => (current === percent ? current : percent));
+  }, []);
   const [fillFromFileName, setFillFromFileName] = useState(false);
   const [fileNameNote, setFileNameNote] = useState<string | null>(null);
   const detailsRef = useRef(details);
@@ -139,6 +143,7 @@ export function HplcApp() {
     choice: { ...choice, continueToLook: latestFlags.continueToLook },
     heat: heatChoice,
     continuePastEfficiency: latestFlags.continuePast,
+    linePercent,
   });
   if (syncedRuns !== runs) {
     setRuns(syncedRuns);
@@ -508,6 +513,7 @@ export function HplcApp() {
               fillFromFileName={fillFromFileName}
               fileNameNote={fileNameNote}
               onToggleFillFromFileName={onToggleFillFromFileName}
+              onLinePercent={index === readyCount - 1 ? reportLinePercent : undefined}
             />
           </TabsContent>
         ))}
@@ -641,6 +647,7 @@ function RunPane({
   fillFromFileName,
   fileNameNote,
   onToggleFillFromFileName,
+  onLinePercent,
 }: {
   index: number;
   run: RunState;
@@ -680,6 +687,7 @@ function RunPane({
   fillFromFileName: boolean;
   fileNameNote: string | null;
   onToggleFillFromFileName: (checked: boolean) => void;
+  onLinePercent?: (percent: number | null) => void;
 }) {
   if (run.afterRetention) {
     const prior = index > 0 ? explainRun(runs, index - 1, details, checks, { choice, heat }) : null;
@@ -789,7 +797,9 @@ function RunPane({
               />
             ) : (
               <>
-                {retention ? <RetentionDecisionView decision={retention} /> : null}
+                {retention ? (
+                  <RetentionDecisionView decision={retention} onLinePercent={onLinePercent} />
+                ) : null}
                 {selectivity ? (
                   <SelectivityDecisionView
                     plan={selectivity}
@@ -995,6 +1005,7 @@ function syncNextRun(
     choice: RetentionChoice;
     heat: HeatStart | null;
     continuePastEfficiency: boolean;
+    linePercent: number | null;
   },
 ): RunState[] {
   const count = readyPrefix(runs);
@@ -1013,7 +1024,7 @@ function syncNextRun(
     { heat: options.heat, continuePastEfficiency: options.continuePastEfficiency },
   );
   const next = runs[count];
-  const prefill = prefillFor(ready, history, details, checks, options.choice);
+  const prefill = prefillFor(ready, history, details, checks, options.choice, options.linePercent);
 
   if (!prefill) {
     if (!next || next.status !== "empty" || runWasEdited(next)) return runs;
@@ -1039,16 +1050,19 @@ function prefillFor(
   details: RunDetails,
   checks: RuleNumbers,
   choice: RetentionChoice,
+  linePercent: number | null,
 ): SelectivityPrefill | null {
   if (history.phase === "selectivity") {
     return history.plan.status === "recommend" ? history.plan.prefill : null;
   }
   const decision = decideRetention(ready.slice(history.segmentStart).map(toSample), checks, choice);
   if (decision.status !== "recommend" || decision.nextPercentB == null) return null;
+  const percent =
+    decision.move === "calculated" && linePercent != null ? linePercent : decision.nextPercentB;
   const lastIndex = ready.length - 1;
   const inherited = inheritedConditions(ready[lastIndex], lastIndex, details);
   return {
-    percentB: formatPercentB(decision.nextPercentB),
+    percentB: formatPercentB(percent),
     temperature: inherited.temperature,
     solvent: inherited.solvent,
     ligand: inherited.ligand,

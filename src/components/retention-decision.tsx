@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { axisTicks, formatAxisTick } from "@/components/chromatogram-chart";
 import {
   formatPercentB,
@@ -12,7 +12,13 @@ import {
   type RetentionFit,
 } from "@/lib/retention";
 
-export function RetentionDecisionView({ decision }: { decision: RetentionDecision }) {
+export function RetentionDecisionView({
+  decision,
+  onLinePercent,
+}: {
+  decision: RetentionDecision;
+  onLinePercent?: (percent: number | null) => void;
+}) {
   const fit = decision.fit;
   const initial = fit?.catalog.filter((run) => run.included).map((run) => run.runNumber) ?? [];
   const signature = fit
@@ -26,6 +32,10 @@ export function RetentionDecisionView({ decision }: { decision: RetentionDecisio
   }
   const overridden = fit != null && !sameRunSet(selected, initial);
   const solved = fit ? refitMinimumPercent(fit.catalog, selected, fit.specifiedTimeMin, fit.usedPercentB) : null;
+  const reported = overridden && solved ? solved.nextPercentB : null;
+  useEffect(() => {
+    onLinePercent?.(reported);
+  }, [onLinePercent, reported]);
   const nextChange = fit && overridden ? nextChangeForSelection(fit, solved) : decision.nextChange;
 
   return (

@@ -9,6 +9,7 @@ import {
   inBetweenPercentError,
   minimumPercentNote,
   refitMinimumPercent,
+  roundMinimumPercent,
   roundTargetPercent,
   type RetentionRules,
   type RetentionSample,
@@ -66,7 +67,7 @@ describe("retention %B along the four lab files", () => {
   const samples = files.map((file, index) => sampleFromRead(file.percentB, reads[index]));
 
   it("recommends 60, then 50, then 40, then a calculated %B", () => {
-    const expected = [60, 50, 40, 41];
+    const expected = [60, 50, 40, 42];
     for (let i = 0; i < samples.length; i++) {
       const decision = decideRetention(samples.slice(0, i + 1), pathRules);
       expect(decision.status).toBe("recommend");
@@ -121,7 +122,7 @@ describe("retention %B along the four lab files", () => {
     const starting = fit.catalog.filter((run) => run.included).map((run) => run.runNumber);
     const again = refitMinimumPercent(fit.catalog, starting, fit.specifiedTimeMin, fit.usedPercentB);
     expect(again).not.toBeNull();
-    expect(again!.nextPercentB).toBe(41);
+    expect(again!.nextPercentB).toBe(42);
     expect(again!.m).toBeCloseTo(fit.m, 10);
     expect(again!.c).toBeCloseTo(fit.c, 10);
     expect(again!.rawPercentB).toBeCloseTo(fit.rawPercentB, 8);
@@ -135,14 +136,15 @@ describe("retention %B along the four lab files", () => {
     expect(note).toContain("The t0 for that target is the average t0 of the runs in the line, 1.089 min");
     expect(note).toContain("logK = log10(k)");
     expect(note).toContain("%B = (that logK − c) / m");
-    expect(note).toContain("The page recommends 41% B.");
+    expect(note).toContain("41.421");
+    expect(note).toContain("The page recommends 42% B.");
     expect(note).not.toContain("middle t0");
     expect(note).not.toContain("half");
     expect(note).not.toContain("you set");
     expect(refitMinimumPercent(fit.catalog, [2], fit.specifiedTimeMin, fit.usedPercentB)).toBeNull();
     const withLeftOut = refitMinimumPercent(fit.catalog, [1, 2, 3, 4], fit.specifiedTimeMin, fit.usedPercentB);
     expect(withLeftOut).not.toBeNull();
-    expect(decideRetention(samples, pathRules).nextPercentB).toBe(41);
+    expect(decideRetention(samples, pathRules).nextPercentB).toBe(42);
   });
 
   it("uses the %B saved on the run, not the percent in the file name", () => {
@@ -153,12 +155,12 @@ describe("retention %B along the four lab files", () => {
 
   it("finishes after a run at the calculated %B even when peaks are still short", () => {
     const calculated = decideRetention(samples, pathRules);
-    expect(calculated.nextPercentB).toBe(41);
+    expect(calculated.nextPercentB).toBe(42);
     const followed = decideRetention(
       [
         ...samples,
         sample({
-          percentB: 41,
+          percentB: 42,
           peakCount: 6,
           lastPeakTimeMin: 8.5,
           firstPeakTimeMin: 1.09,
@@ -577,6 +579,26 @@ describe("retention rule edges", () => {
       oneDecimal: true,
     });
     expect(roundTargetPercent(-3.2, [])).toMatchObject({ value: 0, clamped: "low" });
+    expect(roundMinimumPercent(45.01, [])).toEqual({ value: 46, clamped: null, oneDecimal: false });
+    expect(roundMinimumPercent(45, [])).toEqual({ value: 45, clamped: null, oneDecimal: false });
+    expect(roundMinimumPercent(41.420785, [70, 60, 50, 40])).toEqual({
+      value: 42,
+      clamped: null,
+      oneDecimal: false,
+    });
+    expect(roundMinimumPercent(40.24, [70, 60, 50, 40])).toEqual({
+      value: 41,
+      clamped: null,
+      oneDecimal: false,
+    });
+    expect(roundMinimumPercent(40.24, [70, 60, 50, 40, 41])).toEqual({
+      value: 42,
+      clamped: null,
+      oneDecimal: false,
+    });
+    expect(roundMinimumPercent(99.2, [100])).toEqual({ value: 100, clamped: null, oneDecimal: false });
+    expect(roundMinimumPercent(120, [])).toEqual({ value: 100, clamped: "high", oneDecimal: false });
+    expect(roundMinimumPercent(-3.2, [])).toEqual({ value: 0, clamped: "low", oneDecimal: false });
   });
 
   it("does not finish retention just because the 5 point drop was run", () => {
@@ -642,78 +664,90 @@ describe("first-peak time outliers", () => {
   });
 
   it("leaves out a separated 90% run because its first-peak time is off, and keeps 70%", () => {
-    const decision = decideRetention(
-      [
-        sample({
-          percentB: 90,
-          peakCount: 6,
-          minResolutionExcludingFirst: 2.3,
-          firstPeakTimeMin: 1.296,
-          lastPeakTimeMin: 1.8,
-        }),
-        sample({
-          percentB: 70,
-          peakCount: 6,
-          minResolutionExcludingFirst: 0.6,
-          firstPeakTimeMin: 1.101,
-          lastPeakTimeMin: 2,
-        }),
-        sample({
-          percentB: 60,
-          peakCount: 6,
-          minResolutionExcludingFirst: 0.7,
-          firstPeakTimeMin: 1.088,
-          lastPeakTimeMin: 3,
-        }),
-        sample({
-          percentB: 50,
-          peakCount: 6,
-          minResolutionExcludingFirst: 0.9,
-          firstPeakTimeMin: 1.084,
-          lastPeakTimeMin: 5,
-        }),
-        sample({
-          percentB: 40,
-          peakCount: 6,
-          minResolutionExcludingFirst: 1.2,
-          firstPeakTimeMin: 1.095,
-          lastPeakTimeMin: 9,
-        }),
-      ],
-      { requiredPeaks: 8, lastPeakTimeMin: 10, maxBackPressurePsi: 500 },
-    );
-    expect(decision.move).toBe("calculated");
-    expect(decision.fit!.rows.map((row) => row.percentB)).toEqual([70, 60, 50, 40]);
-    expect(decision.fit!.excluded.map((row) => row.percentB)).toEqual([90]);
-    expect(decision.why).toContain("The Q-test left out Run 1 at 90% B (t0 peak 1.296 min).");
-    expect(decision.why).toContain("The calculation uses Run 2 at 70% B");
-    expect(decision.why).not.toContain("middle t0");
+    const rules = { requiredPeaks: 8, lastPeakTimeMin: 10, maxBackPressurePsi: 500 };
+    const series = [
+      sample({
+        percentB: 90,
+        peakCount: 6,
+        minResolutionExcludingFirst: 2.3,
+        firstPeakTimeMin: 1.296,
+        lastPeakTimeMin: 1.8,
+      }),
+      sample({
+        percentB: 70,
+        peakCount: 6,
+        minResolutionExcludingFirst: 0.6,
+        firstPeakTimeMin: 1.101,
+        lastPeakTimeMin: 2,
+      }),
+      sample({
+        percentB: 60,
+        peakCount: 6,
+        minResolutionExcludingFirst: 0.7,
+        firstPeakTimeMin: 1.088,
+        lastPeakTimeMin: 3,
+      }),
+      sample({
+        percentB: 50,
+        peakCount: 6,
+        minResolutionExcludingFirst: 0.9,
+        firstPeakTimeMin: 1.084,
+        lastPeakTimeMin: 5,
+      }),
+      sample({
+        percentB: 40,
+        peakCount: 6,
+        minResolutionExcludingFirst: 1.2,
+        firstPeakTimeMin: 1.095,
+        lastPeakTimeMin: 9,
+      }),
+    ];
+    const four = decideRetention(series.slice(0, 4), rules);
+    expect(four.move).toBe("calculated");
+    expect(four.fit!.rows.map((row) => row.percentB)).toEqual([70, 60, 50]);
+    expect(four.fit!.excluded.map((row) => row.percentB)).toEqual([90]);
+    expect(four.why).toContain("The Q-test left out Run 1 at 90% B (t0 peak 1.296 min).");
+    expect(four.why).toContain("The calculation uses Run 2 at 70% B");
+    expect(four.why).not.toContain("middle t0");
+    expect(four.nextPercentB).toBe(40);
+    const followed = decideRetention(series, rules);
+    expect(followed.status).toBe("look");
+    expect(followed.move).toBeNull();
   });
 
-  it("leaves out the 1.190 and 1.110 t0 peaks", () => {
-    const decision = decideRetention(
-      [
-        sample({ percentB: 90, peakCount: 2, firstPeakTimeMin: 1.19, lastPeakTimeMin: 2 }),
-        sample({ percentB: 80, peakCount: 2, firstPeakTimeMin: 1.11, lastPeakTimeMin: 3 }),
-        sample({ percentB: 70, peakCount: 2, firstPeakTimeMin: 1.075, lastPeakTimeMin: 4 }),
-        sample({ percentB: 60, peakCount: 2, firstPeakTimeMin: 1.064, lastPeakTimeMin: 5.5 }),
-        sample({ percentB: 50, peakCount: 2, firstPeakTimeMin: 1.068, lastPeakTimeMin: 7 }),
-        sample({ percentB: 40, peakCount: 2, firstPeakTimeMin: 1.08, lastPeakTimeMin: 9 }),
-      ],
-      { requiredPeaks: 8, lastPeakTimeMin: 10, maxBackPressurePsi: 500 },
-    );
-    expect(decision.move).toBe("calculated");
-    expect(decision.fit!.rows.map((row) => row.t0)).toEqual([1.075, 1.064, 1.068, 1.08]);
-    expect(decision.fit!.excluded.map((row) => row.percentB)).toEqual([90, 80]);
-    expect(decision.why).toContain(
+  it("at 90% keeps 1.110 until a later run, then leaves both 1.190 and 1.110 out", () => {
+    const rules = { requiredPeaks: 8, lastPeakTimeMin: 10, maxBackPressurePsi: 500 };
+    const series = [
+      sample({ percentB: 90, peakCount: 2, firstPeakTimeMin: 1.19, lastPeakTimeMin: 2 }),
+      sample({ percentB: 80, peakCount: 2, firstPeakTimeMin: 1.11, lastPeakTimeMin: 3 }),
+      sample({ percentB: 70, peakCount: 2, firstPeakTimeMin: 1.075, lastPeakTimeMin: 4 }),
+      sample({ percentB: 60, peakCount: 2, firstPeakTimeMin: 1.064, lastPeakTimeMin: 5.5 }),
+      sample({ percentB: 50, peakCount: 2, firstPeakTimeMin: 1.068, lastPeakTimeMin: 7 }),
+      sample({ percentB: 40, peakCount: 2, firstPeakTimeMin: 1.08, lastPeakTimeMin: 9 }),
+    ];
+    const four = decideRetention(series.slice(0, 4), rules);
+    expect(four.move).toBe("calculated");
+    expect(four.fit!.rows.map((row) => row.t0)).toEqual([1.11, 1.075, 1.064]);
+    expect(four.fit!.excluded.map((row) => row.percentB)).toEqual([90]);
+    expect(four.why).not.toContain("t0 peak 1.110");
+    expect(four.why).toContain("Run 2 at 80% B");
+    expect(four.nextPercentB).toBe(45);
+
+    const five = decideRetention(series.slice(0, 5), rules);
+    expect(five.move).toBe("calculated");
+    expect(five.fit!.rows.map((row) => row.t0)).toEqual([1.075, 1.064, 1.068]);
+    expect(five.fit!.excluded.map((row) => row.percentB)).toEqual([90, 80]);
+    expect(five.why).toContain(
       "The Q-test left out Run 1 at 90% B (t0 peak 1.190 min) and Run 2 at 80% B (t0 peak 1.110 min).",
     );
-    expect(decision.why).toContain(
-      "The calculation uses Run 3 at 70% B, Run 4 at 60% B, Run 5 at 50% B, Run 6 at 40% B.",
-    );
-    expect(decision.why).not.toContain("middle t0");
-    expect(decision.why).not.toContain("10% cutoff");
-    expect(decision.why).not.toContain("95%");
+    expect(five.nextPercentB).toBe(40);
+    expect(five.fit!.rawPercentB).toBeCloseTo(39.212, 3);
+
+    const six = decideRetention(series, rules);
+    expect(six.status).toBe("look");
+    expect(six.move).toBeNull();
+    expect(six.why).not.toContain("middle t0");
+    expect(six.why).not.toContain("95%");
   });
 
   it("says the t0 peaks passed the Q-test when none is an outlier", () => {
