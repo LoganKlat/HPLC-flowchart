@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { axisTicks, formatAxisTick } from "@/components/chromatogram-chart";
 import {
   formatPercentB,
+  formatRSquared,
+  lineEquation,
   minimumPercentNote,
   refitMinimumPercent,
   type FitCatalogRun,
@@ -237,6 +239,10 @@ function LogKGraph({ fit }: { fit: MinimumFit }) {
   return (
     <figure id="min-b-graph" className="rounded-xl bg-[#f7fbf8] ring-1 ring-foreground/10">
       <figcaption className="px-4 pt-3 font-heading text-base text-foreground">logK against %B</figcaption>
+      <div className="px-4 pt-1 pb-2 text-sm leading-snug text-foreground">
+        <p data-min-b-equation>{lineEquation(fit.m, fit.c)}</p>
+        <p data-min-b-r2>{formatRSquared(fit.rSquared)}</p>
+      </div>
       <svg
         width={width}
         height={height}

@@ -130,6 +130,8 @@ export type MinimumFit = {
   rows: RetentionFitRow[];
   m: number;
   c: number;
+  /** Coefficient of determination for the line through the selected runs. */
+  rSquared: number;
   t0Average: number;
   kTarget: number;
   logKTarget: number;
@@ -1334,6 +1336,7 @@ export function refitMinimumPercent(
     rows,
     m: lineFit.m,
     c: lineFit.c,
+    rSquared: lineFit.rSquared,
     t0Average,
     kTarget,
     logKTarget,
@@ -1380,7 +1383,17 @@ function formatSigned(value: number, digits: number): string {
   return value < 0 ? `−${text}` : text;
 }
 
-function ordinaryLeastSquares(points: { x: number; y: number }[]): { m: number; c: number } | null {
+/** Equation written on the logK graph. m and c are the fit for the runs on the line. */
+export function lineEquation(m: number, c: number): string {
+  return `logK = ${formatSigned(m, 6)} × %B + ${formatSigned(c, 6)}`;
+}
+
+/** R² written under the line equation, to three decimal places. */
+export function formatRSquared(rSquared: number): string {
+  return `R² = ${rSquared.toFixed(3)}`;
+}
+
+function ordinaryLeastSquares(points: { x: number; y: number }[]): { m: number; c: number; rSquared: number } | null {
   const n = points.length;
   if (n < 2) return null;
   let sumX = 0;
@@ -1398,7 +1411,18 @@ function ordinaryLeastSquares(points: { x: number; y: number }[]): { m: number; 
   const m = (n * sumXY - sumX * sumY) / denominator;
   const c = (sumY - m * sumX) / n;
   if (!Number.isFinite(m) || !Number.isFinite(c) || m === 0) return null;
-  return { m, c };
+  const meanY = sumY / n;
+  let total = 0;
+  let residual = 0;
+  for (const point of points) {
+    const predicted = m * point.x + c;
+    total += (point.y - meanY) ** 2;
+    residual += (point.y - predicted) ** 2;
+  }
+  let rSquared = total === 0 ? 1 : 1 - residual / total;
+  if (rSquared > 1) rSquared = 1;
+  if (rSquared < 0 && rSquared > -1e-12) rSquared = 0;
+  return { m, c, rSquared };
 }
 
 function resolutionIncreased(samples: RetentionSample[], requiredPeaks: number): boolean {

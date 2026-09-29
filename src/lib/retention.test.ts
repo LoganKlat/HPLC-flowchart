@@ -7,6 +7,8 @@ import {
   carryForwardIndex,
   decideRetention,
   inBetweenPercentError,
+  formatRSquared,
+  lineEquation,
   minimumPercentNote,
   refitMinimumPercent,
   roundMinimumPercent,
@@ -125,6 +127,9 @@ describe("retention %B along the four lab files", () => {
     expect(again!.nextPercentB).toBe(42);
     expect(again!.m).toBeCloseTo(fit.m, 10);
     expect(again!.c).toBeCloseTo(fit.c, 10);
+    expect(lineEquation(again!.m, again!.c)).toBe("logK = −0.039509 × %B + 2.549388");
+    expect(again!.rSquared).toBeCloseTo(0.996929, 6);
+    expect(formatRSquared(again!.rSquared)).toBe("R² = 0.997");
     expect(again!.rawPercentB).toBeCloseTo(fit.rawPercentB, 8);
     expect(again!.t0Average).toBeCloseTo(1.089, 3);
     const note = minimumPercentNote(again!, fit.specifiedTimeMin).join("\n");
@@ -144,6 +149,8 @@ describe("retention %B along the four lab files", () => {
     expect(refitMinimumPercent(fit.catalog, [2], fit.specifiedTimeMin, fit.usedPercentB)).toBeNull();
     const withLeftOut = refitMinimumPercent(fit.catalog, [1, 2, 3, 4], fit.specifiedTimeMin, fit.usedPercentB);
     expect(withLeftOut).not.toBeNull();
+    expect(lineEquation(withLeftOut!.m, withLeftOut!.c)).not.toBe(lineEquation(again!.m, again!.c));
+    expect(formatRSquared(withLeftOut!.rSquared)).toMatch(/^R² = \d\.\d{3}$/);
     expect(decideRetention(samples, pathRules).nextPercentB).toBe(42);
   });
 
