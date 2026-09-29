@@ -93,9 +93,28 @@ export type RetentionExclusion = {
   reason: string;
 };
 
+/** One uploaded run, whether or not the starting line keeps it. */
+export type FitCatalogRun = {
+  runNumber: number;
+  percentB: number | null;
+  t0: number | null;
+  /** Last peak time, in minutes. */
+  tR: number | null;
+  k: number | null;
+  logK: number | null;
+  /** True when the Q-test and the separation rules keep this run on the starting line. */
+  included: boolean;
+};
+
 export type RetentionFit = {
   rows: RetentionFitRow[];
   excluded: RetentionExclusion[];
+  /** Every uploaded run, in order. The starting ticks are `included`. */
+  catalog: FitCatalogRun[];
+  /** Last-peak time in the specification, in minutes. The target logK aims at this. */
+  specifiedTimeMin: number;
+  /** %B values already uploaded. The rounding rule reads this list. */
+  usedPercentB: number[];
   m: number;
   c: number;
   t0Average: number;
@@ -104,6 +123,18 @@ export type RetentionFit = {
   rawPercentB: number;
   nextPercentB: number;
   oneDecimal: boolean;
+  clamped: "low" | "high" | null;
+};
+
+export type MinimumFit = {
+  rows: RetentionFitRow[];
+  m: number;
+  c: number;
+  t0Average: number;
+  kTarget: number;
+  logKTarget: number;
+  rawPercentB: number;
+  nextPercentB: number;
   clamped: "low" | "high" | null;
 };
 
@@ -848,6 +879,9 @@ function calculatePercentB(
   const fit: RetentionFit = {
     rows,
     excluded: picked.excluded,
+    catalog: catalogRuns(samples, rows),
+    specifiedTimeMin: rules.lastPeakTimeMin,
+    usedPercentB,
     m: lineFit.m,
     c: lineFit.c,
     t0Average,
@@ -1220,6 +1254,104 @@ function retentionFactor(sample: RetentionSample): { k: number; logK: number } |
   const k = (tR - t0) / t0;
   if (!(k > 0)) return null;
   return { k, logK: Math.log10(k) };
+}
+
+function catalogRuns(samples: RetentionSample[], rows: RetentionFitRow[]): FitCatalogRun[] {
+  const kept = new Set(rows.map((row) => row.runNumber));
+  return samples.map((sample, index) => {
+    const factor = retentionFactor(sample);
+    const runNumber = index + 1;
+    return {
+      runNumber,
+      percentB: sample.percentB,
+      t0: sample.firstPeakTimeMin,
+      tR: sample.lastPeakTimeMin,
+      k: factor?.k ?? null,
+      logK: factor?.logK ?? null,
+      included: kept.has(runNumber),
+    };
+  });
+}
+
+/** Line through the runs selected now. Null when those runs cannot draw a line. */
+export function refitMinimumPercent(
+  catalog: readonly FitCatalogRun[],
+  selected: readonly number[],
+  specifiedTimeMin: number,
+  usedPercentB: readonly number[],
+): MinimumFit | null {
+  const chosen = new Set(selected);
+  const rows: RetentionFitRow[] = [];
+  for (const run of catalog) {
+    if (!chosen.has(run.runNumber)) continue;
+    if (run.percentB == null || run.t0 == null || run.tR == null || run.k == null || run.logK == null) continue;
+    rows.push({
+      runNumber: run.runNumber,
+      percentB: run.percentB,
+      t0: run.t0,
+      tR: run.tR,
+      k: run.k,
+      logK: run.logK,
+    });
+  }
+  if (rows.length < 2) return null;
+  const lineFit = ordinaryLeastSquares(rows.map((row) => ({ x: row.percentB, y: row.logK })));
+  if (!lineFit) return null;
+  const t0Average = rows.reduce((sum, row) => sum + row.t0, 0) / rows.length;
+  const kTarget = (specifiedTimeMin - t0Average) / t0Average;
+  if (!(kTarget > 0) || !(t0Average > 0)) return null;
+  const logKTarget = Math.log10(kTarget);
+  const rawPercentB = (logKTarget - lineFit.c) / lineFit.m;
+  if (!Number.isFinite(rawPercentB)) return null;
+  const rounded = roundTargetPercent(rawPercentB, [...usedPercentB]);
+  return {
+    rows,
+    m: lineFit.m,
+    c: lineFit.c,
+    t0Average,
+    kTarget,
+    logKTarget,
+    rawPercentB,
+    nextPercentB: rounded.value,
+    clamped: rounded.clamped,
+  };
+}
+
+/** Plain sentences and the arithmetic for the runs on the line now. */
+export function minimumPercentNote(fit: MinimumFit, specifiedTimeMin: number): string[] {
+  const points = fit.rows.map((row) => {
+    const t0 = formatMinutes(row.t0);
+    const last = formatMinutes(row.tR);
+    return `Run ${row.runNumber} at ${formatPercentB(row.percentB)}% B gives one point. Its t0 is ${t0} min and its last peak is ${last} min, so k = (${last} − ${t0}) / ${t0} = ${formatCalc(row.k, 3)} and logK = ${formatCalc(row.logK, 3)}.`;
+  });
+  const targetT0 = formatMinutes(fit.t0Average);
+  const spec = formatTypedMinutes(specifiedTimeMin);
+  const logKText = formatCalc(fit.logKTarget, 6);
+  const mText = formatSigned(fit.m, 6);
+  const cText = formatSigned(fit.c, 6);
+  const rawText = formatCalc(fit.rawPercentB, 3);
+  let rounded = `The page recommends ${formatPercentB(fit.nextPercentB)}% B.`;
+  if (fit.clamped === "high") {
+    rounded += " The calculated value was above 100, so it is held at 100.";
+  } else if (fit.clamped === "low") {
+    rounded += " The calculated value was below 0, so it is held at 0.";
+  }
+  return [
+    "t0 is the first peak’s retention time, in minutes. For the last peak, k = (last peak time − t0) / t0. k is how many t0-lengths the last peak sits past the unretained peak. logK is the base-10 log of k.",
+    points.join(" "),
+    `Those points fall close to a straight line, logK = m × %B + c. m = ${mText} and c = ${cText}.`,
+    `The logK we substitute is not from a run. It is the logK that would put the last peak at the specified time of ${spec} min. The t0 for that target is the average t0 of the runs in the line, ${targetT0} min. k = (${spec} − ${targetT0}) / ${targetT0} = ${formatCalc(fit.kTarget, 3)}, then logK = log10(k) = ${logKText}.`,
+    `%B = (that logK − c) / m = (${logKText} − ${cText}) / ${mText} = ${rawText}. ${rounded}`,
+  ];
+}
+
+function formatCalc(value: number, digits: number): string {
+  return value.toFixed(digits);
+}
+
+function formatSigned(value: number, digits: number): string {
+  const text = Math.abs(value).toFixed(digits);
+  return value < 0 ? `−${text}` : text;
 }
 
 function ordinaryLeastSquares(points: { x: number; y: number }[]): { m: number; c: number } | null {

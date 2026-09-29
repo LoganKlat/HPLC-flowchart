@@ -7,6 +7,8 @@ import {
   carryForwardIndex,
   decideRetention,
   inBetweenPercentError,
+  minimumPercentNote,
+  refitMinimumPercent,
   roundTargetPercent,
   type RetentionRules,
   type RetentionSample,
@@ -109,9 +111,38 @@ describe("retention %B along the four lab files", () => {
     );
     expect(decision.why).not.toContain("66%");
     expect(decision.why).not.toContain("0.66");
-    expect(decision.why).not.toContain("logK");
-    expect(decision.why).not.toContain("m =");
     expect(decision.why).not.toContain("80%");
+    expect(decision.why).not.toContain("middle t0");
+
+    const fit = decision.fit!;
+    expect(fit.catalog.map((run) => run.included)).toEqual([false, true, true, true]);
+    expect(fit.catalog[0]?.logK).not.toBeNull();
+    expect(fit.specifiedTimeMin).toBe(10);
+    const starting = fit.catalog.filter((run) => run.included).map((run) => run.runNumber);
+    const again = refitMinimumPercent(fit.catalog, starting, fit.specifiedTimeMin, fit.usedPercentB);
+    expect(again).not.toBeNull();
+    expect(again!.nextPercentB).toBe(41);
+    expect(again!.m).toBeCloseTo(fit.m, 10);
+    expect(again!.c).toBeCloseTo(fit.c, 10);
+    expect(again!.rawPercentB).toBeCloseTo(fit.rawPercentB, 8);
+    expect(again!.t0Average).toBeCloseTo(1.089, 3);
+    const note = minimumPercentNote(again!, fit.specifiedTimeMin).join("\n");
+    expect(note).toContain("t0 is the first peak’s retention time");
+    expect(note).toContain("k = (last peak time − t0) / t0");
+    expect(note).toContain("logK is the base-10 log of k");
+    expect(note).toContain("logK = m × %B + c");
+    expect(note).toContain("m =");
+    expect(note).toContain("The t0 for that target is the average t0 of the runs in the line, 1.089 min");
+    expect(note).toContain("logK = log10(k)");
+    expect(note).toContain("%B = (that logK − c) / m");
+    expect(note).toContain("The page recommends 41% B.");
+    expect(note).not.toContain("middle t0");
+    expect(note).not.toContain("half");
+    expect(note).not.toContain("you set");
+    expect(refitMinimumPercent(fit.catalog, [2], fit.specifiedTimeMin, fit.usedPercentB)).toBeNull();
+    const withLeftOut = refitMinimumPercent(fit.catalog, [1, 2, 3, 4], fit.specifiedTimeMin, fit.usedPercentB);
+    expect(withLeftOut).not.toBeNull();
+    expect(decideRetention(samples, pathRules).nextPercentB).toBe(41);
   });
 
   it("uses the %B saved on the run, not the percent in the file name", () => {
