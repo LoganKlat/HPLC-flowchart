@@ -923,11 +923,11 @@ function plan40(
   return {
     status: "recommend",
     step: "temp-40",
-    nextChange: `Run the next chromatogram at 40°C, still at ${percent}% B. Heat comes first, at the same %B, so the retention time stays similar while the peaks have a chance to pull apart.`,
+    nextChange: `Run the next chromatogram at 40°C, still at ${percent}% B. The goal is to change the conditions so the selectivity changes and the overlapping peaks separate. A higher temperature shortens retention. The %B stays the same.`,
     why: [
       `Selectivity starts from Run ${args.baselineNumber} at ${percent}% B.`,
       checksSentence(args.baseline, args.baselineNumber, args.setup),
-      `The peaks are not separated well enough to stop. Heat is the first selectivity change. The next run stays at ${percent}% B so the solvent strength, and the retention time, stay similar. The column temperature goes to 40°C. A warmer column lets the compounds spend less time stuck to the coating, which can pull overlapping peaks apart.`,
+      `The peaks are not separated well enough to stop. The next chromatogram is 40°C, still at ${percent}% B. The goal is to change the conditions so the selectivity changes and the overlapping peaks separate. A higher temperature shortens retention. The %B stays the same.`,
       args.ambient.sentence,
     ].join(" "),
     prefill: {
@@ -972,7 +972,7 @@ function plan60(
     why: [
       `${what} at 40°C compared with Run ${args.baselineNumber}, the run from before the temperature change.`,
       compareSentence(args.baseline, args.baselineNumber, heated, args.setup.requiredPeaks),
-      `Heat helped, so 60°C at the same ${percent}% B is next. Staying at the same %B keeps the solvent strength the same, so the retention time stays in the same neighborhood. A warmer column already improved the separation, and 60°C continues that change. Going to 60°C is still a selectivity change. Efficiency is not the step being taken.`,
+      `Heat helped, so 60°C at the same ${percent}% B is next. A higher temperature shortens retention. The %B stays the same. The point of the heat is a selectivity change so overlapping peaks can separate.`,
       "A higher temperature is likely to increase separation further.",
     ].join(" "),
     prefill: { percentB: percent, temperature: "60", solvent, ligand },

@@ -617,7 +617,7 @@ function lookDecision(
   const sourceIndex = samples.length - 1;
   const why =
     mode === "picker"
-      ? "The peak count is still under the specification, so some peaks are still overlapping. Pick which uploaded run to heat. Heat is the next change. It can pull overlapping peaks apart while the solvent strength stays the same. Heat is a selectivity change. Retention stays similar because %B is not dropped."
+      ? "The peak count is still under the specification, so some peaks are still overlapping. Pick which uploaded run to heat. Heat is the next change. The goal is a selectivity change so the overlapping peaks separate. A higher temperature shortens retention. The %B of the run you pick stays the same."
       : mode === "between"
         ? "Compare the runs. The calculated %B matches a run already uploaded, so another drop is not the next step. An in-between %B uses the same temperature, solvent, and ligand as this run, and it sits between %B values already tried. A no does not start temperature, solvent, or a column. An in-between %B changes retention. It does not change selectivity, because temperature, solvent, and ligand stay the same."
         : "Compare the runs before the next change. An in-between %B uses the same temperature, solvent, and ligand as the minimum %B run, and it fills a gap between %B values already tried. If that is not useful, pick which uploaded run to heat. Heat can pull overlapping peaks apart without dropping %B again. An in-between %B changes retention only. Heat is a selectivity change.";

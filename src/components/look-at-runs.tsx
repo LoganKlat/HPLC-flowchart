@@ -134,8 +134,9 @@ export function LookAtRuns({
         <section id="pick-run" className="rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10">
           <h2 className="font-heading text-base">Which run to heat</h2>
           <p className="mt-1 text-sm leading-relaxed text-foreground">
-            Pick one uploaded run. The next change is heat, to 40°C, at that run’s %B. Heat can pull overlapping peaks
-            apart while the solvent strength stays the same. A late run can be picked. Not met on time means the last
+            Pick one uploaded run. The next change is heat, to 40°C, at that run’s %B. The goal is a selectivity change
+            so the overlapping peaks separate. A higher temperature shortens retention. The %B stays the same. A late
+            run can be picked. Not met on time means the last
             peak is later than the specification.
           </p>
           <div className="mt-3 flex flex-col gap-2">

@@ -519,7 +519,7 @@ export function HplcApp() {
         ))}
       </Tabs>
       <footer className="mt-10 border-t border-border pt-4 text-xs text-muted-foreground">
-        Work for Logan Klat.
+        Built by Logan Klat
       </footer>
       </>
       ) : null}
