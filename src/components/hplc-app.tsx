@@ -4,6 +4,7 @@ import { useMemo, useRef, useState, type CSSProperties, type ReactNode } from "r
 import { ChoiceSelect } from "@/components/choice-select";
 import { FileDrop } from "@/components/file-drop";
 import { LeaveSelectivityAsk, LeaveSelectivityDone } from "@/components/leave-selectivity";
+import { LookAtRuns } from "@/components/look-at-runs";
 import { LaterChangeNote, RetentionDecisionView, StartHighBNote } from "@/components/retention-decision";
 import { ResultsPanel } from "@/components/results-panel";
 import { RunForm } from "@/components/run-form";
@@ -16,15 +17,21 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { evaluateRun, parseUserCount, parseUserNumber, type RuleNumbers } from "@/lib/evaluate";
 import { FILE_NAME_CHECKBOX_LABEL, parseRunFileName } from "@/lib/filename-details";
 import { readLabFile, type LabFileRead } from "@/lib/lab-file";
-import { decideRetention, formatPercentB, type RetentionDecision, type RetentionSample } from "@/lib/retention";
+import {
+  decideRetention,
+  formatPercentB,
+  inBetweenPercentError,
+  type RetentionChoice,
+  type RetentionDecision,
+  type RetentionSample,
+} from "@/lib/retention";
 import { emptyRuleInputs, emptyRunDetails, type RuleInputs, type RunDetails } from "@/lib/run-details";
 import {
   LIGANDS,
   SOLVENTS,
-  efficiencyAsk,
   findSolvent,
-  type EfficiencyAsk,
   planHistory,
+  type HeatStart,
   solventById,
   solventChoicePercent,
   type SelectivityPlan,
@@ -98,8 +105,13 @@ export function HplcApp() {
   const [details, setDetails] = useState<RunDetails>(emptyRunDetails);
   const [rules, setRules] = useState<RuleInputs>(emptyRuleInputs);
   const [runs, setRuns] = useState<RunState[]>([emptyRun()]);
-  const [declinedThrough, setDeclinedThrough] = useState<number | null>(null);
-  const [declinedSevenPeaks, setDeclinedSevenPeaks] = useState(false);
+  const [declinedEfficiencyNow, setDeclinedEfficiencyNow] = useState(false);
+  const [efficiencyChosen, setEfficiencyChosen] = useState(false);
+  const [inBetween, setInBetween] = useState<{ percent: number; sourceIndex: number } | null>(null);
+  const [heatChoice, setHeatChoice] = useState<HeatStart | null>(null);
+  const [betweenAnswer, setBetweenAnswer] = useState<"yes" | "no" | null>(null);
+  const [betweenText, setBetweenText] = useState("");
+  const [betweenError, setBetweenError] = useState<string | null>(null);
   const [leftSelectivity, setLeftSelectivity] = useState(false);
   const [tempPathByRun, setTempPathByRun] = useState<Record<number, TempPath>>({});
   const [hoveredRun, setHoveredRun] = useState<number | null>(null);
@@ -111,7 +123,18 @@ export function HplcApp() {
   fillFromFileNameRef.current = fillFromFileName;
 
   const checks = useMemo(() => toRuleNumbers(rules), [rules]);
-  const syncedRuns = syncNextRun(runs, details, checks, leftSelectivity);
+  const choice = useMemo<RetentionChoice>(
+    () => ({
+      declinedEfficiencyNow,
+      afterInBetween: inBetweenMatches(runs, inBetween),
+    }),
+    [declinedEfficiencyNow, runs, inBetween],
+  );
+  const syncedRuns = syncNextRun(runs, details, checks, {
+    leftSelectivity: leftSelectivity || efficiencyChosen,
+    choice,
+    heat: heatChoice,
+  });
   if (syncedRuns !== runs) {
     setRuns(syncedRuns);
   }
@@ -167,6 +190,7 @@ export function HplcApp() {
       const history = planHistory(
         current.slice(0, count).map((run, runIndex) => toSelectivityRun(run, runIndex, detailsRef.current)),
         setupFrom(detailsRef.current, checks),
+        { heat: heatChoice },
       );
       const choice = history.phase === "selectivity" ? history.plan.tempChoice : null;
       if (!choice) return current;
@@ -197,6 +221,7 @@ export function HplcApp() {
       const history = planHistory(
         current.slice(0, count).map((run, runIndex) => toSelectivityRun(run, runIndex, details)),
         setupFrom(details, checks),
+        { heat: heatChoice },
       );
       const solvent = solventId ? solventById(solventId) : null;
       const matched =
@@ -326,7 +351,7 @@ export function HplcApp() {
         <p className="text-xs tracking-[0.16em] text-[#0f6b56] uppercase">Composite sample</p>
         <h1 className="mt-1 font-heading text-3xl text-foreground sm:text-4xl">HPLC run check</h1>
         <p className="mt-2 max-w-2xl text-base text-muted-foreground">
-          See whether this chromatogram meets the rules you set. While retention or selectivity is
+          See whether this chromatogram meets the specification. While retention or selectivity is
           the step, the page says what to change next.
         </p>
       </header>
@@ -380,14 +405,70 @@ export function HplcApp() {
               onProblem={acceptProblem}
               onRemove={removeFile}
               onOpen={(next) => setActive(next)}
-              declinedThrough={declinedThrough}
-              declinedSevenPeaks={declinedSevenPeaks}
-              leftSelectivity={leftSelectivity}
-              onDecline={(ask) => {
-                if (ask.peakCount >= 7) setDeclinedSevenPeaks(true);
-                if (ask.multiple != null) setDeclinedThrough(ask.multiple);
+              leftSelectivity={leftSelectivity || efficiencyChosen}
+              onLeave={() => setEfficiencyChosen(true)}
+              onDeclineEfficiency={() => setDeclinedEfficiencyNow(true)}
+              betweenAnswer={betweenAnswer}
+              betweenText={betweenText}
+              betweenError={betweenError}
+              onBetweenAnswer={(answer) => {
+                setBetweenAnswer(answer);
+                setBetweenError(null);
+                if (answer === "no") {
+                  const explanation = explainRun(syncedRuns, index, details, checks, { choice, heat: heatChoice });
+                  const look = explanation?.kind === "retention" ? explanation.decision.look : null;
+                  if (look?.mode === "between") setEfficiencyChosen(true);
+                }
               }}
-              onLeave={() => setLeftSelectivity(true)}
+              onBetweenText={(value) => {
+                setBetweenText(value);
+                setBetweenError(null);
+              }}
+              onUseBetween={() => {
+                const explanation = explainRun(syncedRuns, index, details, checks, { choice, heat: heatChoice });
+                const decision = explanation?.kind === "retention" ? explanation.decision : null;
+                const used = syncedRuns
+                  .filter((run) => run.status === "ready")
+                  .map((run) => parseUserNumber(run.percentB))
+                  .filter((percent): percent is number => percent != null);
+                const error = inBetweenPercentError(betweenText, used);
+                if (error || !decision?.look) {
+                  setBetweenError(error ?? "Type a %B from 0 to 100.");
+                  return;
+                }
+                const percent = Number(betweenText.trim());
+                const sourceIndex = decision.look.sourceIndex;
+                setInBetween({ percent, sourceIndex });
+                setBetweenError(null);
+                setRuns((current) => {
+                  const copy = current.slice();
+                  const source = copy[sourceIndex];
+                  const slot = sourceIndex + 1;
+                  const existing = copy[slot] ?? emptyRun();
+                  if (existing.status !== "empty" && copy[slot]) return current;
+                  const inherited = inheritedConditions(source ?? emptyRun(), sourceIndex, details);
+                  copy[slot] = {
+                    ...(copy[slot] ?? emptyRun()),
+                    percentB: formatPercentB(percent),
+                    temperature: inherited.temperature,
+                    solvent: inherited.solvent,
+                    ligand: inherited.ligand,
+                    percentEdited: true,
+                    temperatureEdited: true,
+                    solventEdited: true,
+                    ligandEdited: true,
+                  };
+                  return copy;
+                });
+                setActive(sourceIndex + 1);
+              }}
+              onPickRun={(pickIndex) => {
+                const count = readyPrefix(syncedRuns);
+                setHeatChoice({ carryIndex: pickIndex, seriesLength: count });
+                setBetweenAnswer("no");
+              }}
+              choice={choice}
+              heat={heatChoice}
               fillFromFileName={fillFromFileName}
               fileNameNote={fileNameNote}
               onToggleFillFromFileName={onToggleFillFromFileName}
@@ -507,11 +588,18 @@ function RunPane({
   onProblem,
   onRemove,
   onOpen,
-  declinedThrough,
-  declinedSevenPeaks,
   leftSelectivity,
-  onDecline,
   onLeave,
+  onDeclineEfficiency,
+  betweenAnswer,
+  betweenText,
+  betweenError,
+  onBetweenAnswer,
+  onBetweenText,
+  onUseBetween,
+  onPickRun,
+  choice,
+  heat,
   fillFromFileName,
   fileNameNote,
   onToggleFillFromFileName,
@@ -537,38 +625,35 @@ function RunPane({
   onProblem: (index: number, fileName: string, message: string) => void;
   onRemove: (index: number) => void;
   onOpen: (index: number) => void;
-  declinedThrough: number | null;
-  declinedSevenPeaks: boolean;
   leftSelectivity: boolean;
-  onDecline: (ask: EfficiencyAsk) => void;
   onLeave: () => void;
+  onDeclineEfficiency: () => void;
+  betweenAnswer: "yes" | "no" | null;
+  betweenText: string;
+  betweenError: string | null;
+  onBetweenAnswer: (answer: "yes" | "no") => void;
+  onBetweenText: (value: string) => void;
+  onUseBetween: () => void;
+  onPickRun: (index: number) => void;
+  choice: RetentionChoice;
+  heat: HeatStart | null;
   fillFromFileName: boolean;
   fileNameNote: string | null;
   onToggleFillFromFileName: (checked: boolean) => void;
 }) {
   if (run.afterRetention) {
-    const prior = index > 0 ? explainRun(runs, index - 1, details, checks) : null;
+    const prior = index > 0 ? explainRun(runs, index - 1, details, checks, { choice, heat }) : null;
     return <LaterChangeNote decision={prior?.kind === "retention" ? prior.decision : null} />;
   }
 
-  const explanation = explainRun(runs, index, details, checks);
+  const explanation = explainRun(runs, index, details, checks, { choice, heat });
   const rows = run.read ? evaluateRun(run.read, checks) : null;
   const next = runs[index + 1];
   const selectivity = explanation?.kind === "selectivity" ? explanation.plan : null;
+  const retention = explanation?.kind === "retention" ? explanation.decision : null;
   const ask =
-    !leftSelectivity && run.status === "ready" && run.read
-      ? efficiencyAsk({
-          peakCount: run.read.peakCount,
-          foundResolution: run.read.minResolutionExcludingFirst,
-          requiredPeaks: checks.requiredPeaks,
-          minResolution: checks.minResolution,
-          declinedThrough,
-          declinedSevenPeaks,
-          lastPeakTimeMin: run.read.lastPeakTimeMin,
-          specifiedRunTimeMin: checks.lastPeakTimeMin,
-          maxBackPressurePsi: run.read.maxBackPressurePsi,
-          maxBackPressureSpec: checks.maxBackPressurePsi,
-        })
+    !leftSelectivity && retention?.status === "ask" && retention.efficiencyNow
+      ? retention.efficiencyNow
       : null;
 
   return (
@@ -637,11 +722,22 @@ function RunPane({
               <LeaveSelectivityAsk
                 ask={ask}
                 onYes={onLeave}
-                onNo={() => onDecline(ask)}
+                onNo={() => onDeclineEfficiency()}
+              />
+            ) : retention?.status === "look" && retention.look && !heat ? (
+              <LookAtRuns
+                look={retention.look}
+                betweenAnswer={betweenAnswer}
+                betweenText={betweenText}
+                betweenError={betweenError}
+                onAnswer={onBetweenAnswer}
+                onBetweenText={onBetweenText}
+                onUseBetween={onUseBetween}
+                onPickRun={onPickRun}
               />
             ) : (
               <>
-                {explanation?.kind === "retention" ? <RetentionDecisionView decision={explanation.decision} /> : null}
+                {retention ? <RetentionDecisionView decision={retention} /> : null}
                 {selectivity ? (
                   <SelectivityDecisionView
                     plan={selectivity}
@@ -807,6 +903,7 @@ function explainRun(
   index: number,
   details: RunDetails,
   checks: RuleNumbers,
+  options: { choice: RetentionChoice; heat: HeatStart | null },
 ): Explanation | null {
   const run = runs[index];
   if (!run || run.status !== "ready" || !run.read) return null;
@@ -817,20 +914,25 @@ function explainRun(
   const history = planHistory(
     prefix.map((item, itemIndex) => toSelectivityRun(item, itemIndex, details)),
     setupFrom(details, checks),
+    { heat: options.heat },
   );
   if (history.phase === "selectivity") return { kind: "selectivity", plan: history.plan };
   const segment = prefix.slice(history.segmentStart);
-  return { kind: "retention", decision: decideRetention(segment.map(toSample), checks) };
+  const onLatest = index === prefix.length - 1;
+  return {
+    kind: "retention",
+    decision: decideRetention(segment.map(toSample), checks, onLatest ? options.choice : undefined),
+  };
 }
 
 function syncNextRun(
   runs: RunState[],
   details: RunDetails,
   checks: RuleNumbers,
-  leftSelectivity: boolean,
+  options: { leftSelectivity: boolean; choice: RetentionChoice; heat: HeatStart | null },
 ): RunState[] {
   const count = readyPrefix(runs);
-  if (leftSelectivity) {
+  if (options.leftSelectivity) {
     const next = runs[count];
     if (next && next.status === "empty" && !runWasEdited(next) && runs.length === count + 1) {
       return runs.slice(0, count);
@@ -842,9 +944,10 @@ function syncNextRun(
   const history = planHistory(
     ready.map((run, index) => toSelectivityRun(run, index, details)),
     setupFrom(details, checks),
+    { heat: options.heat },
   );
   const next = runs[count];
-  const prefill = prefillFor(ready, history, details, checks);
+  const prefill = prefillFor(ready, history, details, checks, options.choice);
 
   if (!prefill) {
     if (!next || next.status !== "empty" || runWasEdited(next)) return runs;
@@ -869,11 +972,12 @@ function prefillFor(
   history: ReturnType<typeof planHistory>,
   details: RunDetails,
   checks: RuleNumbers,
+  choice: RetentionChoice,
 ): SelectivityPrefill | null {
   if (history.phase === "selectivity") {
     return history.plan.status === "recommend" ? history.plan.prefill : null;
   }
-  const decision = decideRetention(ready.slice(history.segmentStart).map(toSample), checks);
+  const decision = decideRetention(ready.slice(history.segmentStart).map(toSample), checks, choice);
   if (decision.status !== "recommend" || decision.nextPercentB == null) return null;
   const lastIndex = ready.length - 1;
   const inherited = inheritedConditions(ready[lastIndex], lastIndex, details);
@@ -990,7 +1094,20 @@ function toSample(run: RunState): RetentionSample {
     firstPeakTimeMin: run.read?.firstPeakTimeMin ?? null,
     minResolutionExcludingFirst: run.read?.minResolutionExcludingFirst ?? null,
     maxBackPressurePsi: run.read?.maxBackPressurePsi ?? null,
+    peaks: run.read?.peaks ?? [],
   };
+}
+
+function inBetweenMatches(
+  runs: RunState[],
+  picked: { percent: number; sourceIndex: number } | null,
+): boolean {
+  if (!picked) return false;
+  const run = runs[picked.sourceIndex + 1];
+  if (!run || run.status !== "ready" || !run.read) return false;
+  const percent = parseUserNumber(run.percentB);
+  if (percent == null) return false;
+  return Math.abs(percent - picked.percent) <= 1e-9;
 }
 
 function toRuleNumbers(rules: RuleInputs): RuleNumbers {

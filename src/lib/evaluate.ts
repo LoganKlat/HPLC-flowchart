@@ -127,7 +127,7 @@ export function evaluateRun(read: LabFileRead, rules: RuleNumbers): ResultRow[] 
         read.lastPeakTimeMin == null
           ? "The peak table has no retention times in the R.Time column."
           : rules.lastPeakTimeMin != null && read.lastPeakTimeMin > rules.lastPeakTimeMin
-            ? "Later than the time you set. That time is the latest the last peak may come out."
+            ? "Later than the specification. That time is the latest the last peak may come out."
             : null,
     },
     {

@@ -275,8 +275,6 @@ export function efficiencyAsk(input: {
   requiredPeaks: number | null;
   minResolution: number | null;
   declinedThrough: number | null;
-  /** No again means a later run is not asked only because it also has 7 peaks. */
-  declinedSevenPeaks?: boolean;
   lastPeakTimeMin?: number | null;
   specifiedRunTimeMin?: number | null;
   maxBackPressurePsi?: number | null;
@@ -287,15 +285,15 @@ export function efficiencyAsk(input: {
   const measured = resolutionForDecision(input.peakCount, input.foundResolution, input.requiredPeaks);
   if (measured == null || !Number.isFinite(measured)) return null;
 
-  const peaksMeetSpec = input.requiredPeaks != null && input.peakCount >= input.requiredPeaks;
-  const multiple = peaksMeetSpec ? highestMultiple(measured, input.minResolution) : null;
-  if (peaksMeetSpec && multiple != null) {
+  const peaksMeetSpec = input.requiredPeaks != null && input.peakCount === input.requiredPeaks;
+  if (peaksMeetSpec) return null;
+  if (input.requiredPeaks != null && input.peakCount > input.requiredPeaks) return null;
+  const multiple = input.requiredPeaks != null && input.peakCount >= input.requiredPeaks
+    ? highestMultiple(measured, input.minResolution)
+    : null;
+  if (multiple != null) {
     if (input.declinedThrough != null && multiple <= input.declinedThrough + 1e-9) return null;
     return finishEfficiencyAsk(input, measured, multiple);
-  }
-
-  if (input.peakCount >= 7 && !input.declinedSevenPeaks) {
-    return finishEfficiencyAsk(input, measured, null);
   }
   return null;
 }
@@ -381,8 +379,9 @@ function efficiencyWhy(input: {
     input.maxBackPressurePsi != null &&
     Number.isFinite(input.maxBackPressurePsi) &&
     !isOver(input.maxBackPressurePsi, input.maxBackPressureSpec!);
-  const peaksChecked = input.requiredPeaks != null;
-  const peaksMet = peaksChecked && input.peakCount >= input.requiredPeaks;
+  const requiredPeaks = input.requiredPeaks;
+  const peaksChecked = requiredPeaks != null;
+  const peaksMet = requiredPeaks != null && input.peakCount != null && input.peakCount >= requiredPeaks;
   const everySpecificationMet =
     (!peaksChecked || peaksMet) &&
     resolutionMet &&
@@ -509,27 +508,66 @@ export function adjustedPercentB(input: {
   return { percentB: rounded.value, method: "line", clamped: rounded.clamped };
 }
 
-export function planHistory(runs: SelectivityRun[], setup: SelectivitySetup): HistoryPlan {
+export type HeatStart = {
+  /** Uploaded run the user picked to heat. */
+  carryIndex: number;
+  /** How many runs were already uploaded when that pick was made. Later runs are the temperature path. */
+  seriesLength: number;
+};
+
+export function planHistory(
+  runs: SelectivityRun[],
+  setup: SelectivitySetup,
+  options?: { heat?: HeatStart | null },
+): HistoryPlan {
   const tried: string[] = [];
   if (setup.originalLigand.trim()) tried.push(setup.originalLigand);
 
   let start = 0;
+  let forced: { finishedOffset: number; carryIndex: number } | null = null;
+  const heat = options?.heat;
+  if (
+    heat &&
+    heat.carryIndex >= 0 &&
+    heat.carryIndex < runs.length &&
+    heat.seriesLength > heat.carryIndex &&
+    heat.seriesLength <= runs.length &&
+    !peaksMatchSpec(runs[runs.length - 1], setup)
+  ) {
+    forced = { finishedOffset: heat.seriesLength - 1, carryIndex: heat.carryIndex };
+  }
   while (start < runs.length) {
     const segment = runs.slice(start);
     const rules = retentionRules(setup);
     let finishedOffset = -1;
-    for (let count = 1; count <= segment.length; count++) {
-      const decision = decideRetention(segment.slice(0, count).map(toRetentionSample), rules);
-      if (decision.status === "finished") {
-        finishedOffset = count - 1;
-        break;
+    let carryIndex: number | null = null;
+    if (forced && start === 0) {
+      finishedOffset = forced.finishedOffset;
+      carryIndex = forced.carryIndex;
+      forced = null;
+    } else if (forced && start > 0) {
+      finishedOffset = 0;
+      carryIndex = 0;
+      forced = null;
+    } else {
+      for (let count = 1; count <= segment.length; count++) {
+        const decision = decideRetention(segment.slice(0, count).map(toRetentionSample), rules);
+        if (decision.status === "finished") {
+          finishedOffset = count - 1;
+          break;
+        }
+      }
+      if (finishedOffset >= 0) {
+        carryIndex = carryForwardIndex(segment.slice(0, finishedOffset + 1).map(toRetentionSample), rules);
       }
     }
     if (finishedOffset < 0) return { phase: "retention", segmentStart: start };
+    if (peaksMatchSpec(runs[runs.length - 1], setup)) {
+      return { phase: "retention", segmentStart: start };
+    }
 
     const window = segment.slice(0, finishedOffset + 1);
     const later = segment.slice(finishedOffset + 1);
-    const carryIndex = carryForwardIndex(window.map(toRetentionSample), rules);
     const outcome = walkSelectivity({
       carry: carryIndex == null ? null : window[carryIndex],
       later,
@@ -545,9 +583,35 @@ export function planHistory(runs: SelectivityRun[], setup: SelectivitySetup): Hi
     }
     const restart = later[outcome.ligandRunOffset];
     if (restart?.ligand.trim()) tried.push(restart.ligand);
-    start = start + finishedOffset + 1 + outcome.ligandRunOffset;
+    const nextStart = start + finishedOffset + 1 + outcome.ligandRunOffset;
+    const nextSegment = runs.slice(nextStart);
+    const first = nextSegment[0];
+    const second = nextSegment[1];
+    const looksLikeHeat =
+      first?.temperatureC != null &&
+      second?.temperatureC != null &&
+      second.temperatureC > first.temperatureC + 0.5;
+    if (
+      nextSegment.length > 1 &&
+      looksLikeHeat &&
+      !peaksMatchSpec(nextSegment[nextSegment.length - 1], setup)
+    ) {
+      forced = { finishedOffset: 0, carryIndex: 0 };
+      start = nextStart;
+      continue;
+    }
+    return { phase: "retention", segmentStart: nextStart };
   }
   return { phase: "retention", segmentStart: start };
+}
+
+function peaksMatchSpec(run: SelectivityRun | undefined, setup: SelectivitySetup): boolean {
+  return (
+    run != null &&
+    setup.requiredPeaks != null &&
+    run.peakCount != null &&
+    run.peakCount === setup.requiredPeaks
+  );
 }
 
 type WalkResult = { kind: "plan"; plan: SelectivityPlan } | { kind: "restart"; ligandRunOffset: number };
@@ -567,8 +631,8 @@ function walkSelectivity(args: {
     return {
       kind: "plan",
       plan: blockedPlan(
-        "Retention is finished, but no uploaded run is within the last-peak time you set, so selectivity has no %B to start from.",
-        "Every uploaded run in this %B series has a last peak past the time you set. Selectivity starts from a run that is still inside that time.",
+        "Retention is finished, but no uploaded run is within the last-peak time in the specification, so selectivity has no %B to start from.",
+        "Every uploaded run in this %B series has a last peak past the specification. Selectivity starts from a run that is still inside that time.",
       ),
     };
   }
@@ -1055,9 +1119,9 @@ function peakSentence(run: SelectivityRun, setup: SelectivitySetup, check: Happy
   if (setup.requiredPeaks == null) return "The peak-count rule is empty, so enough peaks cannot be judged.";
   if (run.peakCount == null) return "The peak count is missing.";
   if (check.enoughPeaks) {
-    return `It has ${formatCount(run.peakCount)} peaks, which meets the ${formatCount(setup.requiredPeaks)} you asked for.`;
+    return `It has ${formatCount(run.peakCount)} peaks, which meets the specification of ${formatCount(setup.requiredPeaks)}.`;
   }
-  return `It has ${formatCount(run.peakCount)} peaks, under the ${formatCount(setup.requiredPeaks)} you asked for.`;
+  return `It has ${formatCount(run.peakCount)} peaks, under the specification of ${formatCount(setup.requiredPeaks)}.`;
 }
 
 function resolutionSentence(run: SelectivityRun, setup: SelectivitySetup, check: HappyCheck): string {
@@ -1066,7 +1130,7 @@ function resolutionSentence(run: SelectivityRun, setup: SelectivitySetup, check:
     run.peakCount != null &&
     run.peakCount < setup.requiredPeaks
   ) {
-    return "It has fewer peaks than you asked for, so its minimum resolution is 0. Missing peaks are overlaps.";
+    return "It has fewer peaks than the specification, so its minimum resolution is 0. Missing peaks are overlaps.";
   }
   if (check.missingResolutionRule || setup.minResolution == null) {
     return "You did not type a minimum resolution, so resolution cannot be judged and the run is not treated as finished.";

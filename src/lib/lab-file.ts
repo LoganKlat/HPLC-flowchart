@@ -11,6 +11,12 @@ export type ChromatogramPoint = {
   intensity: number;
 };
 
+export type PeakMeasurement = {
+  timeMin: number | null;
+  area: number | null;
+  height: number | null;
+};
+
 export type LabFileRead = {
   /** Set when the peak table cannot be used. Plain words for the screen. */
   blockingMessage: string | null;
@@ -21,6 +27,10 @@ export type LabFileRead = {
   firstPeakTimeMin: number | null;
   /** Every peak-table R.Time, in table order. */
   peakTimesMin: number[];
+  /** Every peak row: retention time, area, and height. Columns are found by header. */
+  peaks: PeakMeasurement[];
+  areaColumnFound: boolean;
+  heightColumnFound: boolean;
   lastPeakTimeMin: number | null;
   /** Smallest Resolution after the first peak. Null when that value is not available. */
   minResolutionExcludingFirst: number | null;
@@ -112,8 +122,15 @@ export function readLabFile(input: string | ArrayBuffer | Uint8Array): LabFileRe
     );
   }
 
-  const peakTimesMin = peakRows
-    .map((row) => parseFileNumber(row[timeCol] ?? ""))
+  const areaCol = columnIndex(peakTable.headers, "Area");
+  const heightCol = columnIndex(peakTable.headers, "Height");
+  const peaks = peakRows.map((row) => ({
+    timeMin: parseFileNumber(row[timeCol] ?? ""),
+    area: areaCol < 0 ? null : parseFileNumber(row[areaCol] ?? ""),
+    height: heightCol < 0 ? null : parseFileNumber(row[heightCol] ?? ""),
+  }));
+  const peakTimesMin = peaks
+    .map((peak) => peak.timeMin)
     .filter((value): value is number => value != null);
   const firstPeakTimeMin = peakTimesMin[0] ?? null;
   const lastPeakTimeMin = peakTimesMin.length > 0 ? Math.max(...peakTimesMin) : null;
@@ -145,6 +162,9 @@ export function readLabFile(input: string | ArrayBuffer | Uint8Array): LabFileRe
     peakRowCount: peakRows.length,
     firstPeakTimeMin,
     peakTimesMin,
+    peaks,
+    areaColumnFound: areaCol >= 0,
+    heightColumnFound: heightCol >= 0,
     lastPeakTimeMin,
     minResolutionExcludingFirst,
     resolutionColumnFound: resolutionCol >= 0,
@@ -250,6 +270,9 @@ function emptyRead(): LabFileRead {
     peakRowCount: 0,
     firstPeakTimeMin: null,
     peakTimesMin: [],
+    peaks: [],
+    areaColumnFound: false,
+    heightColumnFound: false,
     lastPeakTimeMin: null,
     minResolutionExcludingFirst: null,
     resolutionColumnFound: false,

@@ -1,5 +1,3 @@
-import type { EfficiencyAsk } from "@/lib/selectivity";
-
 const choiceClass =
   "flex h-10 min-w-0 cursor-pointer items-center justify-center rounded-lg border px-3 text-sm font-medium";
 
@@ -8,7 +6,7 @@ export function LeaveSelectivityAsk({
   onYes,
   onNo,
 }: {
-  ask: EfficiencyAsk;
+  ask: { question: string; why: string };
   onYes: () => void;
   onNo: () => void;
 }) {

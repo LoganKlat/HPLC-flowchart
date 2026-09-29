@@ -1,4 +1,5 @@
 import { formatDecimal, resolutionForDecision } from "@/lib/evaluate";
+import type { PeakMeasurement } from "@/lib/lab-file";
 
 /**
  * Retention step: choose the next %B, or say retention is finished.
@@ -18,6 +19,42 @@ export type RetentionSample = {
   firstPeakTimeMin: number | null;
   minResolutionExcludingFirst: number | null;
   maxBackPressurePsi: number | null;
+  /** Peak table rows. Used when the peak count is above the specification. */
+  peaks?: PeakMeasurement[];
+};
+
+export type RetentionChoice = {
+  /** The latest file is the in-between %B the user typed. */
+  afterInBetween?: boolean;
+  /** The user said no to moving on, so show the minimum %B. */
+  declinedEfficiencyNow?: boolean;
+};
+
+export type LookMark = "met" | "not-met" | "blank";
+
+export type LookRun = {
+  index: number;
+  percentB: number | null;
+  peakCount: number | null;
+  resolution: number | null;
+  lastPeakTimeMin: number | null;
+  peaks: LookMark;
+  resolutionMark: LookMark;
+  time: LookMark;
+  pressure: LookMark;
+};
+
+export type LookStep = {
+  /** between: in-between %B only. between-then-heat: then pick a run. picker: pick a run. */
+  mode: "between" | "between-then-heat" | "picker";
+  runs: LookRun[];
+  /** Run whose temperature, solvent, and ligand are copied for an in-between %B. */
+  sourceIndex: number;
+};
+
+export type EfficiencyNow = {
+  question: string;
+  why: string;
 };
 
 export type RetentionRules = {
@@ -69,16 +106,24 @@ export type RetentionReason =
   | "missing-rules"
   | "missing-measurement"
   | "missing-percent"
-  | "fit-unavailable";
+  | "fit-unavailable"
+  | "investigate"
+  | "specs-met"
+  | "efficiency"
+  | "look"
+  | "cannot-calculate";
 
 export type RetentionDecision = {
-  status: "recommend" | "finished" | "blocked";
+  status: "recommend" | "finished" | "blocked" | "investigate" | "efficiency" | "specs-met" | "look" | "ask";
   reason: RetentionReason;
   move: "drop-10" | "drop-5" | "calculated" | null;
   nextPercentB: number | null;
   nextChange: string;
   why: string;
   fit: RetentionFit | null;
+  look?: LookStep;
+  /** One question before the minimum %B, when the peak count already matches. */
+  efficiencyNow?: EfficiencyNow | null;
 };
 
 type CompleteRules = {
@@ -96,6 +141,7 @@ type SeparationSpec = {
 export function decideRetention(
   samples: RetentionSample[],
   rules: RetentionRules,
+  choice?: RetentionChoice,
 ): RetentionDecision {
   const current = samples[samples.length - 1];
   if (!current) {
@@ -121,6 +167,14 @@ export function decideRetention(
     minResolution: rules.minResolution ?? null,
   };
 
+  if (current.peakCount != null && current.peakCount > complete.requiredPeaks) {
+    return investigateDecision(current, complete);
+  }
+
+  if (choice?.afterInBetween) {
+    return afterInBetweenFile(samples, complete);
+  }
+
   if (current.percentB == null) {
     return blocked(
       "missing-percent",
@@ -136,7 +190,7 @@ export function decideRetention(
       prior.nextPercentB != null &&
       nearly(current.percentB, prior.nextPercentB)
     ) {
-      return finishedCalculated(samples, complete, prior.nextPercentB);
+      return afterCalculatedFile(samples, complete);
     }
   }
 
@@ -145,32 +199,17 @@ export function decideRetention(
     return blocked("missing-measurement", "Do not recommend a %B.", missing.join(" "));
   }
 
+  if (current.peakCount === complete.requiredPeaks) {
+    return equalPeakCount(samples, complete, choice);
+  }
+
   if (!pressureIsUnder(current.maxBackPressurePsi!, complete.maxBackPressurePsi)) {
     const measured = formatDecimal(current.maxBackPressurePsi!, 1);
     const limit = formatDecimal(complete.maxBackPressurePsi, 1);
     return blocked(
       "pressure",
-      `Do not lower %B. The highest back-pressure is ${measured} psi, already at or above the ${limit} psi you set.`,
-      `The pressure is already too high to lower %B. This run reached ${measured} psi, and the limit you set is ${limit} psi.`,
-    );
-  }
-
-  const peaksMet = current.peakCount! >= complete.requiredPeaks;
-  const timeStillShort = isBelow(current.lastPeakTimeMin!, complete.lastPeakTimeMin);
-
-  if (peaksMet && !timeStillShort) {
-    return finished(
-      "finished-peaks-time",
-      "Retention is finished. Do not lower %B.",
-      `This run already has ${formatCount(current.peakCount!)} peaks, which meets the ${formatCount(complete.requiredPeaks)} you asked for. The last peak is at ${formatMinutes(current.lastPeakTimeMin!)} min, which is not under the ${formatMinutes(complete.lastPeakTimeMin)} min you set.`,
-    );
-  }
-
-  if (peaksMet && samples.length > 1 && !resolutionIncreased(samples, complete.requiredPeaks)) {
-    return finished(
-      "finished-peaks-resolution",
-      "Retention is finished. Do not lower %B.",
-      resolutionStopWhy(samples, complete),
+      `Do not lower %B. The highest back-pressure is ${measured} psi, already at or above the specification of ${limit} psi.`,
+      `The pressure is already too high to lower %B. This run reached ${measured} psi. The specification is ${limit} psi.`,
     );
   }
 
@@ -179,6 +218,18 @@ export function decideRetention(
     return dropPoints(samples, complete, 10, "drop-10");
   }
   return calculatePercentB(samples, complete);
+}
+
+/** Blank when the typed %B can be the next in-between run. */
+export function inBetweenPercentError(raw: string, usedPercentB: number[]): string | null {
+  const text = raw.trim();
+  if (!text) return "Type a %B from 0 to 100.";
+  const value = Number(text);
+  if (!Number.isFinite(value) || value < 0 || value > 100) return "Type a %B from 0 to 100.";
+  if (usedPercentB.some((percent) => nearly(percent, value))) {
+    return `A run at ${formatPercentB(value)}% B is already uploaded. Type a different %B.`;
+  }
+  return null;
 }
 
 export function roundTargetPercent(
@@ -216,83 +267,301 @@ export function formatPercentB(value: number): string {
   return value.toFixed(2);
 }
 
-function finishedCalculated(
+const INVESTIGATE_COPY =
+  "This run has more peaks than the specification. An extra peak can be a breakdown product, a peak that split in two, or sample left over from an earlier injection. Compare the area and the height of the extra peak with the peaks from a 0.1 mg/mL injection. If it is nowhere near that size, it is probably not one of the compounds. You decide.";
+
+function investigateDecision(sample: RetentionSample, rules: CompleteRules): RetentionDecision {
+  const peaks = sample.peaks ?? [];
+  const areaMissing = peaks.length === 0 || peaks.some((peak) => peak.area == null);
+  const heightMissing = peaks.length === 0 || peaks.some((peak) => peak.height == null);
+  const lines = [
+    INVESTIGATE_COPY,
+    `Peaks: ${formatCount(sample.peakCount ?? peaks.length)}. The specification is ${formatCount(rules.requiredPeaks)}.`,
+  ];
+  if (areaMissing) lines.push("Area is missing.");
+  if (heightMissing) lines.push("Height is missing.");
+  if (peaks.length === 0) {
+    lines.push("The peak table rows are not available, so retention time, area, and height cannot be listed.");
+  } else {
+    lines.push("Every peak:");
+    for (const peak of peaks) {
+      const time = peak.timeMin == null ? "time missing" : `${formatMinutes(peak.timeMin)} min`;
+      const area = peak.area == null ? "area missing" : String(peak.area);
+      const height = peak.height == null ? "height missing" : String(peak.height);
+      lines.push(`Retention time ${time}. Area ${area}. Height ${height}.`);
+    }
+  }
+  return {
+    status: "investigate",
+    reason: "investigate",
+    move: null,
+    nextPercentB: null,
+    nextChange: "Investigate. Do not change %B, temperature, solvent, or the column.",
+    why: lines.join("\n\n"),
+    fit: null,
+  };
+}
+
+function afterCalculatedFile(samples: RetentionSample[], rules: CompleteRules): RetentionDecision {
+  const current = samples[samples.length - 1];
+  if (current.peakCount != null && current.peakCount > rules.requiredPeaks) {
+    return investigateDecision(current, rules);
+  }
+  if (current.peakCount === rules.requiredPeaks) {
+    const judged = judgeEqualPeaks(current, rules);
+    if (judged.resolutionMeets && !judged.timeLate) return specsMet(current, rules, judged);
+    if (judged.timeLate && judged.resolutionPositive) return efficiencyStop(current, rules, judged);
+    if (judged.timeLate) return holdLate(current, rules, judged);
+    return lookDecision(samples, rules, "between");
+  }
+  return lookDecision(samples, rules, "between-then-heat");
+}
+
+function afterInBetweenFile(samples: RetentionSample[], rules: CompleteRules): RetentionDecision {
+  const current = samples[samples.length - 1];
+  if (current.peakCount != null && current.peakCount > rules.requiredPeaks) {
+    return investigateDecision(current, rules);
+  }
+  if (current.peakCount === rules.requiredPeaks) {
+    const judged = judgeEqualPeaks(current, rules);
+    if (judged.resolutionMeets && !judged.timeLate) return specsMet(current, rules, judged);
+    return efficiencyStop(current, rules, judged);
+  }
+  return lookDecision(samples, rules, "picker");
+}
+
+function equalPeakCount(
   samples: RetentionSample[],
   rules: CompleteRules,
-  target: number,
+  choice: RetentionChoice | undefined,
 ): RetentionDecision {
   const current = samples[samples.length - 1];
-  const percent = formatPercentB(current.percentB!);
-  const chosen = chooseCarryRun(samples, rules);
-  const parts = [
-    `This chromatogram was run at ${percent}% B, the calculated %B (${formatPercentB(target)}% B) for a last peak at ${formatMinutes(rules.lastPeakTimeMin)} min.`,
-  ];
+  const judged = judgeEqualPeaks(current, rules);
+  if (judged.resolutionMeets && !judged.timeLate) return specsMet(current, rules, judged);
+  if (judged.timeLate && judged.resolutionPositive) return efficiencyStop(current, rules, judged);
+  if (judged.timeLate) return holdLate(current, rules, judged);
+  return minimumPercentOnce(samples, rules, choice);
+}
 
-  if (current.lastPeakTimeMin != null && isPast(current.lastPeakTimeMin, rules.lastPeakTimeMin)) {
-    parts.push(
-      `Its last peak is at ${formatMinutes(current.lastPeakTimeMin)} min, past the ${formatMinutes(rules.lastPeakTimeMin)} min you set. That time is the latest the last peak may come out, so this run is not the one to carry forward.`,
-    );
-  }
+type EqualJudgment = {
+  resolution: number | null;
+  resolutionMeets: boolean;
+  resolutionPositive: boolean;
+  timeLate: boolean;
+};
 
-  if (!chosen) {
-    parts.push(
-      "Every uploaded run has a last peak past that time, so there is no run to carry forward. Retention is finished. The next kind of change is not built yet.",
-    );
-    return {
-      status: "finished",
-      reason: "finished-calculated",
-      move: null,
-      nextPercentB: null,
-      nextChange:
-        "Retention is finished. The next kind of change is not built yet. No uploaded run is within the last-peak time you set.",
-      why: parts.join(" "),
-      fit: null,
-    };
-  }
+function judgeEqualPeaks(sample: RetentionSample, rules: CompleteRules): EqualJudgment {
+  const resolution = resolutionForDecision(
+    sample.peakCount,
+    sample.minResolutionExcludingFirst,
+    rules.requiredPeaks,
+  );
+  const hasResolutionSpec = rules.minResolution != null && rules.minResolution > 0;
+  const resolutionMeets =
+    !hasResolutionSpec || (resolution != null && Number.isFinite(resolution) && resolution + 1e-9 >= rules.minResolution!);
+  const timeLate = sample.lastPeakTimeMin != null && isPast(sample.lastPeakTimeMin, rules.lastPeakTimeMin);
+  const resolutionPositive = resolution != null && Number.isFinite(resolution) && resolution > 0;
+  return { resolution, resolutionMeets, resolutionPositive, timeLate };
+}
 
-  const chosenLabel = `Run ${chosen.index + 1} at ${formatPercentB(chosen.sample.percentB!)}% B`;
-  const resolution = carryResolution(chosen.sample, rules.requiredPeaks);
-  const resolutionText =
-    resolution == null
-      ? "it has no usable minimum resolution"
-      : `its minimum resolution is ${formatResolution(resolution)}, the best among the runs still within that time`;
-
-  if (chosen.index === samples.length - 1) {
-    parts.push(
-      `Its last peak is at ${formatMinutes(current.lastPeakTimeMin!)} min, at or before ${formatMinutes(rules.lastPeakTimeMin)} min, and ${resolutionText}. This is the run to carry forward.`,
-    );
-  } else {
-    if (current.lastPeakTimeMin != null && !isPast(current.lastPeakTimeMin, rules.lastPeakTimeMin)) {
-      parts.push(
-        `Its last peak is at ${formatMinutes(current.lastPeakTimeMin)} min, at or before ${formatMinutes(rules.lastPeakTimeMin)} min, so the time alone does not rule it out.`,
-      );
-    }
-    parts.push(
-      `${chosenLabel} is the run to carry forward. Its last peak is at ${formatMinutes(chosen.sample.lastPeakTimeMin!)} min, still within ${formatMinutes(rules.lastPeakTimeMin)} min, and ${resolutionText}.`,
-    );
-  }
-
-  if (current.peakCount != null && current.peakCount < rules.requiredPeaks) {
-    parts.push(
-      `This file has ${formatCount(current.peakCount)} peaks, still under the ${formatCount(rules.requiredPeaks)} you asked for.`,
-    );
-  }
-  parts.push("Retention is finished. The next kind of change is not built yet.");
-
-  const nextChange =
-    chosen.index === samples.length - 1
-      ? `Retention is finished. The next kind of change is not built yet. Carry forward this run, ${chosenLabel}.`
-      : `Retention is finished. The next kind of change is not built yet. Carry forward ${chosenLabel}, not this ${percent}% B run.`;
-
+function specsMet(sample: RetentionSample, rules: CompleteRules, judged: EqualJudgment): RetentionDecision {
   return {
-    status: "finished",
-    reason: "finished-calculated",
+    status: "specs-met",
+    reason: "specs-met",
+    move: null,
+    nextPercentB: null,
+    nextChange: "The specifications are met.",
+    why: [...ruleLines(sample, rules, judged), "The specifications are met. Do not keep going."].join("\n\n"),
+    fit: null,
+  };
+}
+
+function efficiencyStop(sample: RetentionSample, rules: CompleteRules, judged: EqualJudgment): RetentionDecision {
+  const nextLine = judged.resolutionMeets
+    ? "Efficiency is next to bring the last peak time to the specification."
+    : "Efficiency is next for the resolution.";
+  const nextChange =
+    sample.percentB == null
+      ? "Leave %B as it is. Efficiency is next. That stage is not built yet."
+      : `Leave %B at ${formatPercentB(sample.percentB)}% B. Efficiency is next. That stage is not built yet.`;
+  return {
+    status: "efficiency",
+    reason: "efficiency",
     move: null,
     nextPercentB: null,
     nextChange,
-    why: parts.join(" "),
+    why: [...ruleLines(sample, rules, judged), nextLine, "Efficiency is not built yet."].join("\n\n"),
     fit: null,
   };
+}
+
+function holdLate(sample: RetentionSample, rules: CompleteRules, judged: EqualJudgment): RetentionDecision {
+  return {
+    status: "blocked",
+    reason: "efficiency",
+    move: null,
+    nextPercentB: null,
+    nextChange: "Do not change %B, temperature, solvent, or the column.",
+    why: [
+      ...ruleLines(sample, rules, judged),
+      "The minimum resolution is not above 0. The last peak is later than the specification. This run stays here.",
+    ].join("\n\n"),
+    fit: null,
+  };
+}
+
+function minimumPercentOnce(
+  samples: RetentionSample[],
+  rules: CompleteRules,
+  choice: RetentionChoice | undefined,
+): RetentionDecision {
+  const current = samples[samples.length - 1];
+  const calculated = calculatePercentB(samples, rules, "equal");
+  const unusable =
+    calculated.move === "drop-5" || calculated.reason === "fit-unavailable" || calculated.nextPercentB == null;
+  let decision: RetentionDecision;
+  if (unusable) {
+    decision = {
+      status: "blocked",
+      reason: "cannot-calculate",
+      move: null,
+      nextPercentB: null,
+      nextChange: "The minimum %B cannot be calculated yet. Do not change %B, temperature, solvent, or the column.",
+      why: [
+        ...ruleLines(current, rules, judgeEqualPeaks(current, rules)),
+        "There are not enough runs to calculate the minimum %B.",
+      ].join("\n\n"),
+      fit: null,
+    };
+  } else if (nearly(current.percentB!, calculated.nextPercentB!)) {
+    return lookDecision(samples, rules, "between");
+  } else {
+    decision = calculated;
+  }
+  if (choice?.declinedEfficiencyNow) return decision;
+  const judged = judgeEqualPeaks(current, rules);
+  return {
+    ...decision,
+    status: "ask",
+    efficiencyNow: {
+      question: efficiencyNowQuestion(judged.resolution, rules.minResolution!),
+      why: [...ruleLines(current, rules, judged), "Not every specification is met. Efficiency and gradient may still bring the resolution up to the specification."].join(
+        "\n\n",
+      ),
+    },
+  };
+}
+
+function efficiencyNowQuestion(measured: number | null, spec: number): string {
+  const shown = measured == null || !Number.isFinite(measured) ? "not in this file" : formatResolution(measured);
+  return `Consider whether efficiency and gradient can still bring the resolution up to the specification. Minimum resolution: ${shown}. Under the specification of ${formatResolution(spec)}. Move on to efficiency and be done with selectivity?`;
+}
+
+function ruleLines(sample: RetentionSample, rules: CompleteRules, judged: EqualJudgment): string[] {
+  const lines = [
+    `Peaks: ${formatCount(sample.peakCount ?? 0)}. The specification is ${formatCount(rules.requiredPeaks)}. Met.`,
+  ];
+  if (rules.minResolution != null && rules.minResolution > 0) {
+    const shown =
+      judged.resolution == null || !Number.isFinite(judged.resolution)
+        ? "not in this file"
+        : formatResolution(judged.resolution);
+    lines.push(
+      `Minimum resolution: ${shown}. ${judged.resolutionMeets ? "Above" : "Under"} the specification of ${formatResolution(rules.minResolution)}.`,
+    );
+  }
+  if (sample.lastPeakTimeMin == null) {
+    lines.push(`Last peak: not in this file. The specification is ${formatTypedMinutes(rules.lastPeakTimeMin)} min. Not met.`);
+  } else if (judged.timeLate) {
+    lines.push(
+      `Last peak: ${formatMinutes(sample.lastPeakTimeMin)} min. Later than the specification of ${formatTypedMinutes(rules.lastPeakTimeMin)} min. Not met.`,
+    );
+  } else {
+    lines.push(
+      `Last peak: ${formatMinutes(sample.lastPeakTimeMin)} min. The specification is ${formatTypedMinutes(rules.lastPeakTimeMin)} min. Met.`,
+    );
+  }
+  if (sample.maxBackPressurePsi == null) {
+    lines.push(
+      `Back-pressure: not in this file. The specification is ${formatTypedPressure(rules.maxBackPressurePsi)} psi. Not met.`,
+    );
+  } else if (!pressureIsUnder(sample.maxBackPressurePsi, rules.maxBackPressurePsi) && !nearly(sample.maxBackPressurePsi, rules.maxBackPressurePsi)) {
+    lines.push(
+      `Back-pressure: ${formatDecimal(sample.maxBackPressurePsi, 1)} psi. Over the specification of ${formatTypedPressure(rules.maxBackPressurePsi)} psi. Not met.`,
+    );
+  } else {
+    lines.push(
+      `Back-pressure: ${formatDecimal(sample.maxBackPressurePsi, 1)} psi. Under the specification of ${formatTypedPressure(rules.maxBackPressurePsi)} psi. Met.`,
+    );
+  }
+  return lines;
+}
+
+function lookDecision(
+  samples: RetentionSample[],
+  rules: CompleteRules,
+  mode: LookStep["mode"],
+): RetentionDecision {
+  const sourceIndex = samples.length - 1;
+  const why =
+    mode === "picker"
+      ? "The peak count is still under the specification. Pick which uploaded run to heat."
+      : mode === "between"
+        ? "Compare the runs. An in-between %B uses the same temperature, solvent, and ligand as this run. A no does not start temperature, solvent, or a column."
+        : "Compare the runs. An in-between %B uses the same temperature, solvent, and ligand as the minimum %B run. If not, pick which uploaded run to heat.";
+  return {
+    status: "look",
+    reason: "look",
+    move: null,
+    nextPercentB: null,
+    nextChange: "Look at the runs.",
+    why,
+    fit: null,
+    look: { mode, runs: lookRuns(samples, rules), sourceIndex },
+  };
+}
+
+function lookRuns(samples: RetentionSample[], rules: CompleteRules): LookRun[] {
+  return samples.map((sample, index) => {
+    const resolution = resolutionForDecision(
+      sample.peakCount,
+      sample.minResolutionExcludingFirst,
+      rules.requiredPeaks,
+    );
+    const peaks: LookMark =
+      sample.peakCount == null ? "blank" : sample.peakCount >= rules.requiredPeaks ? "met" : "not-met";
+    const resolutionMark: LookMark =
+      rules.minResolution == null || !(rules.minResolution > 0)
+        ? "blank"
+        : resolution == null || !Number.isFinite(resolution)
+          ? "not-met"
+          : resolution + 1e-9 >= rules.minResolution
+            ? "met"
+            : "not-met";
+    const time: LookMark =
+      sample.lastPeakTimeMin == null
+        ? "blank"
+        : isPast(sample.lastPeakTimeMin, rules.lastPeakTimeMin)
+          ? "not-met"
+          : "met";
+    const pressure: LookMark =
+      sample.maxBackPressurePsi == null
+        ? "blank"
+        : sample.maxBackPressurePsi <= rules.maxBackPressurePsi
+          ? "met"
+          : "not-met";
+    return {
+      index,
+      percentB: sample.percentB,
+      peakCount: sample.peakCount,
+      resolution,
+      lastPeakTimeMin: sample.lastPeakTimeMin,
+      peaks,
+      resolutionMark,
+      time,
+      pressure,
+    };
+  });
 }
 
 /** Index of the in-time run selectivity should start from, or null when none qualify. */
@@ -377,7 +646,6 @@ function dropPoints(
       ? `Lower %B by 5 percentage points. Run the next chromatogram at ${to}% B. Another run is needed before the %B that hits the last-peak time can be calculated.${clampNote}`
       : `Run the next one at ${to}% B.${clampNote}`;
 
-  const line = retentionLine(rules.lastPeakTimeMin);
   const whyParts = situationSentences(samples, rules);
   if (reason === "drop-10") {
     whyParts.push(
@@ -385,7 +653,7 @@ function dropPoints(
     );
   } else {
     whyParts.push(
-      `The last peak is at ${formatMinutes(current.lastPeakTimeMin!)} min, which is not under ${formatMinutes(line)} min (${retentionPercent()} of the ${formatMinutes(rules.lastPeakTimeMin)} min you set). This is the only chromatogram so far, so the %B that would hit ${formatMinutes(rules.lastPeakTimeMin)} min is not calculated. ${from}% B minus 5 percentage points is ${to}% B. Another run is needed before that %B can be calculated.`,
+      `The last peak is at ${formatMinutes(current.lastPeakTimeMin!)} min, close to the specified run time of ${formatTypedMinutes(rules.lastPeakTimeMin)} min. This is the only chromatogram so far, so the %B that would hit that time is not calculated. ${from}% B minus 5 percentage points is ${to}% B. Another run is needed before that %B can be calculated.`,
     );
   }
 
@@ -400,12 +668,19 @@ function dropPoints(
   };
 }
 
-function calculatePercentB(samples: RetentionSample[], rules: CompleteRules): RetentionDecision {
+function calculatePercentB(
+  samples: RetentionSample[],
+  rules: CompleteRules,
+  mode: "ladder" | "equal" = "ladder",
+): RetentionDecision {
   const current = samples[samples.length - 1];
-  const intro = [
-    ...situationSentences(samples, rules),
-    `The last peak is at ${formatMinutes(current.lastPeakTimeMin!)} min, close to the specified run time of ${formatTypedMinutes(rules.lastPeakTimeMin)} min. Another 10% drop would make that retention time much longer, because retention grows exponentially as %B goes down. The next %B is calculated instead.`,
-  ];
+  const intro =
+    mode === "equal"
+      ? equalIntro(samples, rules)
+      : [
+          ...situationSentences(samples, rules),
+          `The last peak is at ${formatMinutes(current.lastPeakTimeMin!)} min, close to the specified run time of ${formatTypedMinutes(rules.lastPeakTimeMin)} min. Another 10% drop would make that retention time much longer, because retention grows exponentially as %B goes down. The next %B is calculated instead.`,
+        ];
 
   if (!isBelow(current.lastPeakTimeMin!, rules.lastPeakTimeMin)) {
     intro.push(
@@ -469,7 +744,7 @@ function calculatePercentB(samples: RetentionSample[], rules: CompleteRules): Re
   if (!(kTarget > 0) || !(t0Average > 0)) {
     return blocked(
       "fit-unavailable",
-      "Do not recommend a %B. The last-peak time you set is not after the average t0 peak.",
+      "Do not recommend a %B. The last-peak time in the specification is not after the average t0 peak.",
       [...intro, `The average t0 of the runs used here is ${formatMinutes(t0Average)} min.`].join(
         "\n\n",
       ),
@@ -532,11 +807,11 @@ function situationSentences(samples: RetentionSample[], rules: CompleteRules): s
 
   if (!peaksMet) {
     lines.push(
-      `This run has ${formatCount(current.peakCount!)} peaks, still under the ${formatCount(rules.requiredPeaks)} you asked for.`,
+      `This run has ${formatCount(current.peakCount!)} peaks, still under the specification of ${formatCount(rules.requiredPeaks)}.`,
     );
   } else if (samples.length === 1) {
     lines.push(
-      `This run has ${formatCount(current.peakCount!)} peaks, which meets the ${formatCount(rules.requiredPeaks)} you asked for. This is the first run, so there is no earlier resolution to compare. The last peak is at ${formatMinutes(current.lastPeakTimeMin!)} min, still under the ${formatMinutes(rules.lastPeakTimeMin)} min you set, so the time and pressure still decide the next %B.`,
+      `This run has ${formatCount(current.peakCount!)} peaks, which meets the specification of ${formatCount(rules.requiredPeaks)}. This is the first run, so there is no earlier resolution to compare. The last peak is at ${formatMinutes(current.lastPeakTimeMin!)} min, still under the specification of ${formatMinutes(rules.lastPeakTimeMin)} min, so the time and pressure still decide the next %B.`,
     );
   } else {
     const previous = samples[samples.length - 2];
@@ -547,13 +822,30 @@ function situationSentences(samples: RetentionSample[], rules: CompleteRules): s
         ? `The previous run had no usable resolution, and this run’s minimum resolution is ${formatResolution(currentResolution!)}.`
         : `Minimum resolution went from ${formatResolution(previousResolution)} to ${formatResolution(currentResolution!)}, which is higher than the previous run.`;
     lines.push(
-      `This run has ${formatCount(current.peakCount!)} peaks, which meets the ${formatCount(rules.requiredPeaks)} you asked for. ${resolutionText} The last peak is at ${formatMinutes(current.lastPeakTimeMin!)} min, still under the ${formatMinutes(rules.lastPeakTimeMin)} min you set, so %B can still come down.`,
+      `This run has ${formatCount(current.peakCount!)} peaks, which meets the specification of ${formatCount(rules.requiredPeaks)}. ${resolutionText} The last peak is at ${formatMinutes(current.lastPeakTimeMin!)} min, still under the specification of ${formatMinutes(rules.lastPeakTimeMin)} min, so %B can still come down.`,
     );
   }
 
   lines.push(
-    `The highest back-pressure is ${formatDecimal(current.maxBackPressurePsi!, 1)} psi, under the ${formatDecimal(rules.maxBackPressurePsi, 1)} psi you set.`,
+    `The highest back-pressure is ${formatDecimal(current.maxBackPressurePsi!, 1)} psi, under the specification of ${formatTypedPressure(rules.maxBackPressurePsi)} psi.`,
   );
+  return lines;
+}
+
+function equalIntro(samples: RetentionSample[], rules: CompleteRules): string[] {
+  const current = samples[samples.length - 1];
+  const judged = judgeEqualPeaks(current, rules);
+  const lines = ruleLines(current, rules, judged);
+  const line = retentionLine(rules.lastPeakTimeMin);
+  if (!isBelow(current.lastPeakTimeMin!, line)) {
+    lines.push(
+      `The last peak is at ${formatMinutes(current.lastPeakTimeMin!)} min, close to the specified run time of ${formatTypedMinutes(rules.lastPeakTimeMin)} min. Another 10% drop would make that retention time much longer, because retention grows exponentially as %B goes down. The next %B is calculated instead.`,
+    );
+  } else {
+    lines.push(
+      "The peak count matches the specification, so %B is not lowered by 10 points. The next %B is calculated for the specified run time.",
+    );
+  }
   return lines;
 }
 
@@ -562,7 +854,7 @@ function resolutionStopWhy(samples: RetentionSample[], rules: CompleteRules): st
   const previous = samples[samples.length - 2];
   const previousResolution = usableResolution(previous, rules.requiredPeaks);
   const currentResolution = usableResolution(current, rules.requiredPeaks);
-  const peakText = `This run already has ${formatCount(current.peakCount!)} peaks, which meets the ${formatCount(rules.requiredPeaks)} you asked for.`;
+  const peakText = `This run already has ${formatCount(current.peakCount!)} peaks, which meets the specification of ${formatCount(rules.requiredPeaks)}.`;
 
   if (previousResolution == null && currentResolution == null) {
     return `${peakText} The previous run had no usable resolution, and this run does not have one either, so resolution did not go up.`;
@@ -689,12 +981,12 @@ function separationVerdict(
     if (askedResolution) {
       return {
         keep: true,
-        sentence: `It is kept because it has enough peaks (${formatCount(count!)} of the ${formatCount(spec.requiredPeaks)} you asked for) and the smallest resolution after the t0 peak (${formatResolution(resolution!)}) meets the ${formatResolution(spec.minResolution!)} you set.`,
+        sentence: `It is kept because it has enough peaks (${formatCount(count!)} of the specification of ${formatCount(spec.requiredPeaks)}) and the smallest resolution after the t0 peak (${formatResolution(resolution!)}) meets the specification of ${formatResolution(spec.minResolution!)}.`,
       };
     }
     return {
       keep: true,
-      sentence: `It is kept because it has enough peaks (${formatCount(count!)} of the ${formatCount(spec.requiredPeaks)} you asked for). No minimum resolution was set.`,
+      sentence: `It is kept because it has enough peaks (${formatCount(count!)} of the specification of ${formatCount(spec.requiredPeaks)}). No minimum resolution is in the specification.`,
     };
   }
 
@@ -702,15 +994,15 @@ function separationVerdict(
   if (!peaksOk) {
     problems.push(
       count == null
-        ? `the peak count is missing, still short of the ${formatCount(spec.requiredPeaks)} you asked for, so the peaks are still overlapping`
-        : `it has ${formatCount(count)} peaks, still under the ${formatCount(spec.requiredPeaks)} you asked for, so the peaks are still overlapping`,
+        ? `the peak count is missing, still short of the specification of ${formatCount(spec.requiredPeaks)}, so the peaks are still overlapping`
+        : `it has ${formatCount(count)} peaks, still under the specification of ${formatCount(spec.requiredPeaks)}, so the peaks are still overlapping`,
     );
   }
   if (askedResolution && !resolutionOk) {
     problems.push(
       resolution == null || !Number.isFinite(resolution)
-        ? `there is no resolution after the t0 peak to compare with the ${formatResolution(spec.minResolution!)} you set`
-        : `the smallest resolution after the t0 peak is ${formatResolution(resolution)}, under the ${formatResolution(spec.minResolution!)} you set`,
+        ? `there is no resolution after the t0 peak to compare with the specification of ${formatResolution(spec.minResolution!)}`
+        : `the smallest resolution after the t0 peak is ${formatResolution(resolution)}, under the specification of ${formatResolution(spec.minResolution!)}`,
     );
   }
   return {
@@ -909,15 +1201,11 @@ function pressureIsUnder(measured: number, limit: number): boolean {
   return measured < limit;
 }
 
-/** Keep the 10-point drop while the last peak is under this fraction of the typed time. */
-const RETENTION_TIME_FRACTION = 0.66;
+/** Keep the 10-point drop while the last peak is at or under this fraction of the specified time. */
+const RETENTION_TIME_FRACTION = 0.5;
 
 function retentionLine(specMin: number): number {
   return RETENTION_TIME_FRACTION * specMin;
-}
-
-function retentionPercent(): string {
-  return `${Math.round(RETENTION_TIME_FRACTION * 100)}%`;
 }
 
 function isBelow(value: number, limit: number): boolean {
@@ -936,6 +1224,10 @@ function finished(reason: RetentionReason, nextChange: string, why: string): Ret
 
 function blocked(reason: RetentionReason, nextChange: string, why: string): RetentionDecision {
   return { status: "blocked", reason, move: null, nextPercentB: null, nextChange, why, fit: null };
+}
+
+function formatTypedPressure(value: number): string {
+  return Number.isInteger(value) ? String(value) : formatDecimal(value, 1);
 }
 
 function formatCount(value: number): string {

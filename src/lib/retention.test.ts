@@ -6,6 +6,7 @@ import { readLabFile, type LabFileRead } from "@/lib/lab-file";
 import {
   carryForwardIndex,
   decideRetention,
+  inBetweenPercentError,
   roundTargetPercent,
   type RetentionRules,
   type RetentionSample,
@@ -23,7 +24,7 @@ const files = [
  * Peak counts in these files are 6, 6, 6, and 7.
  * Max pressures are about 1040, 1226, 1390, and 1516 psi.
  * Last peaks are 1.952, 2.779, 4.918, and 11.593 min.
- * 0.66 × 10 min = 6.6 min, so 70, 60, and 50 are under that line and 40 is over it.
+ * Half of 10 min is 5 min, so 70, 60, and 50 are under that line and 40 is over it.
  */
 const pathRules: RetentionRules = {
   requiredPeaks: 8,
@@ -34,7 +35,7 @@ const pathRules: RetentionRules = {
 const reads = files.map((file) => readLabFile(readFileSync(path.join(fixtureDir, file.name))));
 
 describe("retention fixtures can use one last-peak time", () => {
-  it("keeps 70, 60, and 50 under 66% of 10 min, and 40 over it", () => {
+  it("keeps 70, 60, and 50 under half of 10 min, and 40 over it", () => {
     const times = reads.map((read) => read.lastPeakTimeMin);
     const counts = reads.map((read) => read.peakCount);
     const pressures = reads.map((read) => read.maxBackPressurePsi);
@@ -43,10 +44,10 @@ describe("retention fixtures can use one last-peak time", () => {
     for (const time of times) {
       expect(time).not.toBeNull();
     }
-    expect(times[0]!).toBeLessThan(6.6);
-    expect(times[1]!).toBeLessThan(6.6);
-    expect(times[2]!).toBeLessThan(6.6);
-    expect(times[3]!).toBeGreaterThan(6.6);
+    expect(times[0]!).toBeLessThan(5);
+    expect(times[1]!).toBeLessThan(5);
+    expect(times[2]!).toBeLessThan(5);
+    expect(times[3]!).toBeGreaterThan(5);
     for (const count of counts) expect(count!).toBeLessThan(8);
     for (const pressure of pressures) {
       expect(pressure!).toBeLessThan(2000);
@@ -88,7 +89,10 @@ describe("retention %B along the four lab files", () => {
     expect(decision.fit!.excluded.map((row) => row.percentB)).toEqual([70]);
     expect(decision.why.toLowerCase()).toContain("left out once");
     expect(decision.why.toLowerCase()).toContain("overlapping");
-    expect(decision.why).toContain("still under the 8 you asked for");
+    expect(decision.why).toContain("still under the specification of 8");
+    expect(decision.why).not.toContain("you asked for");
+    expect(decision.why).not.toContain("you set");
+    expect(decision.why).not.toContain("half");
 
     const k60 = (2.779 - 1.088) / 1.088;
     const k50 = (4.918 - 1.084) / 1.084;
@@ -133,11 +137,13 @@ describe("retention %B along the four lab files", () => {
       ],
       pathRules,
     );
-    expect(followed.status).toBe("finished");
-    expect(followed.reason).toBe("finished-calculated");
+    expect(followed.status).toBe("look");
+    expect(followed.reason).toBe("look");
+    expect(followed.look?.mode).toBe("between-then-heat");
     expect(followed.nextPercentB).toBeNull();
-    expect(followed.nextChange).toMatch(/Retention is finished/);
-    expect(followed.why).toMatch(/6 peaks/);
+    expect(followed.nextChange).toBe("Look at the runs.");
+    expect(followed.nextChange).not.toContain("Carry forward");
+    expect(followed.why).not.toContain("Carry forward");
   });
 });
 
@@ -161,43 +167,48 @@ describe("retention stops and keeps going", () => {
     expect(over.nextPercentB).toBeNull();
   });
 
-  it("does not finish just because the peak count is already met", () => {
-    expect(reads[0].peakCount).toBeGreaterThanOrEqual(6);
+  it("stops changing chemistry when the peak count already matches and the typed rules are met", () => {
+    expect(reads[0].peakCount).toBe(6);
     const decision = decideRetention([sampleFromRead(70, reads[0])], {
       requiredPeaks: 6,
       lastPeakTimeMin: 10,
       maxBackPressurePsi: 2000,
     });
-    expect(decision.status).toBe("recommend");
-    expect(decision.move).toBe("drop-10");
-    expect(decision.nextPercentB).toBe(60);
+    expect(decision.status).toBe("specs-met");
+    expect(decision.nextPercentB).toBeNull();
+    expect(decision.nextChange).toBe("The specifications are met.");
+    expect(decision.move).not.toBe("drop-10");
   });
 
-  it("still recommends a %B when peaks are met, resolution rose, and the last peak is under the time", () => {
+  it("does not keep dropping 10 points when the peak count matches and resolution is still under", () => {
     expect(reads[1].minResolutionExcludingFirst!).toBeCloseTo(0.625, 3);
     expect(reads[2].minResolutionExcludingFirst!).toBeGreaterThan(reads[1].minResolutionExcludingFirst!);
-    expect(reads[1].peakCount).toBeGreaterThanOrEqual(6);
-    expect(reads[2].peakCount).toBeGreaterThanOrEqual(6);
     const decision = decideRetention(
       [sampleFromRead(60, reads[1]), sampleFromRead(50, reads[2])],
-      { requiredPeaks: 6, lastPeakTimeMin: 10, maxBackPressurePsi: 2000 },
+      { requiredPeaks: 6, lastPeakTimeMin: 10, minResolution: 2, maxBackPressurePsi: 2000 },
     );
-    expect(decision.status).toBe("recommend");
-    expect(decision.nextPercentB).toBe(40);
-    expect(decision.move).toBe("drop-10");
-    expect(decision.why.toLowerCase()).toContain("higher");
+    expect(decision.status).toBe("ask");
+    expect(decision.move).not.toBe("drop-10");
+    expect(decision.efficiencyNow?.question).toContain("bring the resolution up to the specification");
+    const shown = decideRetention(
+      [sampleFromRead(60, reads[1]), sampleFromRead(50, reads[2])],
+      { requiredPeaks: 6, lastPeakTimeMin: 10, minResolution: 2, maxBackPressurePsi: 2000 },
+      { declinedEfficiencyNow: true },
+    );
+    expect(shown.move).toBe("calculated");
+    expect(shown.nextPercentB).not.toBeNull();
   });
 
-  it("stops when the peak count is met and resolution did not rise", () => {
+  it("does not keep going just because resolution rose after the peak count matches", () => {
     expect(reads[1].minResolutionExcludingFirst!).toBeLessThan(reads[0].minResolutionExcludingFirst!);
     const decision = decideRetention(
       [sampleFromRead(70, reads[0]), sampleFromRead(60, reads[1])],
       { requiredPeaks: 6, lastPeakTimeMin: 10, maxBackPressurePsi: 2000 },
     );
-    expect(decision.status).toBe("finished");
-    expect(decision.reason).toBe("finished-peaks-resolution");
+    expect(decision.status).toBe("specs-met");
+    expect(decision.reason).toBe("specs-met");
     expect(decision.nextPercentB).toBeNull();
-    expect(decision.nextChange).toMatch(/Retention is finished/);
+    expect(decision.nextChange).toBe("The specifications are met.");
   });
 
   it("keeps going when the peak count is still short even if resolution fell", () => {
@@ -217,9 +228,12 @@ describe("retention stops and keeps going", () => {
       maxBackPressurePsi: 2000,
     });
     expect(reads[0].lastPeakTimeMin!).toBeGreaterThan(1.5);
-    expect(decision.reason).toBe("finished-peaks-time");
+    expect(reads[0].minResolutionExcludingFirst!).toBeGreaterThan(0);
+    expect(decision.status).toBe("efficiency");
+    expect(decision.reason).toBe("efficiency");
     expect(decision.nextPercentB).toBeNull();
-    expect(decision.nextChange).toMatch(/Do not lower %B/);
+    expect(decision.nextChange).toContain("Leave %B at 70% B");
+    expect(decision.nextChange).not.toContain("40°C");
   });
 
   it("counts a real resolution after an NA run as an increase", () => {
@@ -245,8 +259,8 @@ describe("retention stops and keeps going", () => {
       ],
       rules,
     );
-    expect(continued.status).toBe("recommend");
-    expect(continued.nextPercentB).toBe(50);
+    expect(continued.status).toBe("specs-met");
+    expect(continued.nextPercentB).toBeNull();
 
     const stopped = decideRetention(
       [
@@ -265,7 +279,7 @@ describe("retention stops and keeps going", () => {
       ],
       rules,
     );
-    expect(stopped.reason).toBe("finished-peaks-resolution");
+    expect(stopped.status).toBe("specs-met");
     expect(stopped.nextPercentB).toBeNull();
   });
 });
@@ -284,14 +298,14 @@ describe("retention rule edges", () => {
     expect(decision.why).not.toContain("Max back-pressure is blank.");
   });
 
-  it("uses the calculated path, not a 10 point drop, when the last peak is exactly 66% of the time", () => {
+  it("uses the calculated path, not a 10 point drop, when the last peak is exactly half the time", () => {
     const spec = 10;
     const decision = decideRetention(
       [
         sample({
           percentB: 70,
           peakCount: 2,
-          lastPeakTimeMin: 0.66 * spec,
+          lastPeakTimeMin: spec / 2,
           maxBackPressurePsi: 100,
         }),
       ],
@@ -299,41 +313,48 @@ describe("retention rule edges", () => {
     );
     expect(decision.move).toBe("drop-5");
     expect(decision.nextPercentB).toBe(65);
-    expect(decision.why).toContain("66%");
+    expect(decision.why).not.toContain("66%");
+    expect(decision.why).not.toContain("50%");
+    expect(decision.why).not.toContain("half");
+    expect(decision.why).not.toContain("you set");
     expect(decision.why).not.toContain("80%");
     expect(decision.nextChange).toContain("5 percentage points");
     expect(decision.nextChange.toLowerCase()).toContain("another run");
     expect(decision.nextChange).not.toContain("10 percentage points");
   });
 
-  it("drops 10 points under 66% of the time and switches once the last peak reaches that line", () => {
+  it("drops 10 points while the last peak is under half the time and switches once it reaches that line", () => {
     const rules: RetentionRules = {
       requiredPeaks: 8,
       lastPeakTimeMin: 10,
       maxBackPressurePsi: 500,
     };
     const under = decideRetention(
-      [sample({ percentB: 70, peakCount: 2, lastPeakTimeMin: 6.5, maxBackPressurePsi: 100 })],
+      [sample({ percentB: 70, peakCount: 2, lastPeakTimeMin: 4.5, maxBackPressurePsi: 100 })],
       rules,
     );
     expect(under.move).toBe("drop-10");
     expect(under.nextPercentB).toBe(60);
     expect(under.why).toContain(
-      "The last peak is at 6.500 min, still significantly under the specified run time of 10 min. Decrease %B by 10% to increase retention and peak separation.",
+      "The last peak is at 4.500 min, still significantly under the specified run time of 10 min. Decrease %B by 10% to increase retention and peak separation.",
     );
     expect(under.why).not.toContain("minus 10");
     expect(under.why).not.toContain("66%");
     expect(under.why).not.toContain("0.66");
+    expect(under.why).not.toContain("half");
+    expect(under.why).not.toContain("you set");
     expect(under.nextChange).toContain("Run the next one at 60% B");
     expect(under.nextChange).not.toContain("minus");
 
     const over = decideRetention(
-      [sample({ percentB: 70, peakCount: 2, lastPeakTimeMin: 7, maxBackPressurePsi: 100 })],
+      [sample({ percentB: 70, peakCount: 2, lastPeakTimeMin: 5, maxBackPressurePsi: 100 })],
       rules,
     );
     expect(over.move).toBe("drop-5");
     expect(over.nextPercentB).toBe(65);
     expect(over.why).not.toContain("minus 10");
+    expect(over.why).not.toContain("50%");
+    expect(over.why).not.toContain("half");
   });
 
   it("leaves out the first run and the highest %B when they are different files", () => {
@@ -386,7 +407,7 @@ describe("retention rule edges", () => {
         }),
         sample({
           percentB: 40,
-          peakCount: 7,
+          peakCount: 5,
           minResolutionExcludingFirst: 1.8,
           lastPeakTimeMin: 9,
           firstPeakTimeMin: 1,
@@ -436,7 +457,7 @@ describe("retention rule edges", () => {
         }),
         sample({
           percentB: 40,
-          peakCount: 7,
+          peakCount: 5,
           minResolutionExcludingFirst: 1.8,
           lastPeakTimeMin: 9,
           firstPeakTimeMin: 1,
@@ -484,7 +505,7 @@ describe("retention rule edges", () => {
         }),
         sample({
           percentB: 55,
-          peakCount: 6,
+          peakCount: 5,
           minResolutionExcludingFirst: 1.6,
           lastPeakTimeMin: 7,
           firstPeakTimeMin: 1,
@@ -627,7 +648,7 @@ describe("first-peak time outliers", () => {
           lastPeakTimeMin: 9,
         }),
       ],
-      { requiredPeaks: 2, lastPeakTimeMin: 10, maxBackPressurePsi: 500 },
+      { requiredPeaks: 8, lastPeakTimeMin: 10, maxBackPressurePsi: 500 },
     );
     expect(decision.move).toBe("calculated");
     expect(decision.fit!.rows.map((row) => row.percentB)).toEqual([70, 60, 50, 40]);
@@ -765,15 +786,12 @@ describe("which run to carry forward after the calculated %B", () => {
       [...series, sampleFromRead(calculated.nextPercentB!, read37)],
       rules,
     );
-    expect(followed.reason).toBe("finished-calculated");
-    expect(followed.why).toContain("1.602");
-    expect(followed.why).toContain("Run 5 at 40% B");
-    expect(followed.why).toContain("11.593");
-    expect(followed.why).toContain("0.324");
-    expect(followed.why).toContain("within");
-    expect(followed.nextChange).toContain("Carry forward Run 5 at 40% B");
-    expect(followed.nextChange).toContain("not built yet");
-    expect(followed.nextChange).not.toContain("Carry forward this run");
+    expect(followed.status).toBe("look");
+    expect(followed.look?.mode).toBe("between-then-heat");
+    expect(followed.look?.runs).toHaveLength(series.length + 1);
+    expect(followed.nextChange).toBe("Look at the runs.");
+    expect(followed.nextChange).not.toContain("Carry forward");
+    expect(followed.why).not.toContain("Carry forward");
   });
 
   it("does not let a short run with a high found resolution beat a run that has enough peaks", () => {
@@ -811,14 +829,13 @@ describe("which run to carry forward after the calculated %B", () => {
       ],
       rules,
     );
-    expect(followed.reason).toBe("finished-calculated");
+    expect(followed.status).toBe("efficiency");
     expect(followed.why).toContain("18.258");
-    expect(followed.why.toLowerCase()).toContain("past");
-    expect(followed.why).toContain("Run 5 at 40% B");
-    expect(followed.why).toContain("0.324");
-    expect(followed.nextChange).toContain(
-      `Carry forward Run 5 at 40% B, not this ${calculated.nextPercentB}% B run`,
-    );
+    expect(followed.why).toContain("Efficiency is next to bring the last peak time to the specification.");
+    expect(followed.why).not.toContain("Carry forward");
+    expect(followed.nextChange).toContain("Leave %B");
+    expect(followed.nextChange).not.toContain("Carry forward");
+    expect(followed.nextPercentB).toBeNull();
   });
 });
 
@@ -830,6 +847,7 @@ function sampleFromRead(percentB: number, read: LabFileRead): RetentionSample {
     firstPeakTimeMin: read.firstPeakTimeMin,
     minResolutionExcludingFirst: read.minResolutionExcludingFirst,
     maxBackPressurePsi: read.maxBackPressurePsi,
+    peaks: read.peaks,
   };
 }
 
@@ -844,3 +862,85 @@ function sample(overrides: Partial<RetentionSample> & Pick<RetentionSample, "per
     maxBackPressurePsi: overrides.maxBackPressurePsi ?? 100,
   };
 }
+
+describe("extra peaks and the in-between choice", () => {
+  const rules: RetentionRules = {
+    requiredPeaks: 6,
+    lastPeakTimeMin: 15,
+    minResolution: 1,
+    maxBackPressurePsi: 4000,
+  };
+
+  it("stops on investigate and lists every peak when the count is above the specification", () => {
+    const read = reads[3];
+    expect(read.peakCount).toBe(7);
+    expect(read.areaColumnFound).toBe(true);
+    expect(read.heightColumnFound).toBe(true);
+    const decision = decideRetention([sampleFromRead(40, read)], rules);
+    expect(decision.status).toBe("investigate");
+    expect(decision.nextPercentB).toBeNull();
+    expect(decision.nextChange).toContain("Investigate");
+    expect(decision.nextChange).not.toContain("40°C");
+    expect(decision.why).toContain("more peaks than the specification");
+    expect(decision.why).toContain("You decide.");
+    expect(decision.why).toContain("0.1 mg/mL");
+    expect(decision.why).toContain("Retention time 1.095 min");
+    expect(decision.why).toContain("Retention time 11.593 min");
+    expect(decision.why).toContain("Area 8513700");
+    expect(decision.why).toContain("Height 1993226");
+    expect(decision.why).not.toContain("fake");
+  });
+
+  it("still investigates when area and height are missing", () => {
+    const decision = decideRetention(
+      [
+        sample({
+          percentB: 40,
+          peakCount: 8,
+          lastPeakTimeMin: 4,
+          peaks: [
+            { timeMin: 1, area: null, height: null },
+            { timeMin: 4, area: null, height: null },
+          ],
+        }),
+      ],
+      { requiredPeaks: 6, lastPeakTimeMin: 15, maxBackPressurePsi: 4000 },
+    );
+    expect(decision.status).toBe("investigate");
+    expect(decision.why).toContain("Area is missing.");
+    expect(decision.why).toContain("Height is missing.");
+    expect(decision.nextPercentB).toBeNull();
+  });
+
+  it("shows the run picker after an in-between file when the peak count is still short", () => {
+    const series = [
+      sample({ percentB: 70, peakCount: 4, lastPeakTimeMin: 2, firstPeakTimeMin: 1 }),
+      sample({ percentB: 60, peakCount: 4, lastPeakTimeMin: 4, firstPeakTimeMin: 1 }),
+      sample({ percentB: 41, peakCount: 4, lastPeakTimeMin: 8, firstPeakTimeMin: 1 }),
+    ];
+    const followed = decideRetention(
+      [...series, sample({ percentB: 45, peakCount: 5, lastPeakTimeMin: 9, firstPeakTimeMin: 1 })],
+      { requiredPeaks: 8, lastPeakTimeMin: 10, maxBackPressurePsi: 500 },
+      { afterInBetween: true },
+    );
+    expect(followed.status).toBe("look");
+    expect(followed.look?.mode).toBe("picker");
+    expect(followed.look?.runs[0].time).toBe("met");
+    expect(inBetweenPercentError("60", [70, 60, 41])).toContain("already uploaded");
+    expect(inBetweenPercentError("45", [70, 60, 41])).toBeNull();
+  });
+
+  it("goes to efficiency after an in-between file once the peak count matches", () => {
+    const decision = decideRetention(
+      [
+        sample({ percentB: 70, peakCount: 4, lastPeakTimeMin: 2, firstPeakTimeMin: 1 }),
+        sample({ percentB: 55, peakCount: 8, lastPeakTimeMin: 12, minResolutionExcludingFirst: 0.4, firstPeakTimeMin: 1 }),
+      ],
+      { requiredPeaks: 8, lastPeakTimeMin: 10, minResolution: 1, maxBackPressurePsi: 500 },
+      { afterInBetween: true },
+    );
+    expect(decision.status).toBe("efficiency");
+    expect(decision.nextChange).not.toContain("40°C");
+    expect(decision.why).toContain("Efficiency is next for the resolution.");
+  });
+});

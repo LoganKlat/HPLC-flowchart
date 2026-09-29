@@ -3,7 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { evaluateRun, resolutionForDecision } from "@/lib/evaluate";
 import { readLabFile } from "@/lib/lab-file";
-import { carryForwardIndex } from "@/lib/retention";
+import { carryForwardIndex, decideRetention } from "@/lib/retention";
 import {
   adjustedPercentB,
   assessHappy,
@@ -99,54 +99,35 @@ function percents(percent: number): string[] | undefined {
 }
 
 describe("selectivity checks", () => {
-  it("asks at 0.55 after a decline at 0.4, and jumps straight to 0.7", () => {
-    const base = { peakCount: 8, requiredPeaks: 8, minResolution: 1 };
-    const at04 = efficiencyAsk({ ...base, foundResolution: 0.4, declinedThrough: null });
-    expect(at04?.multiple).toBe(0.4);
-    expect(at04?.question).toBe(efficiencyQuestion(0.4, 1));
-    expect(at04?.question).toContain("Under the specification of 1.000");
-    expect(at04?.question).not.toContain("times");
-
-    const at055 = efficiencyAsk({ ...base, foundResolution: 0.55, declinedThrough: 0.4 });
-    expect(at055?.multiple).toBe(0.55);
-    expect(at055?.question).toContain("bring the resolution up to the specification");
-    expect(at055?.question).toContain("Minimum resolution: 0.550. Under the specification of 1.000.");
-
-    const still04 = efficiencyAsk({ ...base, foundResolution: 0.45, declinedThrough: 0.4 });
-    expect(still04).toBeNull();
-
-    const jump = efficiencyAsk({ ...base, foundResolution: 0.8, declinedThrough: null });
-    expect(jump?.multiple).toBe(0.7);
-    expect(jump?.question).toContain("Minimum resolution: 0.800. Under the specification of 1.000.");
-    expect(jump?.question).not.toContain("times");
-    expect(jump?.question).not.toContain("you set");
-  });
-
-  it("counts a resolution that lands exactly on a multiple", () => {
+  it("does not use the old ladder once the peak count equals the specification", () => {
     expect(efficiencyAsk({
-      peakCount: 6,
-      foundResolution: 0.7,
-      requiredPeaks: 6,
+      peakCount: 8,
+      foundResolution: 0.4,
+      requiredPeaks: 8,
       minResolution: 1,
       declinedThrough: null,
-    })?.multiple).toBe(0.7);
+    })).toBeNull();
     expect(efficiencyAsk({
-      peakCount: 6,
+      peakCount: 8,
+      foundResolution: 0.55,
+      requiredPeaks: 8,
+      minResolution: 1,
+      declinedThrough: 0.4,
+    })).toBeNull();
+    expect(efficiencyAsk({
+      peakCount: 8,
       foundResolution: 1,
-      requiredPeaks: 6,
+      requiredPeaks: 8,
       minResolution: 1,
       declinedThrough: 0.85,
-    })?.multiple).toBe(1);
-    expect(efficiencyAsk({
-      peakCount: 6,
-      foundResolution: 2,
-      requiredPeaks: 6,
-      minResolution: 1,
-      declinedThrough: 1,
     })).toBeNull();
+    expect(efficiencyQuestion(0.4, 1)).toContain("Under the specification of 1.000");
+    expect(efficiencyQuestion(0.4, 1)).not.toContain("times");
+    expect(efficiencyQuestion(0.4, 1)).not.toContain("you set");
+    expect(efficiencyQuestion(0.4, 1)).not.toContain("benchmark");
   });
 
-  it("asks about the last peak time when this workbook already meets resolution", () => {
+  it("sends a late run that already has the peaks to efficiency", () => {
     const workbook =
       "/home/ubuntu/.cursor/projects/workspace/uploads/GR09-14-4-ACN-3-ISO-35-1.5-20u-CP-0.1-C18aqP-150x4.6x5-amb-254_ae4e.xlsx";
     const read = readLabFile(readFileSync(workbook));
@@ -154,98 +135,67 @@ describe("selectivity checks", () => {
       requiredPeaks: 7,
       lastPeakTimeMin: 15,
       minResolution: 1.4,
-      maxBackPressurePsi: 2000,
+      maxBackPressurePsi: 4000,
     };
-    const rows = evaluateRun(read, rules);
+    const rows = evaluateRun(read, { ...rules, maxBackPressurePsi: 2000 });
     expect(rows.find((row) => row.id === "peaks")?.status).toBe("met");
     expect(rows.find((row) => row.id === "resolution")?.status).toBe("met");
-    expect(rows.find((row) => row.id === "back-pressure")?.status).toBe("met");
     expect(rows.find((row) => row.id === "last-peak")?.status).toBe("not-met");
     expect(read.lastPeakTimeMin).toBeCloseTo(19.854, 3);
 
-    const ask = efficiencyAsk({
-      peakCount: read.peakCount,
-      foundResolution: read.minResolutionExcludingFirst,
-      requiredPeaks: rules.requiredPeaks,
-      minResolution: rules.minResolution,
-      declinedThrough: null,
-      lastPeakTimeMin: read.lastPeakTimeMin,
-      specifiedRunTimeMin: rules.lastPeakTimeMin,
-      maxBackPressurePsi: read.maxBackPressurePsi,
-      maxBackPressureSpec: 4000,
-    });
-    expect(ask?.question).toBe(
-      "Consider whether efficiency and gradient can still bring the last peak time to the specification. The last peak is at 19.854 min, later than the specification of 15 min. Move on to efficiency and be done with selectivity?",
-    );
-    expect(ask?.question).not.toContain("bring the resolution");
-    expect(ask?.why).toBe(
+    const decision = decideRetention(
       [
-        "Moving on to efficiency is a choice.",
-        "Peaks: 7. The specification is 7. Met.",
-        "Minimum resolution: 1.453. Above the specification of 1.400.",
-        "Last peak: 19.854 min. Later than the specification of 15 min. Not met.",
-        "Back-pressure: 1180.5 psi. Under the specification of 4000 psi. Met.",
-        "Not every specification is met. Efficiency and gradient may still bring the last peak time to the specification.",
-      ].join("\n\n"),
+        {
+          percentB: 35,
+          peakCount: read.peakCount,
+          lastPeakTimeMin: read.lastPeakTimeMin,
+          firstPeakTimeMin: read.firstPeakTimeMin,
+          minResolutionExcludingFirst: read.minResolutionExcludingFirst,
+          maxBackPressurePsi: read.maxBackPressurePsi,
+        },
+      ],
+      rules,
     );
-    expect(ask?.why).not.toContain("you set");
-    expect(ask?.why).not.toContain("times");
-
-    const stillShort = efficiencyAsk({
-      peakCount: read.peakCount,
-      foundResolution: 0.9,
-      requiredPeaks: rules.requiredPeaks,
-      minResolution: rules.minResolution,
-      declinedThrough: null,
-      lastPeakTimeMin: read.lastPeakTimeMin,
-      specifiedRunTimeMin: rules.lastPeakTimeMin,
-      maxBackPressurePsi: read.maxBackPressurePsi,
-      maxBackPressureSpec: 4000,
-    });
-    expect(stillShort?.question).toContain("bring the resolution up to the specification");
-    expect(stillShort?.question).toContain("Minimum resolution: 0.900. Under the specification of 1.400.");
-    expect(stillShort?.question).not.toContain("last peak time");
-    expect(stillShort?.why).toContain("Minimum resolution: 0.900. Under the specification of 1.400.");
-    expect(stillShort?.why).toContain(
-      "Not every specification is met. Efficiency and gradient may still bring the resolution up to the specification.",
-    );
-    expect(stillShort?.why).not.toContain("bring the last peak time");
-    expect(stillShort?.why).not.toContain("you set");
-    expect(stillShort?.why).not.toContain("times");
-
-    const blankPressure = efficiencyAsk({
+    expect(decision.status).toBe("efficiency");
+    expect(decision.nextChange).toContain("Leave %B at 35% B");
+    expect(decision.nextPercentB).toBeNull();
+    expect(decision.why).toContain("Peaks: 7. The specification is 7. Met.");
+    expect(decision.why).toContain("Minimum resolution: 1.453. Above the specification of 1.400.");
+    expect(decision.why).toContain("Last peak: 19.854 min. Later than the specification of 15 min. Not met.");
+    expect(decision.why).toContain("Efficiency is next to bring the last peak time to the specification.");
+    expect(decision.why).not.toContain("you set");
+    expect(decision.why).not.toContain("benchmark");
+    expect(efficiencyAsk({
       peakCount: read.peakCount,
       foundResolution: read.minResolutionExcludingFirst,
       requiredPeaks: rules.requiredPeaks,
       minResolution: rules.minResolution,
       declinedThrough: null,
-      lastPeakTimeMin: read.lastPeakTimeMin,
-      specifiedRunTimeMin: rules.lastPeakTimeMin,
-      maxBackPressurePsi: read.maxBackPressurePsi,
-      maxBackPressureSpec: null,
-    });
-    expect(blankPressure?.why).toContain("Back-pressure: the specification is blank, so it is not checked.");
+    })).toBeNull();
   });
 
-  it("asks about the ambient 7-peak file when resolution is under 0.4 times the specification", () => {
+  it("asks once about efficiency before the minimum %B when the peak count matches", () => {
     const ambient = readLabFile(readFileSync(path.join(process.cwd(), "fixtures/selectivity/GR41-09-40-ambient.csv")));
     expect(ambient.peakCount).toBe(7);
     expect(ambient.minResolutionExcludingFirst).toBeCloseTo(0.324, 3);
-    const ask = efficiencyAsk({
+    const sample = {
+      percentB: 40,
       peakCount: ambient.peakCount,
-      foundResolution: ambient.minResolutionExcludingFirst,
-      requiredPeaks: 7,
-      minResolution: 1,
-      declinedThrough: null,
       lastPeakTimeMin: ambient.lastPeakTimeMin,
-      specifiedRunTimeMin: 15,
+      firstPeakTimeMin: ambient.firstPeakTimeMin,
+      minResolutionExcludingFirst: ambient.minResolutionExcludingFirst,
       maxBackPressurePsi: ambient.maxBackPressurePsi,
-      maxBackPressureSpec: 4000,
-    });
-    expect(ask?.multiple).toBeNull();
-    expect(ask?.why).toBe(
+    };
+    const rules = {
+      requiredPeaks: 7,
+      lastPeakTimeMin: 15,
+      minResolution: 1,
+      maxBackPressurePsi: 4000,
+    };
+    const decision = decideRetention([sample], rules);
+    expect(decision.status).toBe("ask");
+    expect(decision.efficiencyNow?.why).toBe(
       [
-        "Moving on to efficiency is a choice.",
         "Peaks: 7. The specification is 7. Met.",
         "Minimum resolution: 0.324. Under the specification of 1.000.",
         "Last peak: 11.593 min. The specification is 15 min. Met.",
@@ -253,71 +203,32 @@ describe("selectivity checks", () => {
         "Not every specification is met. Efficiency and gradient may still bring the resolution up to the specification.",
       ].join("\n\n"),
     );
-    expect(ask?.question).toBe(
+    expect(decision.efficiencyNow?.question).toBe(
       "Consider whether efficiency and gradient can still bring the resolution up to the specification. Minimum resolution: 0.324. Under the specification of 1.000. Move on to efficiency and be done with selectivity?",
     );
+    expect(decision.efficiencyNow?.why).not.toContain("you set");
+    expect(decision.efficiencyNow?.why).not.toContain("benchmark");
+    const shown = decideRetention([sample], rules, { declinedEfficiencyNow: true });
+    expect(shown.reason).toBe("cannot-calculate");
+    expect(shown.nextPercentB).toBeNull();
+    expect(shown.nextChange).toContain("cannot be calculated");
   });
 
-  it("asks once at 7 peaks even under the 0.4 resolution benchmark", () => {
-    const under = efficiencyAsk({
+  it("does not ask just because a short run has 7 peaks", () => {
+    expect(efficiencyAsk({
       peakCount: 7,
       foundResolution: 0.324,
       requiredPeaks: 10,
       minResolution: 1,
       declinedThrough: null,
-      lastPeakTimeMin: 11.593,
-      specifiedRunTimeMin: 15,
-      maxBackPressurePsi: 1180.5,
-      maxBackPressureSpec: 4000,
-    });
-    expect(under?.multiple).toBeNull();
-    expect(under?.question).toContain("bring the resolution up to the specification");
-    expect(under?.question).toContain("Minimum resolution: 0.000. Under the specification of 1.000.");
-    expect(under?.question).not.toContain("last peak time");
-    expect(under?.why).toBe(
-      [
-        "Moving on to efficiency is a choice.",
-        "Peaks: 7. The specification is 10. Not met.",
-        "Minimum resolution: 0.000. Under the specification of 1.000.",
-        "Last peak: 11.593 min. The specification is 15 min. Met.",
-        "Back-pressure: 1180.5 psi. Under the specification of 4000 psi. Met.",
-        "Not every specification is met. Efficiency and gradient may still bring the resolution up to the specification.",
-      ].join("\n\n"),
-    );
-    expect(under?.why).not.toContain("you set");
-    expect(under?.why).not.toContain("times");
-
-    expect(efficiencyAsk({
-      peakCount: 7,
-      foundResolution: 0.2,
-      requiredPeaks: 10,
-      minResolution: 1,
-      declinedThrough: null,
-      declinedSevenPeaks: true,
     })).toBeNull();
-
-    const laterBenchmark = efficiencyAsk({
-      peakCount: 10,
-      foundResolution: 0.4,
-      requiredPeaks: 10,
-      minResolution: 1,
-      declinedThrough: null,
-      declinedSevenPeaks: true,
-    });
-    expect(laterBenchmark?.multiple).toBe(0.4);
-    expect(laterBenchmark?.question).toContain("Minimum resolution: 0.400. Under the specification of 1.000.");
-  });
-
-  it("asks once when 7 peaks already reach a resolution benchmark", () => {
-    const ask = efficiencyAsk({
+    expect(efficiencyAsk({
       peakCount: 7,
       foundResolution: 0.4,
       requiredPeaks: 7,
       minResolution: 1,
       declinedThrough: null,
-    });
-    expect(ask?.multiple).toBe(0.4);
-    expect(ask?.why).toContain("Peaks: 7. The specification is 7. Met.");
+    })).toBeNull();
   });
 
   it("does not ask when peaks are short or the resolution spec is blank", () => {
@@ -329,13 +240,13 @@ describe("selectivity checks", () => {
       declinedThrough: null,
     })).toBeNull();
     expect(efficiencyAsk({
-      peakCount: 8,
+      peakCount: 4,
       foundResolution: 2,
       requiredPeaks: 8,
       minResolution: null,
       declinedThrough: null,
     })).toBeNull();
-    const check = assessHappy({ peakCount: 8 }, { requiredPeaks: 8, minResolution: null });
+    const check = assessHappy({ peakCount: 4 }, { requiredPeaks: 8, minResolution: null });
     expect(check.missingResolutionRule).toBe(true);
   });
 
@@ -366,9 +277,13 @@ describe("selectivity checks", () => {
   });
 });
 
+function withHeat(runs: SelectivityRun[], rules: SelectivitySetup = setup) {
+  return planHistory(runs, rules, { heat: { carryIndex: 0, seriesLength: 1 } });
+}
+
 describe("selectivity plan", () => {
   it("starts at 40°C and the carried-forward %B when the run is not finished", () => {
-    const history = planHistory([run({ peakCount: 8, minResolutionExcludingFirst: 0.4 })], setup);
+    const history = withHeat([run({ peakCount: 4, minResolutionExcludingFirst: 0.4 })], setup);
     expect(history.phase).toBe("selectivity");
     if (history.phase !== "selectivity") return;
     expect(history.plan.step).toBe("temp-40");
@@ -378,8 +293,8 @@ describe("selectivity plan", () => {
   });
 
   it("does not leave selectivity on its own when resolution is past 0.7 times the spec", () => {
-    const history = planHistory(
-      [run({ peakCount: 8, minResolutionExcludingFirst: 0.8, lastPeakTimeMin: 10 })],
+    const history = withHeat(
+      [run({ peakCount: 4, minResolutionExcludingFirst: 0.8, lastPeakTimeMin: 10 })],
       setup,
     );
     expect(history.phase).toBe("selectivity");
@@ -390,7 +305,7 @@ describe("selectivity plan", () => {
   });
 
   it("says the resolution rule is missing instead of finishing", () => {
-    const history = planHistory([run({ peakCount: 8, minResolutionExcludingFirst: 2 })], {
+    const history = withHeat([run({ peakCount: 9, minResolutionExcludingFirst: 2 })], {
       ...setup,
       minResolution: null,
     });
@@ -402,11 +317,11 @@ describe("selectivity plan", () => {
   });
 
   it("offers solvent and 60°C when 40°C does not improve the run", () => {
-    const history = planHistory(
+    const history = withHeat(
       [
-        run({ peakCount: 8, minResolutionExcludingFirst: 0.4 }),
-        run({ percentB: 80, temperatureC: 40, peakCount: 8, minResolutionExcludingFirst: 0.4, lastPeakTimeMin: 6 }),
-        run({ percentB: 75, temperatureC: 40, peakCount: 8, minResolutionExcludingFirst: 0.3, lastPeakTimeMin: 8 }),
+        run({ peakCount: 4, minResolutionExcludingFirst: 0.4 }),
+        run({ percentB: 80, temperatureC: 40, peakCount: 4, minResolutionExcludingFirst: 0.4, lastPeakTimeMin: 6 }),
+        run({ percentB: 75, temperatureC: 40, peakCount: 4, minResolutionExcludingFirst: 0.3, lastPeakTimeMin: 8 }),
       ],
       setup,
     );
@@ -425,10 +340,10 @@ describe("selectivity plan", () => {
   });
 
   it("recommends 60°C only when the peak count went up", () => {
-    const history = planHistory(
+    const history = withHeat(
       [
-        run({ peakCount: 8, minResolutionExcludingFirst: 0.4 }),
-        run({ percentB: 80, temperatureC: 40, peakCount: 8, minResolutionExcludingFirst: 0.4, lastPeakTimeMin: 6 }),
+        run({ peakCount: 4, minResolutionExcludingFirst: 0.4 }),
+        run({ percentB: 80, temperatureC: 40, peakCount: 4, minResolutionExcludingFirst: 0.4, lastPeakTimeMin: 6 }),
         run({ percentB: 70, temperatureC: 40, peakCount: 9, minResolutionExcludingFirst: 0.4, lastPeakTimeMin: 9 }),
       ],
       setup,
@@ -440,18 +355,18 @@ describe("selectivity plan", () => {
     expect(history.plan.showSolventChoices).toBe(false);
     expect(history.plan.nextChange).toContain("60°C");
     expect(history.plan.nextChange.toLowerCase()).not.toContain("solvent");
-    expect(history.plan.why).toContain("The peak count went up");
+    expect(history.plan.why).toContain("went up");
     expect(history.plan.why).toContain("A higher temperature is likely to increase separation further.");
     expect(history.plan.prefill).toMatchObject({ percentB: "70", temperature: "60" });
   });
 
   it("still adjusts %B at 60°C after that path is chosen", () => {
-    const history = planHistory(
+    const history = withHeat(
       [
-        run({ peakCount: 8, minResolutionExcludingFirst: 0.4 }),
-        run({ percentB: 80, temperatureC: 40, peakCount: 8, minResolutionExcludingFirst: 0.4, lastPeakTimeMin: 6 }),
-        run({ percentB: 75, temperatureC: 40, peakCount: 8, minResolutionExcludingFirst: 0.3, lastPeakTimeMin: 8 }),
-        run({ percentB: 75, temperatureC: 60, peakCount: 8, minResolutionExcludingFirst: 0.3, lastPeakTimeMin: 5 }),
+        run({ peakCount: 4, minResolutionExcludingFirst: 0.4 }),
+        run({ percentB: 80, temperatureC: 40, peakCount: 4, minResolutionExcludingFirst: 0.4, lastPeakTimeMin: 6 }),
+        run({ percentB: 75, temperatureC: 40, peakCount: 4, minResolutionExcludingFirst: 0.3, lastPeakTimeMin: 8 }),
+        run({ percentB: 75, temperatureC: 60, peakCount: 4, minResolutionExcludingFirst: 0.3, lastPeakTimeMin: 5 }),
       ],
       setup,
     );
@@ -462,7 +377,7 @@ describe("selectivity plan", () => {
     expect(history.plan.nextChange.toLowerCase()).not.toContain("solvent");
   });
 
-  it("recommends 60°C at the adjusted %B when 40°C improves the separation", () => {
+  it("does not offer 60°C once the latest run already has the peak count", () => {
     const history = planHistory(
       [
         run({ peakCount: 8, minResolutionExcludingFirst: 0.4 }),
@@ -470,31 +385,23 @@ describe("selectivity plan", () => {
         run({ percentB: 70, temperatureC: 40, peakCount: 8, minResolutionExcludingFirst: 0.45, lastPeakTimeMin: 9 }),
       ],
       setup,
+      { heat: { carryIndex: 0, seriesLength: 1 } },
     );
-    expect(history.phase).toBe("selectivity");
-    if (history.phase !== "selectivity") return;
-    expect(history.plan.step).toBe("temp-60");
-    expect(history.plan.tempChoice).toBeNull();
-    expect(history.plan.showSolventChoices).toBe(false);
-    expect(history.plan.prefill).toMatchObject({ percentB: "70", temperature: "60" });
-    expect(history.plan.nextChange).toContain("60°C");
-    expect(history.plan.nextChange.toLowerCase()).not.toContain("solvent");
-    expect(history.plan.why).toContain("The minimum resolution went up");
-    expect(history.plan.why).toContain("A higher temperature is likely to increase separation further.");
+    expect(history.phase).toBe("retention");
   });
 
   it("changes the coating, returns to 100% B, and does not repeat a coating", () => {
-    const cold = run({ peakCount: 8, minResolutionExcludingFirst: 0.4 });
+    const cold = run({ peakCount: 4, minResolutionExcludingFirst: 0.4 });
     const heated = run({
       temperatureC: 40,
-      peakCount: 8,
+      peakCount: 4,
       minResolutionExcludingFirst: 0.4,
       lastPeakTimeMin: 6,
     });
     const adjusted = run({
       percentB: 75,
       temperatureC: 40,
-      peakCount: 8,
+      peakCount: 4,
       minResolutionExcludingFirst: 0.4,
       lastPeakTimeMin: 8,
     });
@@ -502,7 +409,7 @@ describe("selectivity plan", () => {
       percentB: 91,
       temperatureC: 25,
       solvent: "MeOH",
-      peakCount: 8,
+      peakCount: 4,
       minResolutionExcludingFirst: 0.4,
       lastPeakTimeMin: 10,
     });
@@ -510,7 +417,7 @@ describe("selectivity plan", () => {
       percentB: 91,
       temperatureC: 40,
       solvent: "MeOH",
-      peakCount: 8,
+      peakCount: 4,
       minResolutionExcludingFirst: 0.4,
       lastPeakTimeMin: 6,
     });
@@ -518,11 +425,11 @@ describe("selectivity plan", () => {
       percentB: 86,
       temperatureC: 40,
       solvent: "MeOH",
-      peakCount: 8,
+      peakCount: 4,
       minResolutionExcludingFirst: 0.4,
       lastPeakTimeMin: 8,
     });
-    const history = planHistory([cold, heated, adjusted, solventRun, again, againAdjusted], setup);
+    const history = withHeat([cold, heated, adjusted, solventRun, again, againAdjusted], setup);
     expect(history.phase).toBe("selectivity");
     if (history.phase !== "selectivity") return;
     expect(history.plan.step).toBe("ligand");
@@ -544,14 +451,14 @@ describe("selectivity plan", () => {
   it("says every coating was already used and does not invent another", () => {
     const ligands = ["C18", "C18aq", "PFPP", "C8", "biphenyl", "IBD"];
     const runs = ligands.flatMap((ligand) => [
-      run({ ligand, peakCount: 8, minResolutionExcludingFirst: 0.4, lastPeakTimeMin: 10, percentB: 80 }),
-      run({ ligand, temperatureC: 40, peakCount: 8, minResolutionExcludingFirst: 0.4, lastPeakTimeMin: 6, percentB: 80 }),
-      run({ ligand, temperatureC: 40, peakCount: 8, minResolutionExcludingFirst: 0.4, lastPeakTimeMin: 8, percentB: 75 }),
-      run({ ligand, solvent: "MeOH", temperatureC: 25, peakCount: 8, minResolutionExcludingFirst: 0.4, lastPeakTimeMin: 10, percentB: 90 }),
-      run({ ligand, solvent: "MeOH", temperatureC: 40, peakCount: 8, minResolutionExcludingFirst: 0.4, lastPeakTimeMin: 6, percentB: 90 }),
-      run({ ligand, solvent: "MeOH", temperatureC: 40, peakCount: 8, minResolutionExcludingFirst: 0.4, lastPeakTimeMin: 8, percentB: 85 }),
+      run({ ligand, peakCount: 4, minResolutionExcludingFirst: 0.4, lastPeakTimeMin: 10, percentB: 80 }),
+      run({ ligand, temperatureC: 40, peakCount: 4, minResolutionExcludingFirst: 0.4, lastPeakTimeMin: 6, percentB: 80 }),
+      run({ ligand, temperatureC: 40, peakCount: 4, minResolutionExcludingFirst: 0.4, lastPeakTimeMin: 8, percentB: 75 }),
+      run({ ligand, solvent: "MeOH", temperatureC: 25, peakCount: 4, minResolutionExcludingFirst: 0.4, lastPeakTimeMin: 10, percentB: 90 }),
+      run({ ligand, solvent: "MeOH", temperatureC: 40, peakCount: 4, minResolutionExcludingFirst: 0.4, lastPeakTimeMin: 6, percentB: 90 }),
+      run({ ligand, solvent: "MeOH", temperatureC: 40, peakCount: 4, minResolutionExcludingFirst: 0.4, lastPeakTimeMin: 8, percentB: 85 }),
     ]);
-    const history = planHistory(runs, setup);
+    const history = withHeat(runs, setup);
     expect(history.phase).toBe("selectivity");
     if (history.phase !== "selectivity") return;
     expect(history.plan.step).toBe("blocked");
@@ -634,7 +541,7 @@ describe("selectivity plan", () => {
       minResolutionExcludingFirst: read.minResolutionExcludingFirst,
       maxBackPressurePsi: read.maxBackPressurePsi,
     });
-    const history = planHistory(
+    const history = withHeat(
       [
         fromFile(ambient, 40, 25),
         fromFile(hot, 40, 40),
@@ -661,7 +568,7 @@ describe("selectivity plan", () => {
   });
 
   it("uses 25°C when Run 1 has no temperature", () => {
-    const history = planHistory([run({ peakCount: 8, temperatureC: null, minResolutionExcludingFirst: 0.4 })], {
+    const history = withHeat([run({ peakCount: 4, temperatureC: null, minResolutionExcludingFirst: 0.4 })], {
       ...setup,
       ambientTemperatureC: null,
     });

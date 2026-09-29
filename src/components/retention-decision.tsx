@@ -33,8 +33,8 @@ export function StartHighBNote() {
       <h2 className="font-heading text-base">What we’re doing</h2>
       <div className="mt-1 flex flex-col gap-2 text-sm leading-relaxed">
         <p>
-          Retention comes first. It finds a %B where you have enough peaks and the last peak comes
-          out by the time you set.
+          Retention comes first. It finds a %B where the peak count meets the specification and the
+          last peak comes out by the specified time.
         </p>
         <p>
           Selectivity is next. It changes temperature, then solvent, then the column coating, to
