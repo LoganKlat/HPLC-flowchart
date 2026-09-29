@@ -3,6 +3,7 @@
 import { useState, type CSSProperties } from "react";
 import { ChoiceSelect } from "@/components/choice-select";
 import { beadSurface } from "@/lib/bead-surface";
+import { porousSpots, shellSpots } from "@/lib/bead-spots";
 import { LIGANDS } from "@/lib/selectivity";
 
 type BeadKind = "porous" | "shell";
@@ -58,135 +59,72 @@ function choiceStyle(selected: boolean, hovered: boolean): CSSProperties {
   };
 }
 
-type Pt = { x: number; y: number };
+const beadFrames = {
+  porous: { src: "/equipment/bead-fully-porous.png", cx: 236.3, cy: 180, r: 172, w: 418, h: 360 },
+  shell: { src: "/equipment/bead-core-shell.png", cx: 165.9, cy: 152.5, r: 145, w: 352, h: 318 },
+} as const;
 
-function normals(pts: Pt[]): Pt[] {
-  return pts.map((_, index) => {
-    const prev = pts[(index - 1 + pts.length) % pts.length];
-    const next = pts[(index + 1) % pts.length];
-    const dx = next.x - prev.x;
-    const dy = next.y - prev.y;
-    const len = Math.hypot(dx, dy) || 1;
-    return { x: -dy / len, y: dx / len };
-  });
+const ligandPictures: Record<(typeof LIGANDS)[number], string> = {
+  C18: "/equipment/ligand-c18.png",
+  C8: "/equipment/ligand-c8.png",
+  C18aq: "/equipment/ligand-c18aq.png",
+  biphenyl: "/equipment/ligand-biphenyl.png",
+  PFPP: "/equipment/ligand-pfpp.png",
+  IBD: "/equipment/ligand-ibd.png",
+};
+
+const drawCenter = 220;
+const drawRadius = 198;
+
+function framePlacement(kind: BeadKind) {
+  const frame = beadFrames[kind];
+  const scale = drawRadius / frame.r;
+  return {
+    src: frame.src,
+    x: drawCenter - frame.cx * scale,
+    y: drawCenter - frame.cy * scale,
+    width: frame.w * scale,
+    height: frame.h * scale,
+  };
 }
 
-function offset(pts: Pt[], distance: number): Pt[] {
-  const dirs = normals(pts);
-  return pts.map((pt, index) => ({
-    x: pt.x + dirs[index].x * distance,
-    y: pt.y + dirs[index].y * distance,
-  }));
-}
-
-function ribbonPath(center: Pt[], distance: number, closed: boolean) {
-  const upper = offset(center, distance);
-  const lower = offset(center, -distance);
-  const line = (pts: Pt[]) =>
-    pts.map((pt, index) => `${index === 0 ? "M" : "L"}${pt.x.toFixed(1)} ${pt.y.toFixed(1)}`).join(" ");
-  if (closed) return `${line(upper)} Z ${line(lower)} Z`;
-  return `${line(upper)} ${lower
-    .slice()
-    .reverse()
-    .map((pt) => `L${pt.x.toFixed(1)} ${pt.y.toFixed(1)}`)
-    .join(" ")} Z`;
-}
-
-function sampleWall(center: Pt[], count: number, distance: number, closed: boolean): Pt[] {
-  const wall = offset(center, distance);
-  const usable = closed ? wall.slice(0, -1) : wall;
-  const spots: Pt[] = [];
-  for (let index = 0; index < count; index++) {
-    const at = Math.round((index * (usable.length - 1)) / Math.max(1, count - 1));
-    spots.push(usable[Math.min(usable.length - 1, at)]);
-  }
-  return spots;
-}
-
-function porousChannels(): Pt[][] {
-  const channels: Pt[][] = [];
-  for (let channel = 0; channel < 5; channel++) {
-    const yBase = 78 + channel * 66;
-    const pts: Pt[] = [];
-    for (let step = 0; step <= 28; step++) {
-      const t = step / 28;
-      const y = yBase + Math.sin(t * Math.PI * 2 + channel * 0.8) * 14;
-      const dy = y - 220;
-      const half = Math.sqrt(Math.max(0, 176 * 176 - dy * dy));
-      const x = 220 - half + 16 + t * Math.max(20, half * 2 - 32);
-      pts.push({ x, y });
-    }
-    channels.push(pts);
-  }
-  return channels;
-}
-
-function shellRings(): Pt[][] {
-  const rings: Pt[][] = [];
-  for (let ring = 0; ring < 4; ring++) {
-    const radius = 118 + ring * 16;
-    const pts: Pt[] = [];
-    for (let step = 0; step <= 56; step++) {
-      const angle = (step / 56) * Math.PI * 2;
-      const wobble = Math.sin(angle * 5 + ring) * 3.5;
-      pts.push({
-        x: 220 + Math.cos(angle) * (radius + wobble),
-        y: 220 + Math.sin(angle) * (radius + wobble),
-      });
-    }
-    rings.push(pts);
-  }
-  return rings;
-}
-
-function spotAngle(spots: Pt[], index: number) {
-  const prev = spots[Math.max(0, index - 1)];
-  const next = spots[Math.min(spots.length - 1, index + 1)];
-  return Math.atan2(next.y - prev.y, next.x - prev.x);
-}
-
-function LigandMark({ ligand, angle }: { ligand: string; angle: number }) {
-  const turn = `rotate(${((angle * 180) / Math.PI).toFixed(1)})`;
+function LigandMark({ ligand }: { ligand: string }) {
   if (ligand === "C18" || ligand === "C18aq") {
     return (
-      <g transform={turn}>
-        <path d="M0 0 L12 0" stroke="#0f6b56" strokeWidth="1.7" strokeLinecap="round" />
-        {ligand === "C18aq" ? <circle cx="12" cy="0" r="2.1" fill="#7eb9d4" stroke="#144237" strokeWidth="0.6" /> : null}
+      <g>
+        <path d="M0 0 L16 0" stroke="#0f6b56" strokeWidth="2.4" strokeLinecap="round" />
+        {ligand === "C18aq" ? <circle cx="16" cy="0" r="3" fill="#7eb9d4" stroke="#144237" strokeWidth="0.8" /> : null}
       </g>
     );
   }
   if (ligand === "C8") {
-    return (
-      <g transform={turn}>
-        <path d="M0 0 L6 0" stroke="#0f6b56" strokeWidth="1.7" strokeLinecap="round" />
-      </g>
-    );
+    return <path d="M0 0 L8 0" stroke="#0f6b56" strokeWidth="2.4" strokeLinecap="round" />;
   }
   if (ligand === "biphenyl") {
     return (
-      <g transform={turn}>
-        <circle cx="2.2" cy="0" r="2.3" fill="none" stroke="#0f6b56" strokeWidth="1.3" />
-        <circle cx="6.2" cy="0" r="2.3" fill="none" stroke="#0f6b56" strokeWidth="1.3" />
+      <g>
+        <circle cx="3" cy="0" r="3.2" fill="none" stroke="#0f6b56" strokeWidth="1.8" />
+        <circle cx="8.2" cy="0" r="3.2" fill="none" stroke="#0f6b56" strokeWidth="1.8" />
       </g>
     );
   }
   if (ligand === "PFPP") {
     return (
-      <g transform={turn}>
-        <circle cx="3" cy="0" r="2.6" fill="none" stroke="#0f6b56" strokeWidth="1.3" />
-        <path d="M5.6 0 L8.2 0" stroke="#0f6b56" strokeWidth="1.3" strokeLinecap="round" />
+      <g>
+        <circle cx="4" cy="0" r="3.4" fill="none" stroke="#0f6b56" strokeWidth="1.8" />
+        <path d="M7.4 0 L11 0" stroke="#0f6b56" strokeWidth="1.8" strokeLinecap="round" />
       </g>
     );
   }
   if (ligand === "IBD") {
     return (
-      <g transform={turn}>
-        <path d="M0 0 L5 0" stroke="#0f6b56" strokeWidth="1.5" strokeLinecap="round" />
-        <path d="M5 -2.4 L8.2 0 L5 2.4 Z" fill="#0f6b56" />
+      <g>
+        <path d="M0 0 L7 0" stroke="#0f6b56" strokeWidth="2.2" strokeLinecap="round" />
+        <path d="M7 -3.2 L11.2 0 L7 3.2 Z" fill="#0f6b56" />
       </g>
     );
   }
-  return <circle r="2.2" fill="#0f6b56" />;
+  return <circle r="4.2" fill="#0f6b56" />;
 }
 
 function BeadDrawing({
@@ -198,10 +136,8 @@ function BeadDrawing({
   ligand: string;
   ligandAt: boolean[];
 }) {
-  const channels = kind === "porous" ? porousChannels() : shellRings();
-  const per = kind === "porous" ? 20 : 25;
-  const closed = kind === "shell";
-  const spots = channels.flatMap((channel) => sampleWall(channel, per, closed ? 6 : 7, closed));
+  const spots = kind === "porous" ? porousSpots : shellSpots;
+  const frame = framePlacement(kind);
 
   return (
     <svg
@@ -215,38 +151,23 @@ function BeadDrawing({
       data-silanols={ligandAt.length - ligandAt.filter(Boolean).length}
     >
       <defs>
-        <radialGradient id="bead-silica" cx="40%" cy="35%" r="70%">
-          <stop offset="0%" stopColor="#f7fffb" />
-          <stop offset="70%" stopColor="#e7f3ee" />
-          <stop offset="100%" stopColor="#c5ddd2" />
-        </radialGradient>
-        <radialGradient id="bead-core" cx="42%" cy="38%" r="68%">
-          <stop offset="0%" stopColor="#8d9893" />
-          <stop offset="100%" stopColor="#3f4a45" />
-        </radialGradient>
+        <clipPath id="bead-clip">
+          <circle cx={drawCenter} cy={drawCenter} r={drawRadius} />
+        </clipPath>
       </defs>
-      <circle cx="220" cy="220" r="188" fill="url(#bead-silica)" stroke="#0f6b56" strokeWidth="3" />
-      {kind === "shell" ? (
-        <circle cx="220" cy="220" r="100" fill="url(#bead-core)" stroke="#144237" strokeWidth="2.5" />
-      ) : null}
-      {channels.map((channel, index) => (
-        <path
-          key={index}
-          d={ribbonPath(channel, kind === "porous" ? 9 : 5.5, closed)}
-          fill="#f4f1e4"
-          fillRule="evenodd"
-          stroke="#c4b48a"
-          strokeWidth="1"
-        />
-      ))}
-      {spots.map((spot, index) => {
+      <g clipPath="url(#bead-clip)">
+        <image href={frame.src} x={frame.x} y={frame.y} width={frame.width} height={frame.height} />
+      </g>
+      <circle cx={drawCenter} cy={drawCenter} r={drawRadius} fill="none" stroke="#0f6b56" strokeWidth="3" />
+      {spots.map(([x, y], index) => {
         const ligandSpot = ligandAt[index] === true;
         return (
-          <g key={index} transform={`translate(${spot.x.toFixed(1)} ${spot.y.toFixed(1)})`}>
+          <g key={index} transform={`translate(${x.toFixed(1)} ${y.toFixed(1)})`}>
+            <circle r="7.2" fill="#ffffff" opacity="0.92" />
             {ligandSpot ? (
-              <LigandMark ligand={ligand} angle={spotAngle(spots, index) + Math.PI / 2} />
+              <LigandMark ligand={ligand} />
             ) : (
-              <circle r="2.15" fill="#f4e2b0" stroke="#8a6a32" strokeWidth="0.8" />
+              <circle r="4.6" fill="#f6e2a8" stroke="#6a4b16" strokeWidth="1.4" />
             )}
           </g>
         );
@@ -338,6 +259,27 @@ export function BeadDiagram() {
         <p id="bead-counts" className="px-1 font-heading text-xl text-[#144237]">
           {surface.ligands} ligands. {surface.silanols} SiOH.
         </p>
+        <ul id="bead-legend" className="flex flex-col gap-3 px-1 sm:flex-row sm:flex-wrap sm:items-center">
+          <li className="flex items-center gap-2 text-sm">
+            <svg viewBox="0 0 20 20" className="size-5 shrink-0" aria-hidden="true">
+              <circle cx="10" cy="10" r="6.2" fill="#f6e2a8" stroke="#6a4b16" strokeWidth="1.6" />
+            </svg>
+            <span>SiOH</span>
+          </li>
+          <li className="flex items-center gap-2 text-sm">
+            <svg viewBox="0 0 20 20" className="size-5 shrink-0" aria-hidden="true">
+              <circle cx="10" cy="10" r="6.2" fill="#0f6b56" />
+            </svg>
+            <span>{sentence ?? "Ligand"}</span>
+            {sentence ? (
+              <img
+                src={ligandPictures[sentence]}
+                alt=""
+                className="h-20 w-auto rounded-md bg-black px-2 py-1"
+              />
+            ) : null}
+          </li>
+        </ul>
         <div className="flex flex-col gap-1.5" {...bind("ligand")}>
           <label htmlFor="bead-ligand" className="text-sm font-medium">
             Ligand

@@ -13,23 +13,23 @@ type NoteId = "length" | "width" | "resolution" | "retention" | "pressure";
 const notes: Record<NoteId, { label: string; body: string }> = {
   length: {
     label: "Length",
-    body: "A longer column raises resolution about with the square root of length. Retention time and back-pressure rise in line with length. A shorter column does the opposite.",
+    body: "Resolution rises about with the square root of length. Retention time and back-pressure rise in line with length. Shorter does the opposite.",
   },
   width: {
     label: "Width",
-    body: "A wider column cuts resolution a lot, makes retention much longer, and lowers back-pressure. A narrower column does the opposite, until system peaks. The resolution gain stops when the instrument itself widens the peaks. Those are system peaks.",
+    body: "A wider internal diameter drops resolution a lot, raises retention time a lot (with the square of the width), and lowers back-pressure. Narrower does the opposite, until system peaks. Back-pressure at a fixed flow uses 1 over the square of the width. The source table also lists 1/ID to the fourth.",
   },
   resolution: {
     label: "Resolution",
-    body: "This is how this column compares with a 150 mm × 4.6 mm column. Resolution rises about with the square root of length. Width changes it strongly. A narrower column raises it, and a wider column drops it a lot. The gain stops when the instrument itself widens the peaks. Those are system peaks.",
+    body: "Resolution follows the square root of length. Width changes it strongly: a narrower column raises it, and a wider column drops it a lot. The gain stops at the system-peak limit, when the instrument itself widens the peaks.",
   },
   retention: {
     label: "Retention time",
-    body: "Retention time rises with length, and with the square of the width, because a wider column holds more solvent at the same flow.",
+    body: "Retention time scales with length, and with the square of the width. It is times the length, and times the square of the width.",
   },
   pressure: {
     label: "Back-pressure",
-    body: "Back-pressure rises with length, and with 1 over the square of the width, at a fixed flow. The table also lists 1/ID to the fourth. This slider uses 1/ID squared, because the flow is the mL/min you set.",
+    body: "Back-pressure scales with length, and with 1 over the square of the width. It is times the length, and times 1 over the square of the width.",
   },
 };
 
@@ -282,7 +282,7 @@ export function ColumnDiagram() {
       </div>
       <aside
         id="column-note"
-        className="rounded-xl bg-card px-4 py-4 text-sm leading-relaxed text-foreground ring-1 ring-foreground/10 lg:sticky lg:top-4 lg:col-start-2 lg:row-span-4 lg:row-start-1"
+        className="rounded-xl bg-card px-4 py-4 text-sm leading-relaxed text-foreground ring-1 ring-foreground/10 lg:sticky lg:top-4 lg:col-start-2 lg:row-span-3 lg:row-start-1"
       >
         {open ? (
           <>
@@ -293,68 +293,6 @@ export function ColumnDiagram() {
           <p className="text-muted-foreground">Hover or tap a slider.</p>
         )}
       </aside>
-      <figure className="min-w-0 overflow-x-auto rounded-xl bg-card ring-1 ring-foreground/10 lg:col-start-1 lg:row-start-4">
-        <table className="w-full min-w-[36rem] border-collapse text-left text-sm">
-          <thead>
-            <tr className="text-xs tracking-wide text-muted-foreground uppercase">
-              <th className="px-4 py-3 font-medium" scope="col">
-                Dimension change
-              </th>
-              <th className="px-4 py-3 font-medium" scope="col">
-                Resolution (R<sub>s</sub>)
-              </th>
-              <th className="px-4 py-3 font-medium" scope="col">
-                Retention time (t<sub>R</sub>)
-              </th>
-              <th className="px-4 py-3 font-medium" scope="col">
-                Column backpressure (ΔP)
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr className="border-t border-border align-top">
-              <th className="px-4 py-3 font-medium text-foreground" scope="row">
-                Increase length (↑ L)
-              </th>
-              <td className="px-4 py-3">Increases (~ √L)</td>
-              <td className="px-4 py-3">Increases (linearly)</td>
-              <td className="px-4 py-3">Increases (linearly)</td>
-            </tr>
-            <tr className="border-t border-border align-top">
-              <th className="px-4 py-3 font-medium text-foreground" scope="row">
-                Decrease length (↓ L)
-              </th>
-              <td className="px-4 py-3">Decreases (~ √L)</td>
-              <td className="px-4 py-3">Decreases (linearly)</td>
-              <td className="px-4 py-3">Decreases (linearly)</td>
-            </tr>
-            <tr className="border-t border-border align-top">
-              <th className="px-4 py-3 font-medium text-foreground" scope="row">
-                Increase width (↑ ID)
-              </th>
-              <td className="px-4 py-3">Decreases (massively)</td>
-              <td className="px-4 py-3">Increases (massively)</td>
-              <td className="px-4 py-3">
-                Decreases (by 1/ID<sup>2</sup> or 1/ID<sup>4</sup>)
-              </td>
-            </tr>
-            <tr className="border-t border-border align-top">
-              <th className="px-4 py-3 font-medium text-foreground" scope="row">
-                Decrease width (↓ ID)
-              </th>
-              <td className="px-4 py-3">Increases (until system peaks)</td>
-              <td className="px-4 py-3">Decreases (massively)</td>
-              <td className="px-4 py-3">
-                Increases (by 1/ID<sup>2</sup> or 1/ID<sup>4</sup>)
-              </td>
-            </tr>
-          </tbody>
-        </table>
-        <p className="px-4 pt-1 pb-4 text-sm leading-relaxed text-muted-foreground">
-          At a fixed flow rate, back-pressure scales with 1 over the square of the width. The source table
-          also lists 1/ID to the fourth. This page uses 1/ID squared.
-        </p>
-      </figure>
     </section>
   );
 }
