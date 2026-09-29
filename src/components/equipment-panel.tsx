@@ -163,6 +163,16 @@ const setups: Setup[] = [
   },
 ];
 
+function annotationName(part: Part): string {
+  if (part.id === "controller") return "Controller";
+  if (part.id === "pump") return "Pump";
+  return part.label;
+}
+
+function partSide(part: Part): "left" | "right" {
+  return part.box.left + part.box.width / 2 < 50 ? "left" : "right";
+}
+
 function choiceStyle(selected: boolean, hovered: boolean): CSSProperties {
   if (selected && hovered) {
     return { backgroundColor: "#a9d4c4", borderColor: "#0a5644", color: "#144237", fontWeight: 600 };
@@ -186,6 +196,29 @@ const equipmentTabs = [
   { id: "column", label: "Column" },
   { id: "beads", label: "Beads" },
 ] as const;
+
+function PartNames({ parts, side }: { parts: Part[]; side: "left" | "right" }) {
+  return (
+    <div className="relative min-w-0">
+      {parts.map((part) => (
+        <p
+          key={part.id}
+          data-hplc-label={annotationName(part)}
+          className={
+            "absolute max-w-full text-[11px] leading-tight font-medium text-[#144237] sm:text-xs " +
+            (side === "left" ? "right-0 text-right" : "left-0 text-left")
+          }
+          style={{
+            top: `${part.box.top + part.box.height / 2}%`,
+            transform: "translateY(-50%)",
+          }}
+        >
+          {annotationName(part)}
+        </p>
+      ))}
+    </div>
+  );
+}
 
 export function EquipmentPanel({ onOpenNav }: { onOpenNav: () => void }) {
   const [view, setView] = useState<(typeof equipmentTabs)[number]["id"]>("hplc");
@@ -266,46 +299,90 @@ export function EquipmentPanel({ onOpenNav }: { onOpenNav: () => void }) {
           );
         })}
       </div>
-      <figure className="rounded-xl bg-card ring-1 ring-foreground/10">
-        <div className="relative">
-          <img
-            src={setup.src}
-            alt=""
-            width={setup.width}
-            height={setup.height}
-            className="block h-auto w-full"
-          />
-          {setup.parts.map((part) => {
-            const active = open?.id === part.id;
-            return (
-              <button
-                key={part.id}
-                type="button"
-                aria-label={part.label}
-                aria-expanded={active}
-                className="absolute rounded-sm transition-none"
-                style={{
-                  left: `${part.box.left}%`,
-                  top: `${part.box.top}%`,
-                  width: `${part.box.width}%`,
-                  height: `${part.box.height}%`,
-                  backgroundColor: active ? "rgba(207, 232, 223, 0.55)" : "transparent",
-                  outline: active ? "2px solid #0f6b56" : "2px solid transparent",
-                }}
-                onMouseEnter={() => setOpenId(part.id)}
-                onMouseLeave={() =>
-                  setOpenId((current) => (current === part.id && pinnedId !== part.id ? null : current))
-                }
-                onClick={() => {
-                  setPinnedId((current) => {
-                    const next = current === part.id ? null : part.id;
-                    setOpenId(next);
-                    return next;
-                  });
-                }}
-              />
-            );
-          })}
+      <figure id="hplc-diagram" className="rounded-xl bg-card p-2 ring-1 ring-foreground/10 sm:p-3">
+        <div className="grid grid-cols-[minmax(4.6rem,7.25rem)_minmax(0,1fr)_minmax(5.4rem,8.25rem)] items-stretch gap-1 sm:gap-2">
+          <PartNames parts={setup.parts.filter((part) => partSide(part) === "left")} side="left" />
+          <div className="relative min-w-0">
+            <img
+              src={setup.src}
+              alt=""
+              width={setup.width}
+              height={setup.height}
+              className="block h-auto w-full"
+            />
+            {setup.parts.map((part) => {
+              const active = open?.id === part.id;
+              return (
+                <button
+                  key={part.id}
+                  type="button"
+                  aria-label={part.label}
+                  aria-expanded={active}
+                  className="absolute rounded-sm transition-none"
+                  style={{
+                    left: `${part.box.left}%`,
+                    top: `${part.box.top}%`,
+                    width: `${part.box.width}%`,
+                    height: `${part.box.height}%`,
+                    backgroundColor: active ? "rgba(207, 232, 223, 0.55)" : "transparent",
+                    outline: active ? "2px solid #0f6b56" : "2px solid transparent",
+                  }}
+                  onMouseEnter={() => setOpenId(part.id)}
+                  onMouseLeave={() =>
+                    setOpenId((current) => (current === part.id && pinnedId !== part.id ? null : current))
+                  }
+                  onClick={() => {
+                    setPinnedId((current) => {
+                      const next = current === part.id ? null : part.id;
+                      setOpenId(next);
+                      return next;
+                    });
+                  }}
+                />
+              );
+            })}
+            <svg
+              className="pointer-events-none absolute inset-0 h-full w-full"
+              viewBox={`0 0 ${setup.width} ${setup.height}`}
+              aria-hidden="true"
+            >
+              <defs>
+                <marker
+                  id="hplc-arrow"
+                  markerWidth="7"
+                  markerHeight="7"
+                  refX="6"
+                  refY="3.5"
+                  orient="auto"
+                  markerUnits="strokeWidth"
+                >
+                  <path d="M0,0 L7,3.5 L0,7 Z" fill="#0f6b56" />
+                </marker>
+              </defs>
+              {setup.parts.map((part) => {
+                const side = partSide(part);
+                const y = ((part.box.top + part.box.height / 2) / 100) * setup.height;
+                const xTip =
+                  side === "left"
+                    ? (part.box.left / 100) * setup.width
+                    : ((part.box.left + part.box.width) / 100) * setup.width;
+                const xStart = side === "left" ? 1 : setup.width - 1;
+                return (
+                  <line
+                    key={part.id}
+                    x1={xStart}
+                    y1={y}
+                    x2={xTip}
+                    y2={y}
+                    stroke="#0f6b56"
+                    strokeWidth="1.6"
+                    markerEnd="url(#hplc-arrow)"
+                  />
+                );
+              })}
+            </svg>
+          </div>
+          <PartNames parts={setup.parts.filter((part) => partSide(part) === "right")} side="right" />
         </div>
       </figure>
       </div>
