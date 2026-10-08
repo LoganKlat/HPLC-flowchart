@@ -397,18 +397,89 @@ export function BeadDiagram() {
             note={kind === "porous" ? notes.porous.note : notes.shell.note}
           />
         </div>
-        <figure
-          className="mx-auto flex w-full max-w-[28rem] items-center justify-center overflow-hidden rounded-xl bg-card px-3 py-3 ring-1 ring-foreground/10 sm:px-4"
-          {...bind("drawing")}
-        >
-          <BeadDrawing
-            kind={kind}
-            ligand={ligand}
-            ligandAt={surface.ligandAt}
-            particleUm={particleUm}
-            poreAngstroms={poreAngstroms}
-          />
-        </figure>
+        <div id="bead-controls" className="grid grid-cols-[minmax(0,1fr)_auto] items-stretch gap-3">
+          <figure
+            className="flex min-w-0 items-center justify-center overflow-hidden rounded-xl bg-card px-3 py-3 ring-1 ring-foreground/10 sm:px-4"
+            {...bind("drawing")}
+          >
+            <BeadDrawing
+              kind={kind}
+              ligand={ligand}
+              ligandAt={surface.ligandAt}
+              particleUm={particleUm}
+              poreAngstroms={poreAngstroms}
+            />
+          </figure>
+          <div id="bead-sliders" className="flex items-stretch gap-1">
+            <div
+              className="flex h-full w-[4.6rem] flex-col items-center gap-1"
+              onMouseEnter={() => setOpenId("load")}
+              onMouseLeave={() => setOpenId((current) => (current === "load" ? null : current))}
+              onClick={() => setOpenId("load")}
+            >
+              <p className="text-center text-xs font-medium leading-tight">
+                Carbon load <KindMark kind="chemical" />
+              </p>
+              <p className="text-center text-[0.65rem] leading-none text-muted-foreground">Percent</p>
+              <p className="text-center font-heading text-sm font-semibold leading-none text-[#144237] tabular-nums">
+                {carbonLoad}%
+              </p>
+              <input
+                id="bead-carbon-load"
+                className="column-slider-y mt-1 h-auto! min-h-0 w-7 flex-1"
+                type="range"
+                min={0}
+                max={100}
+                step={1}
+                value={carbonLoad}
+                aria-label="Carbon load"
+                aria-valuetext={`${carbonLoad} percent`}
+                aria-describedby={openId === "load" ? "carbon-load-note" : undefined}
+                onChange={(event) => setCarbonLoad(Number(event.target.value))}
+              />
+            </div>
+            <div className="flex h-full w-[4.6rem] flex-col items-center gap-1" {...bind("particle")}>
+              <p className="text-center text-xs font-medium leading-tight">
+                Particle size <KindMark kind="mechanical" />
+              </p>
+              <p className="text-center font-heading text-sm font-semibold leading-none text-[#144237] tabular-nums">
+                {formatMicrons(particleUm)} µm
+              </p>
+              <input
+                id="bead-particle-size"
+                className="column-slider-y mt-1 h-auto! min-h-0 w-7 flex-1"
+                type="range"
+                min={1.5}
+                max={10}
+                step={0.1}
+                value={particleUm}
+                aria-label="Particle size"
+                aria-valuetext={`${formatMicrons(particleUm)} micrometers`}
+                onChange={(event) => setParticleUm(Number(event.target.value))}
+              />
+            </div>
+            <div className="flex h-full w-[4.6rem] flex-col items-center gap-1" {...bind("pore")}>
+              <p className="text-center text-xs font-medium leading-tight">
+                Pore size <KindMark kind="chemical" />
+              </p>
+              <p className="text-center font-heading text-sm font-semibold leading-none text-[#144237] tabular-nums">
+                {poreAngstroms} Å
+              </p>
+              <input
+                id="bead-pore-size"
+                className="column-slider-y mt-1 h-auto! min-h-0 w-7 flex-1"
+                type="range"
+                min={60}
+                max={300}
+                step={1}
+                value={poreAngstroms}
+                aria-label="Pore size"
+                aria-valuetext={`${poreAngstroms} angstroms`}
+                onChange={(event) => setPoreAngstroms(Number(event.target.value))}
+              />
+            </div>
+          </div>
+        </div>
         <p id="bead-counts" className="px-1 font-heading text-xl text-[#144237]">
           {surface.ligands} ligands. {surface.silanols} SiOH.
         </p>
@@ -446,68 +517,6 @@ export function BeadDiagram() {
             onChange={setLigand}
           />
           {sentence ? <p className="text-sm text-muted-foreground">{ligandSentences[sentence]}</p> : null}
-        </div>
-        <div
-          className="rounded-lg px-1 py-2"
-          onMouseEnter={() => setOpenId("load")}
-          onMouseLeave={() => setOpenId((current) => (current === "load" ? null : current))}
-          onClick={() => setOpenId("load")}
-        >
-          <div className="flex items-baseline justify-between gap-3">
-            <div>
-              <p className="text-sm font-medium">Carbon load <KindMark kind="chemical" /></p>
-              <p className="text-xs text-muted-foreground">Percent</p>
-            </div>
-            <p className="font-heading text-lg text-[#144237] tabular-nums">{carbonLoad}%</p>
-          </div>
-          <input
-            id="bead-carbon-load"
-            className="column-slider mt-1"
-            type="range"
-            min={0}
-            max={100}
-            step={1}
-            value={carbonLoad}
-            aria-valuetext={`${carbonLoad} percent`}
-            aria-describedby={openId === "load" ? "carbon-load-note" : undefined}
-            onChange={(event) => setCarbonLoad(Number(event.target.value))}
-          />
-        </div>
-        <div className="rounded-lg px-1 py-2" {...bind("particle")}>
-          <div className="flex items-baseline justify-between gap-3">
-            <p className="text-sm font-medium">Particle size <KindMark kind="mechanical" /></p>
-            <p className="font-heading text-lg text-[#144237] tabular-nums">
-              {formatMicrons(particleUm)} µm
-            </p>
-          </div>
-          <input
-            id="bead-particle-size"
-            className="column-slider mt-1"
-            type="range"
-            min={1.5}
-            max={10}
-            step={0.1}
-            value={particleUm}
-            aria-valuetext={`${formatMicrons(particleUm)} micrometers`}
-            onChange={(event) => setParticleUm(Number(event.target.value))}
-          />
-        </div>
-        <div className="rounded-lg px-1 py-2" {...bind("pore")}>
-          <div className="flex items-baseline justify-between gap-3">
-            <p className="text-sm font-medium">Pore size <KindMark kind="chemical" /></p>
-            <p className="font-heading text-lg text-[#144237] tabular-nums">{poreAngstroms} Å</p>
-          </div>
-          <input
-            id="bead-pore-size"
-            className="column-slider mt-1"
-            type="range"
-            min={60}
-            max={300}
-            step={1}
-            value={poreAngstroms}
-            aria-valuetext={`${poreAngstroms} angstroms`}
-            onChange={(event) => setPoreAngstroms(Number(event.target.value))}
-          />
         </div>
       </div>
       <aside

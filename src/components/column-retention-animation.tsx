@@ -56,7 +56,7 @@ export function ColumnRetentionAnimation() {
     <section id="column-animation" className="flex flex-col gap-4">
       <header>
         <p className="text-xs tracking-[0.16em] text-[#0f6b56] uppercase">Retention</p>
-        <h2 className="mt-1 font-heading text-2xl text-[#144237]">Why they stop</h2>
+        <h2 className="mt-1 font-heading text-2xl text-[#144237]">Why compounds separate</h2>
         <div className="mt-2 flex max-w-2xl flex-col gap-3 text-base text-muted-foreground">
           {paragraphs.map((paragraph) => (
             <p key={paragraph.slice(0, 24)}>{paragraph}</p>

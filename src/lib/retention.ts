@@ -295,8 +295,8 @@ export function decideRetention(
   }
 
   const line = retentionLine(complete.lastPeakTimeMin);
-  if (isBelow(current.lastPeakTimeMin!, line)) {
-    return dropOrBoth(samples, complete);
+  if (!isPast(current.lastPeakTimeMin!, line)) {
+    return dropPoints(samples, complete, 10, "drop-10");
   }
   return calculatePercentB(samples, complete);
 }
@@ -808,52 +808,6 @@ function dropPoints(
     why: whyParts.join("\n\n"),
     fit: null,
   };
-}
-
-function dropOrBoth(samples: RetentionSample[], rules: CompleteRules): RetentionDecision {
-  const drop = dropPoints(samples, rules, 10, "drop-10");
-  if (samples.length < 2 || drop.nextPercentB == null) return drop;
-  const line = calculatePercentB(samples, rules);
-  if (line.reason !== "calculated" || line.fit == null || line.nextPercentB == null) return drop;
-  const dropExpected = expectedLastPeak(drop.nextPercentB, line.fit);
-  const minimumExpected = expectedLastPeak(line.nextPercentB, line.fit);
-  const choices: PercentChoice[] = [
-    {
-      id: "drop-10",
-      percentB: drop.nextPercentB,
-      expectedLastPeakMin: dropExpected,
-      sentence: choiceSentence("A 10-point drop", drop.nextPercentB, dropExpected),
-    },
-    {
-      id: "minimum",
-      percentB: line.nextPercentB,
-      expectedLastPeakMin: minimumExpected,
-      sentence: choiceSentence("The minimum %B from the logK line", line.nextPercentB, minimumExpected),
-    },
-  ];
-  return {
-    ...drop,
-    fit: line.fit,
-    bChoices: choices,
-    nextChange: `${choices[0].sentence} ${choices[1].sentence} Pick one. ${PERCENT_B_SENTENCE}`,
-    following: SELECTIVITY_ORDER,
-  };
-}
-
-function choiceSentence(name: string, percentB: number, expected: number | null): string {
-  const time =
-    expected == null
-      ? "The logK line cannot give an expected last-peak time for that %B."
-      : `The logK line expects the last peak at ${formatMinutes(expected)} min, from tR = t0 × (1 + 10^logK).`;
-  return `${name}: run at ${formatPercentB(percentB)}% B. ${time}`;
-}
-
-function expectedLastPeak(percentB: number, fit: RetentionFit): number | null {
-  const logK = fit.m * percentB + fit.c;
-  if (!Number.isFinite(logK) || !(fit.t0Average > 0)) return null;
-  const k = 10 ** logK;
-  if (!Number.isFinite(k)) return null;
-  return fit.t0Average * (1 + k);
 }
 
 function returnToSelectivity(samples: RetentionSample[], rules: CompleteRules): RetentionDecision {

@@ -138,7 +138,7 @@ export function LaterChangeNote({ decision }: { decision: RetentionDecision | nu
     <div className="flex flex-col gap-4">
       <section
         id="next-change"
-        className="scroll-mt-16 rounded-xl bg-[#e7f3ee] px-4 py-4 text-[#144237]"
+        className="@container scroll-mt-16 rounded-xl bg-[#e7f3ee] px-4 py-4 text-[#144237]"
       >
         <h2 className="font-heading text-base">Next change</h2>
         <p className="mt-1 text-base font-semibold">{label}</p>

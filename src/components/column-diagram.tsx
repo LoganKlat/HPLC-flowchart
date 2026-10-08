@@ -68,9 +68,11 @@ function columnGeometry(lengthMm: number, widthMm: number) {
   const nutW = 16;
   const fitW = 22;
   const side = nutW + fitW;
-  const vbW = 640;
+  const gutter = 108;
+  const vbW = 640 + gutter;
   const vbH = 148;
-  const x = (vbW - (body + side * 2)) / 2;
+  const assembly = body + side * 2;
+  const x = gutter + (vbW - gutter - assembly) / 2;
   return { body, thick, nutW, fitW, side, x, cy: 72, vbW, vbH };
 }
 
@@ -94,6 +96,8 @@ function ColumnDrawing({ lengthMm, widthMm }: { lengthMm: number; widthMm: numbe
       aria-label="Column, drawn to the length and internal diameter"
       data-body={body.toFixed(1)}
       data-thick={thick.toFixed(1)}
+      data-body-x={(x + side).toFixed(1)}
+      data-left={x.toFixed(1)}
     >
       <defs>
         <linearGradient id="column-tube" x1="0" y1="0" x2="0" y2="1">
@@ -107,7 +111,7 @@ function ColumnDrawing({ lengthMm, widthMm }: { lengthMm: number; widthMm: numbe
           <stop offset="100%" stopColor="#5c6661" />
         </linearGradient>
       </defs>
-      <rect x="48" y="118" width="544" height="8" rx="4" fill="#e7f3ee" />
+      <rect x={x} y="118" width={body + side * 2} height="8" rx="4" fill="#e7f3ee" />
       <rect
         x={leftNutX}
         y={cy - nutH / 2}
@@ -195,23 +199,24 @@ function ColumnWithSliders({
   const { body, x, side, vbW } = columnGeometry(lengthMm, widthMm);
   const lengthLeft = ((x + side) / vbW) * 100;
   const lengthSpan = (body / vbW) * 100;
-  const widthAt = ((x + side + body * 0.18) / vbW) * 100;
+  const widthAnchor = (x / vbW) * 100;
 
   return (
     <figure className="min-w-0 rounded-xl bg-card px-3 py-3 ring-1 ring-foreground/10 sm:px-4">
       <div className="relative">
         <ColumnDrawing lengthMm={lengthMm} widthMm={widthMm} />
         <div
-          className="absolute inset-y-1 z-10 flex w-8 -translate-x-1/2 flex-col items-center"
-          style={{ left: `${widthAt}%` }}
+          className="absolute inset-y-1 z-10 flex -translate-x-full flex-col items-center gap-1 pr-2"
+          style={{ left: `${widthAnchor}%` }}
           {...widthEvents}
         >
-          <p className="rounded-md bg-card px-1.5 font-heading text-sm font-semibold text-[#144237] tabular-nums ring-1 ring-foreground/10">
+          <p className="text-xs font-medium leading-none text-[#144237]">Width</p>
+          <p className="rounded-md bg-card px-1.5 font-heading text-sm font-semibold whitespace-nowrap text-[#144237] tabular-nums ring-1 ring-foreground/10">
             {widthMm.toFixed(1)} mm
           </p>
           <input
             id="column-width"
-            className="column-slider-y mt-1 min-h-0 flex-1"
+            className="column-slider-y mt-1 h-auto! min-h-0 w-7 flex-1"
             type="range"
             min={WIDTH_MIN}
             max={WIDTH_MAX}
@@ -223,11 +228,12 @@ function ColumnWithSliders({
           />
         </div>
       </div>
-      <div className="relative mt-1 h-14" {...lengthEvents}>
+      <div className="relative mt-1 h-[4.75rem]" {...lengthEvents}>
         <div className="absolute top-0" style={{ left: `${lengthLeft}%`, width: `${lengthSpan}%` }}>
+          <p className="text-center text-xs font-medium leading-none text-[#144237]">Length</p>
           <input
             id="column-length"
-            className="column-slider"
+            className="column-slider mt-1"
             type="range"
             min={LENGTH_MIN}
             max={LENGTH_MAX}
@@ -365,7 +371,7 @@ export function ColumnDiagram({ runs }: { runs: ColumnRunTrace[] }) {
         <p className="text-xs tracking-[0.16em] text-[#0f6b56] uppercase">Column</p>
         <h2 className="mt-1 font-heading text-2xl text-[#144237]">Length and width</h2>
         <p className="mt-2 max-w-2xl text-base text-muted-foreground">
-          Drag along the column for length, and across it for width. The drawing changes shape, and
+          Drag the bar under the tube for length, and the bar at its left end for width. The drawing changes shape, and
           the chromatogram is the selected run stretched by those two sizes. Each multiplier starts
           at 1 for the column that produced that run.
         </p>
