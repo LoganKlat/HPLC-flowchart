@@ -190,6 +190,34 @@ describe("retention %B along the four lab files", () => {
     expect(past.fit).not.toBeNull();
   });
 
+  it("runs the calculated %B when a 10-point step would land below it", () => {
+    const decision = decideRetention(
+      [
+        sample({
+          percentB: 60,
+          peakCount: 4,
+          lastPeakTimeMin: 3,
+          firstPeakTimeMin: 1,
+          maxBackPressurePsi: 200,
+        }),
+        sample({
+          percentB: 50,
+          peakCount: 4,
+          lastPeakTimeMin: 6,
+          firstPeakTimeMin: 1,
+          maxBackPressurePsi: 300,
+        }),
+      ],
+      pathRules,
+    );
+    expect(decision.move).toBe("calculated");
+    expect(decision.nextPercentB).not.toBe(40);
+    expect(decision.nextPercentB).not.toBeNull();
+    expect(decision.nextPercentB!).toBeGreaterThan(40);
+    expect(decision.nextPercentB!).toBeLessThan(50);
+    expect(decision.fit).not.toBeNull();
+  });
+
   it("uses the %B saved on the run, not the percent in the file name", () => {
     const decision = decideRetention([sampleFromRead(63, reads[0])], pathRules);
     expect(decision.move).toBe("drop-10");

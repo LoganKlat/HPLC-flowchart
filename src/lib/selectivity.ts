@@ -123,14 +123,6 @@ export type TempChoice = {
   other: "solvent" | "ligand";
 };
 
-/** Shown when 40°C did not improve separation. Solvent is the recommended path. */
-export const TEMP_CHOICE_RECOMMENDED =
-  "Change the solvent. This is recommended because the temperature increase did not help, so a higher temperature is unlikely to increase separation.";
-
-/** Shown when 40°C on the new solvent did not improve separation. Ligand is the recommended path. */
-export const LIGAND_CHOICE_RECOMMENDED =
-  "Change the ligand. This is recommended because the temperature increase did not help, so a higher temperature is unlikely to increase separation.";
-
 export type SelectivityPlan = {
   status: "recommend" | "finished" | "blocked";
   step: SelectivityStep;
@@ -782,10 +774,7 @@ function walkTemperature(args: {
 
   if (!at60) {
     if (args.pending.length === 1) {
-      const plan = args.offerChoice
-        ? planTempChoice(args, percent, solvent, ligand, heated)
-        : planLigandHeatChoice(args, percent, solvent, ligand, heated);
-      return { type: "plan", plan };
+      return { type: "plan", plan: plan60Despite(args, percent, solvent, ligand, heated) };
     }
     return { type: "advance", consumed: 1, did60: false };
   }
@@ -797,12 +786,12 @@ function isSixty(run: SelectivityRun): boolean {
   return run.temperatureC != null && Math.abs(run.temperatureC - 60) < 0.51;
 }
 
-function planTempChoice(
+function plan60Despite(
   args: {
     baseline: SelectivityRun;
     baselineNumber: number;
     setup: SelectivitySetup;
-    ambient: Ambient;
+    offerChoice: boolean;
   },
   percentB: number,
   solvent: string,
@@ -810,104 +799,30 @@ function planTempChoice(
   heated: SelectivityRun[],
 ): SelectivityPlan {
   const percent = formatPercentB(percentB);
-  const heatLabel = `Increase the temperature anyway, to 60°C at ${percent}% B.`;
-  const solventStep = solventPlan({
-    anchor: args.baseline,
-    anchorNumber: args.baselineNumber,
-    setup: args.setup,
-    ambient: args.ambient,
-    ligandName: ligand,
-    skipped60: true,
-    heated,
-  });
+  const later = args.offerChoice
+    ? "A new solvent comes after 60°C, at the chart %B. It is not the next step."
+    : "A new coating comes after 60°C on this solvent. It is not the next step.";
   return {
     status: "recommend",
-    step: "temp-choice",
-    nextChange: TEMP_CHOICE_RECOMMENDED,
+    step: "temp-60",
+    nextChange: `Run the next chromatogram at 60°C, still at ${percent}% B. 40°C did not improve the separation. Stay on the same solvent and the same %B. ${TEMPERATURE_SENTENCE} A higher temperature shortens retention. The %B stays the same.`,
+    following: args.offerChoice
+      ? `After 60°C, the next step is the second solvent at the chart %B, tried at 40°C and 60°C, then the coating last. ${SELECTIVITY_ORDER}`
+      : `After 60°C on this solvent, the next step is a new coating. ${SELECTIVITY_ORDER}`,
     why: [
-      TEMP_CHOICE_RECOMMENDED,
-      heatLabel,
+      `40°C did not improve the separation compared with Run ${args.baselineNumber}.`,
       compareSentence(args.baseline, args.baselineNumber, heated, args.setup.requiredPeaks),
-      "40°C did not pull the peaks apart. More heat at the same %B is unlikely to help, because the compounds already had a chance to spend less time on the coating and the separation did not improve. The other button changes the solvent. A different solvent changes which compounds prefer the coating, which can separate a pair that heat did not. That solvent change is a selectivity change, not an efficiency change. The matched %B keeps the retention time similar.",
+      `The next chromatogram is still 60°C, at ${percent}% B, on the same solvent. ${later} The %B stays the same.`,
     ].join(" "),
-    prefill: null,
-    nomograph: solventStep.nomograph,
-    showSolventChoices: false,
-    showLigandChoices: false,
-    recommendedSolventId: null,
-    recommendedLigand: null,
-    anchorPercentB: solventStep.anchorPercentB,
-    oldSolvent: solventStep.oldSolvent,
-    tempChoice: {
-      recommendedSentence: TEMP_CHOICE_RECOMMENDED,
-      heatLabel,
-      heatNextChange: `Run the next chromatogram at 60°C, at ${percent}% B.`,
-      heatPrefill: { percentB: percent, temperature: "60", solvent, ligand },
-      solventNextChange: solventStep.nextChange,
-      solventPrefill: solventStep.prefill ?? {
-        percentB: "",
-        temperature: String(args.ambient.celsius),
-        solvent: "",
-        ligand,
-      },
-      other: "solvent",
-    },
-  };
-}
-
-function planLigandHeatChoice(
-  args: {
-    baseline: SelectivityRun;
-    baselineNumber: number;
-    setup: SelectivitySetup;
-    ambient: Ambient;
-    triedLigands: string[];
-  },
-  percentB: number,
-  solvent: string,
-  ligand: string,
-  heated: SelectivityRun[],
-): SelectivityPlan {
-  const percent = formatPercentB(percentB);
-  const heatLabel = `Go to 60°C anyway, at ${percent}% B.`;
-  const ligandStep = ligandPlan({
-    setup: args.setup,
-    ambient: args.ambient,
-    triedLigands: args.triedLigands,
-  });
-  const fallbackPrefill: SelectivityPrefill = {
-    percentB: "100",
-    temperature: String(args.ambient.celsius),
-    solvent: "",
-    ligand: "",
-  };
-  return {
-    status: "recommend",
-    step: "temp-choice",
-    nextChange: LIGAND_CHOICE_RECOMMENDED,
-    why: [
-      LIGAND_CHOICE_RECOMMENDED,
-      heatLabel,
-      compareSentence(args.baseline, args.baselineNumber, heated, args.setup.requiredPeaks),
-      "40°C on this solvent did not pull the peaks apart. More heat is unlikely to help, because the warmer column was already tried and the separation did not improve. The other button changes the column coating. The coating is last, because temperature and solvent were already tried. A new coating starts the %B ladder again. A new ligand is a selectivity change: peaks can pull apart or change order.",
-    ].join(" "),
-    prefill: null,
+    prefill: { percentB: percent, temperature: "60", solvent, ligand },
     nomograph: null,
     showSolventChoices: false,
     showLigandChoices: false,
     recommendedSolventId: null,
     recommendedLigand: null,
-    anchorPercentB: null,
-    oldSolvent: null,
-    tempChoice: {
-      recommendedSentence: LIGAND_CHOICE_RECOMMENDED,
-      heatLabel,
-      heatNextChange: `Run the next chromatogram at 60°C, at ${percent}% B.`,
-      heatPrefill: { percentB: percent, temperature: "60", solvent, ligand },
-      solventNextChange: ligandStep.nextChange,
-      solventPrefill: ligandStep.prefill ?? fallbackPrefill,
-      other: "ligand",
-    },
+    anchorPercentB: percentB,
+    oldSolvent: solvent,
+    tempChoice: null,
   };
 }
 
@@ -1049,9 +964,6 @@ function ligandPlan(args: {
 }): SelectivityPlan {
   const unused = recommendLigand(args.triedLigands);
   const triedText = uniqueLabels(args.triedLigands);
-  const original = findSolvent(args.setup.originalSolvent);
-  const solventWords = original?.label ?? (args.setup.originalSolvent.trim() || "the original solvent");
-  const solventField = original?.label ?? args.setup.originalSolvent.trim();
   if (!unused) {
     return blockedPlan(
       "Every column coating in the list has already been tried.",
@@ -1062,18 +974,18 @@ function ligandPlan(args: {
   return {
     status: "recommend",
     step: "ligand",
-    nextChange: `${pick} Go back to 100% B, ${args.ambient.celsius}°C, and ${solventWords}, then start the %B steps over.`,
+    nextChange: `${pick} Go back to 100% B, ${args.ambient.celsius}°C, and ACN, then start the %B steps over.`,
     following: `${COATING_SENTENCE} ${SELECTIVITY_ORDER}`,
     why: [
-      "The coating is last. Temperature is tried first, then a new solvent, because a new coating means starting over. The temperature steps and the solvent change still do not meet the peak count and the resolution check. A new ligand is a selectivity change: peaks can pull apart or change order. It is the last one.",
+      "The coating is last. Temperature is tried first, then a new solvent, because a new coating means starting over. The temperature steps and the solvent change still do not meet the peak count and the resolution check. A new ligand is a selectivity change: peaks can pull apart or change order. It is the last one. You pick the coating.",
       `${pick} Already used: ${triedText}.`,
-      `The ladder starts again at 100% B, the starting temperature (${args.ambient.celsius}°C), and the original solvent (${solventWords}). A strong solvent brings the compounds off the new coating quickly, and the %B steps bring the last peak back toward the specified time.`,
+      `The ladder starts again at 100% B with ACN, at ${args.ambient.celsius}°C. The previous solvent is not carried forward. A strong solvent brings the compounds off the new coating quickly, and the %B steps bring the last peak back toward the specified time.`,
       args.ambient.sentence,
     ].join(" "),
     prefill: {
       percentB: "100",
       temperature: String(args.ambient.celsius),
-      solvent: solventField,
+      solvent: "ACN",
       ligand: "",
     },
     nomograph: null,
