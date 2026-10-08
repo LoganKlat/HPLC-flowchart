@@ -160,6 +160,7 @@ export type RetentionReason =
   | "specs-met"
   | "efficiency"
   | "look"
+  | "intermediate"
   | "cannot-calculate";
 
 export type PercentChoice = {
@@ -428,6 +429,8 @@ function afterCalculatedFile(
     if (choice?.continueToLook) return lookDecision(samples, rules, "between-then-heat");
     return efficiencyStop(current, rules, judged, true);
   }
+  const intermediate = intermediateAfterMinimum(samples, rules);
+  if (intermediate) return intermediate;
   return lookDecision(samples, rules, "between-then-heat");
 }
 
@@ -568,6 +571,8 @@ function minimumPercentOnce(
       fit: null,
     };
   } else if (nearly(current.percentB!, calculated.nextPercentB!)) {
+    const intermediate = intermediateAfterMinimum(samples, rules);
+    if (intermediate) return intermediate;
     return lookDecision(samples, rules, "between");
   } else {
     decision = calculated;
@@ -613,6 +618,161 @@ function ruleLines(sample: RetentionSample, rules: CompleteRules, judged: EqualJ
     );
   }
   return lines;
+}
+
+/**
+ * After the minimum-%B chromatogram has been tested: the whole %B, inside the
+ * tested range, where the closest logK lines are farthest apart and the
+ * predicted last peak still meets the set time.
+ */
+function intermediateAfterMinimum(
+  samples: RetentionSample[],
+  rules: CompleteRules,
+): RetentionDecision | null {
+  const current = samples[samples.length - 1];
+  if (current.lastPeakTimeMin == null || !isPast(current.lastPeakTimeMin, retentionLine(rules.lastPeakTimeMin))) {
+    return null;
+  }
+  if (timedPeaks(current).length < 2) return null;
+  const found = optimalIntermediatePercent(samples, rules);
+  if (!found) return null;
+  const percent = formatPercentB(found.percentB);
+  const identity = found.named
+    ? "Named compounds stay on their own line, even when the elution order changes. A peak with no name uses its peak number."
+    : "These files do not name the compounds, so each line uses the same peak number. If two compounds change elution order, that line is not one compound.";
+  const edge = found.atEdge
+    ? `${percent}% B is at the edge of the %B values already tested. One more run should confirm it.`
+    : "";
+  const why = [
+    "The minimum %B run has been tested. The next change is an intermediate %B, not another 10% step.",
+    `logK was calculated for every retained peak, leaving out the t0 peak. k = (tR − t0) / t0, then logK = log10(k). ${identity} A line is kept only when that peak shows up in at least three runs.`,
+    `At each whole %B between the lowest and highest already tested, the smallest gap between those lines was measured. ${percent}% B is where that gap is largest. The predicted last peak there is ${formatMinutes(found.predictedLastMin)} min, inside the set time of ${formatTypedMinutes(rules.lastPeakTimeMin)} min. That gap is not the chromatographic resolution. Resolution also depends on how wide the peaks are.`,
+    edge,
+  ]
+    .filter((paragraph) => paragraph.length > 0)
+    .join("\n\n");
+  return {
+    status: "recommend",
+    reason: "intermediate",
+    move: null,
+    nextPercentB: found.percentB,
+    nextChange: `Run the next chromatogram at ${percent}% B. That is the intermediate %B. The closest peaks are farthest apart there, and the predicted last peak stays within the set time.`,
+    why,
+    fit: null,
+  };
+}
+
+function optimalIntermediatePercent(
+  samples: RetentionSample[],
+  rules: CompleteRules,
+): { percentB: number; predictedLastMin: number; atEdge: boolean; named: boolean } | null {
+  const used = samples
+    .map((sample) => sample.percentB)
+    .filter((percent): percent is number => percent != null && Number.isFinite(percent));
+  const points = new Map<string, { x: number; y: number; t0: number; run: number }[]>();
+  const namedKeys = new Set<string>();
+  samples.forEach((sample, run) => {
+    if (sample.percentB == null || !Number.isFinite(sample.percentB)) return;
+    const peaks = timedPeaks(sample);
+    if (peaks.length < 2) return;
+    const t0 = peaks[0].timeMin!;
+    if (!(t0 > 0)) return;
+    const seen = new Set<string>();
+    peaks.slice(1).forEach((peak, index) => {
+      const tR = peak.timeMin!;
+      const k = (tR - t0) / t0;
+      if (!(k > 0)) return;
+      const identity = compoundKey(peak, index);
+      if (seen.has(identity.key)) return;
+      seen.add(identity.key);
+      const line = points.get(identity.key) ?? [];
+      line.push({ x: sample.percentB!, y: Math.log10(k), t0, run });
+      points.set(identity.key, line);
+      if (identity.named) namedKeys.add(identity.key);
+    });
+  });
+  const fits: { m: number; c: number; named: boolean }[] = [];
+  const t0ByRun = new Map<number, number>();
+  for (const [key, line] of points) {
+    if (line.length < 3) continue;
+    const fit = slopeIntercept(line);
+    if (!fit) continue;
+    fits.push({ ...fit, named: namedKeys.has(key) });
+    for (const point of line) t0ByRun.set(point.run, point.t0);
+  }
+  if (fits.length < 2 || t0ByRun.size === 0) return null;
+  const percents = [...t0ByRun.keys()].map((run) => samples[run].percentB!);
+  if (percents.length === 0) return null;
+  const minB = Math.min(...percents);
+  const maxB = Math.max(...percents);
+  const low = Math.floor(minB) + 1;
+  const high = Math.ceil(maxB) - 1;
+  if (low > high) return null;
+  const t0Values = [...t0ByRun.values()];
+  const t0Average = t0Values.reduce((sum, value) => sum + value, 0) / t0Values.length;
+  const middle = (minB + maxB) / 2;
+  let best: { percentB: number; dMin: number; predictedLastMin: number } | null = null;
+  for (let percent = low; percent <= high; percent++) {
+    if (used.some((value) => nearly(value, percent))) continue;
+    const logs = fits.map((fit) => fit.m * percent + fit.c);
+    let dMin = Infinity;
+    for (let i = 0; i < logs.length; i++) {
+      for (let j = i + 1; j < logs.length; j++) {
+        dMin = Math.min(dMin, Math.abs(logs[i] - logs[j]));
+      }
+    }
+    if (!Number.isFinite(dMin)) continue;
+    const predictedLast = Math.max(...logs.map((logK) => t0Average * (1 + 10 ** logK)));
+    if (!Number.isFinite(predictedLast) || isPast(predictedLast, rules.lastPeakTimeMin)) continue;
+    const nearer =
+      best == null ||
+      dMin > best.dMin + 1e-12 ||
+      (Math.abs(dMin - best.dMin) <= 1e-12 && Math.abs(percent - middle) < Math.abs(best.percentB - middle) - 1e-9);
+    if (nearer) best = { percentB: percent, dMin, predictedLastMin: predictedLast };
+  }
+  if (!best) return null;
+  return {
+    percentB: best.percentB,
+    predictedLastMin: best.predictedLastMin,
+    atEdge: best.percentB === low || best.percentB === high,
+    named: fits.some((fit) => fit.named),
+  };
+}
+
+function timedPeaks(sample: RetentionSample): PeakMeasurement[] {
+  return (sample.peaks ?? [])
+    .filter((peak) => peak.timeMin != null && Number.isFinite(peak.timeMin))
+    .slice()
+    .sort((a, b) => a.timeMin! - b.timeMin!);
+}
+
+function compoundKey(peak: PeakMeasurement, elutionIndex: number): { key: string; named: boolean } {
+  const name = peak.name?.trim();
+  if (name) return { key: `name:${name.toLowerCase()}`, named: true };
+  const id = peak.id?.trim();
+  if (id) return { key: `id:${id.toLowerCase()}`, named: true };
+  return { key: `order:${elutionIndex}`, named: false };
+}
+
+function slopeIntercept(points: { x: number; y: number }[]): { m: number; c: number } | null {
+  const n = points.length;
+  if (n < 2) return null;
+  let sumX = 0;
+  let sumY = 0;
+  let sumXY = 0;
+  let sumX2 = 0;
+  for (const point of points) {
+    sumX += point.x;
+    sumY += point.y;
+    sumXY += point.x * point.y;
+    sumX2 += point.x * point.x;
+  }
+  const denominator = n * sumX2 - sumX * sumX;
+  if (denominator === 0) return null;
+  const m = (n * sumXY - sumX * sumY) / denominator;
+  const c = (sumY - m * sumX) / n;
+  if (!Number.isFinite(m) || !Number.isFinite(c)) return null;
+  return { m, c };
 }
 
 function lookDecision(

@@ -46,6 +46,8 @@ export function RetentionDecisionView({
     onLinePercent?.(reported);
   }, [onLinePercent, reported]);
   const shownPercent = overridden && solved ? solved.nextPercentB : (pickedPercent ?? decision.nextPercentB);
+  const intermediateHeading =
+    decision.reason === "intermediate" && shownPercent != null ? minimumPercentHeading(shownPercent) : null;
   const label = retentionChangeLabel(
     shownPercent === decision.nextPercentB ? decision : { ...decision, nextPercentB: shownPercent },
     shownPercent,
@@ -74,7 +76,10 @@ export function RetentionDecisionView({
           </div>
         ) : null}
       </section>
-      <section id="min-b-note" className={`rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10 ${decisionUnderClass}`}>
+      <section
+        id={intermediateHeading ? "intermediate-b" : "min-b-note"}
+        className={`rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10 ${decisionUnderClass}`}
+      >
         {fit ? (
           <MinimumPercentFit
             fit={fit}
@@ -89,7 +94,7 @@ export function RetentionDecisionView({
           />
         ) : (
           <>
-            <h2 className="font-heading text-base">Why</h2>
+            <h2 className="font-heading text-base">{intermediateHeading ?? "Why"}</h2>
             <div className="mt-1 flex flex-col gap-2 text-sm leading-relaxed text-foreground">
               {whyParagraphs(decision.why).map((paragraph, index) => (
                 <p key={index}>{paragraph}</p>

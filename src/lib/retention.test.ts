@@ -255,6 +255,74 @@ describe("retention %B along the four lab files", () => {
     expect(followed.nextChange).not.toContain("Carry forward");
     expect(followed.why).not.toContain("Carry forward");
   });
+
+  it("recommends an intermediate %B after the minimum %B run, not during the 10% ladder", () => {
+    const ladder = decideRetention(samples.slice(0, 2), pathRules);
+    expect(ladder.reason).toBe("drop-10");
+    expect(ladder.nextPercentB).toBe(50);
+    expect(ladder.reason).not.toBe("intermediate");
+
+    const minimum = decideRetention(samples, pathRules);
+    expect(minimum.move).toBe("calculated");
+    expect(minimum.reason).toBe("calculated");
+    expect(minimum.nextPercentB).toBe(42);
+
+    const followed = decideRetention([...samples, sampleFromRead(42, reads[3])], pathRules);
+    expect(followed.status).toBe("recommend");
+    expect(followed.reason).toBe("intermediate");
+    expect(followed.move).toBeNull();
+    expect(followed.nextPercentB).toBe(62);
+    expect(followed.fit).toBeNull();
+    expect(followed.nextChange).toContain("62%");
+    expect(followed.why).toContain("62% B is where that gap is largest");
+    expect(followed.why).toContain("2.628 min");
+    expect(followed.why).toContain("inside the set time of 10 min");
+    expect(followed.why).toContain("same peak number");
+    expect(followed.why).not.toContain("40°C");
+    expect(followed.why).not.toContain("coating");
+    expect(followed.why.toLowerCase()).not.toContain("solvent");
+    expect(followed.why).not.toContain("15 minute");
+    expect(followed.why).not.toContain("One more run should confirm");
+
+    const stillEarly = decideRetention(
+      [...samples, { ...sampleFromRead(42, reads[3]), lastPeakTimeMin: 5 }],
+      pathRules,
+    );
+    expect(stillEarly.reason).not.toBe("intermediate");
+    expect(stillEarly.status).toBe("look");
+
+    const underHalf = decideRetention(
+      [...samples, { ...sampleFromRead(42, reads[3]), lastPeakTimeMin: 4 }],
+      pathRules,
+    );
+    expect(underHalf.reason).not.toBe("intermediate");
+    expect(underHalf.status).toBe("look");
+  });
+
+  it("follows a compound name instead of assuming the same peak number", () => {
+    const namedRuns = samples.map((sample) => ({
+      ...sample,
+      peaks: sample.peaks?.map((peak, index) => ({ ...peak, name: `compound-${index}` })),
+    }));
+    const followed = decideRetention(
+      [...namedRuns, { ...namedRuns[3], percentB: 42 }],
+      pathRules,
+    );
+    expect(followed.reason).toBe("intermediate");
+    expect(followed.nextPercentB).toBe(62);
+    expect(followed.why).toContain("Named compounds stay on their own line");
+    expect(followed.why).toContain("2.628 min");
+
+    const unmatched = {
+      ...sampleFromRead(42, reads[3]),
+      peaks: reads[3].peaks.map((peak, index) => ({ ...peak, name: `only-${index}` })),
+    };
+    const apart = decideRetention([...samples, unmatched], pathRules);
+    expect(apart.reason).toBe("intermediate");
+    expect(apart.nextPercentB).toBe(62);
+    expect(apart.why).toContain("2.615 min");
+    expect(apart.why).toContain("same peak number");
+  });
 });
 
 describe("retention stops and keeps going", () => {

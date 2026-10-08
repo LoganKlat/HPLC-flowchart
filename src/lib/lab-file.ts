@@ -21,6 +21,10 @@ export type PeakMeasurement = {
   timeMin: number | null;
   area: number | null;
   height: number | null;
+  /** Compound name from the peak table. Blank when the file does not name it. */
+  name?: string | null;
+  /** ID# from the peak table. Blank when the file does not identify it. */
+  id?: string | null;
 };
 
 export type LabFileRead = {
@@ -132,10 +136,14 @@ export function readLabFile(input: string | ArrayBuffer | Uint8Array): LabFileRe
 
   const areaCol = columnIndex(peakTable.headers, "Area");
   const heightCol = columnIndex(peakTable.headers, "Height");
+  const nameCol = columnIndex(peakTable.headers, "Name");
+  const idCol = columnIndex(peakTable.headers, "ID#");
   const peaks = peakRows.map((row) => ({
     timeMin: parseFileNumber(row[timeCol] ?? ""),
     area: areaCol < 0 ? null : parseFileNumber(row[areaCol] ?? ""),
     height: heightCol < 0 ? null : parseFileNumber(row[heightCol] ?? ""),
+    name: blankLabel(nameCol < 0 ? "" : (row[nameCol] ?? "")),
+    id: blankLabel(idCol < 0 ? "" : (row[idCol] ?? "")),
   }));
   const peakTimesMin = peaks
     .map((peak) => peak.timeMin)
@@ -409,6 +417,11 @@ function metaGet(meta: Record<string, string>, key: string): string | undefined 
     if (normalizeHeader(name) === target) return value;
   }
   return undefined;
+}
+
+function blankLabel(raw: string): string | null {
+  const text = raw.trim();
+  return text ? text : null;
 }
 
 function parseFileNumber(raw: string): number | null {
