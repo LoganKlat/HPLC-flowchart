@@ -554,7 +554,7 @@ export function HplcApp() {
         className="flex! h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden"
       >
       <div className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden pl-4 sm:pl-5">
-      <div id="decision-layout" className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden lg:grid lg:grid-cols-[28rem_minmax(0,1fr)] lg:grid-rows-[auto_minmax(0,1fr)_auto] lg:gap-x-5 lg:gap-y-3">
+      <div id="decision-layout" className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden lg:grid lg:grid-cols-[22.25rem_minmax(0,1fr)] lg:grid-rows-[auto_minmax(0,1fr)_auto] lg:gap-x-5 lg:gap-y-3">
       <header className="order-2 flex shrink-0 items-start justify-between gap-4 lg:col-span-2 lg:col-start-1 lg:row-start-1">
         <div className="min-w-0">
         <div className="mb-3 md:hidden">

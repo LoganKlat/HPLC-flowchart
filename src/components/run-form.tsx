@@ -230,7 +230,7 @@ export function RunForm({ title, details, rules, onDetails, onRules }: RunFormPr
         </CardHeader>
         <CardContent className="grid gap-1.5">
           <TextField
-            label="Number of peaks to separate"
+            label="Number of peaks"
             value={rules.requiredPeaks}
             onChange={(value) => setRule("requiredPeaks", value)}
             inputMode="numeric"
@@ -540,7 +540,7 @@ function FieldRow({
 }) {
   return (
     <div className="flex min-w-0 flex-col gap-1">
-      <div className="grid grid-cols-[minmax(0,1fr)_minmax(9.5rem,12.5rem)] items-center gap-x-2">
+      <div className="grid grid-cols-[minmax(0,1fr)_10.5rem] items-center gap-x-2">
         <div className="flex min-w-0 items-start gap-1.5">
           <Label htmlFor={id} className="h-auto whitespace-normal text-sm leading-snug">
             {label}
