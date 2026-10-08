@@ -17,9 +17,11 @@ import {
 export function RetentionDecisionView({
   decision,
   onLinePercent,
+  onPickPercent,
 }: {
   decision: RetentionDecision;
   onLinePercent?: (percent: number | null) => void;
+  onPickPercent?: (percent: number) => void;
 }) {
   const fit = decision.fit;
   const initial = fit?.catalog.filter((run) => run.included).map((run) => run.runNumber) ?? [];
@@ -48,6 +50,25 @@ export function RetentionDecisionView({
       >
         <h2 className="font-heading text-base">Next change</h2>
         <p className="mt-1 text-sm leading-relaxed text-foreground">{nextChange}</p>
+        {decision.bChoices && decision.bChoices.length > 1 ? (
+          <div id="percent-choices" className="mt-3 flex flex-col gap-2">
+            {decision.bChoices.map((choice) => (
+              <button
+                key={choice.id}
+                type="button"
+                className="rounded-lg border border-[#0f6b56] bg-white px-3 py-2 text-left text-sm leading-relaxed text-[#144237]"
+                onClick={() => onPickPercent?.(choice.percentB)}
+              >
+                {choice.sentence}
+              </button>
+            ))}
+          </div>
+        ) : null}
+        {decision.following ? (
+          <p id="following-step" className="mt-3 text-sm leading-relaxed text-foreground">
+            {decision.following}
+          </p>
+        ) : null}
       </section>
       <section id="min-b-note" className="rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10">
         <h2 className="font-heading text-base">Why</h2>

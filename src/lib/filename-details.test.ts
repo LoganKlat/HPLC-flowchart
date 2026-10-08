@@ -1,9 +1,11 @@
 import { readFileSync } from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { FILE_NAME_CHECKBOX_LABEL, FILE_NAME_MISMATCH, parseRunFileName } from "@/lib/filename-details";
+import { FILE_NAME_CHECKBOX_LABEL, FILE_NAME_EXAMPLE, FILE_NAME_MISMATCH, parseRunFileName } from "@/lib/filename-details";
 import { readLabFile } from "@/lib/lab-file";
+import { decideRetention } from "@/lib/retention";
 
-const uploads = "/home/ubuntu/.cursor/projects/workspace/uploads";
+const uploads = path.join(process.cwd(), "fixtures/lab");
 const workbook90 = `${uploads}/GR09-05-3-ACN-3-ISO-90-1.5-20-CP-0.1-C18aqP-150x4.6x5-amb-254_f959.xlsx`;
 const workbook80 = `${uploads}/GR09-06-3-ACN-3-ISO-80-1.5-20-CP-0.1-C18aqP-150x4.6x5-amb-254_2191.xlsx`;
 const name90 = "GR09-05-3-ACN-3-ISO-90-1.5-20-CP-0.1-C18aqP-150x4.6x5-amb-254.xlsx";
@@ -137,5 +139,51 @@ describe("run file names", () => {
     expect(second.minResolutionExcludingFirst).toBeCloseTo(1.093, 3);
     expect(second.pressureFound).toBe(true);
     expect(second.chromatogram?.length).toBeGreaterThan(10);
+  });
+
+  it("fills the class pattern and still loads a short or odd name", () => {
+    const matched = parseRunFileName(`${FILE_NAME_EXAMPLE}.csv`);
+    expect(matched.ok).toBe(true);
+    if (!matched.ok) return;
+    expect(matched.fields).toMatchObject({
+      solvent: "ACN",
+      ph: "3",
+      method: "ISO",
+      percentB: "90",
+      flowRate: "1.5",
+      injectionVolume: "20",
+      sampleType: "CP",
+      sampleConcentration: "0.1",
+      ligand: "C18aq",
+      lengthMm: "150",
+      diameterMm: "4.6",
+      particleSize: "5",
+      temperature: "ambient",
+      wavelength: "254",
+    });
+
+    const odd = parseRunFileName("lab-export.csv");
+    expect(odd.ok).toBe(false);
+    if (odd.ok) return;
+    expect(odd.message).toBe(FILE_NAME_MISMATCH);
+
+    const read = readLabFile(readFileSync(path.join(process.cwd(), "fixtures/synthetic-lab.csv")));
+    expect(read.blockingMessage).toBeNull();
+    expect(read.peakCount).toBe(3);
+    const decision = decideRetention(
+      [
+        {
+          percentB: 90,
+          peakCount: read.peakCount,
+          lastPeakTimeMin: read.lastPeakTimeMin,
+          firstPeakTimeMin: read.firstPeakTimeMin,
+          minResolutionExcludingFirst: read.minResolutionExcludingFirst,
+          maxBackPressurePsi: read.maxBackPressurePsi,
+        },
+      ],
+      { requiredPeaks: 8, lastPeakTimeMin: 10, maxBackPressurePsi: 2000 },
+    );
+    expect(decision.nextChange.length).toBeGreaterThan(0);
+    expect(decision.nextChange.toLowerCase()).not.toContain("file name");
   });
 });

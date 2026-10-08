@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { LIGANDS, SOLVENTS, chartX, findSolvent, type SelectivityPlan, type TempPath } from "@/lib/selectivity";
+import { SELECTIVITY_ORDER } from "@/lib/setting-kind";
 
 const fieldClass =
   "h-10 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
@@ -44,6 +45,9 @@ export function SelectivityDecisionView({
       <section id="next-change" className="scroll-mt-16 rounded-xl bg-[#e7f3ee] px-4 py-4 text-[#144237]">
         <h2 className="font-heading text-base">Next change</h2>
         <p className="mt-1 text-sm leading-relaxed">{nextChange}</p>
+        <p id="following-step" className="mt-3 text-sm leading-relaxed">
+          {plan.following ?? SELECTIVITY_ORDER}
+        </p>
         {choice ? (
           <div id="temp-choice" className="mt-3 flex flex-col gap-2">
             <Button

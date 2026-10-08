@@ -3,6 +3,7 @@
 import { useState, type CSSProperties } from "react";
 import { ChoiceSelect } from "@/components/choice-select";
 import { FunctionNoteView, type FunctionNote } from "@/components/function-note";
+import { KindMark } from "@/components/setting-legend";
 import { beadSurface } from "@/lib/bead-surface";
 import { porousSpots, shellSpots } from "@/lib/bead-spots";
 import { LIGANDS } from "@/lib/selectivity";
@@ -424,8 +425,9 @@ export function BeadDiagram() {
           </li>
         </ul>
         <div className="flex flex-col gap-1.5" {...bind("ligand")}>
-          <label htmlFor="bead-ligand" className="text-sm font-medium">
+          <label htmlFor="bead-ligand" className="flex flex-wrap items-center gap-2 text-sm font-medium">
             Ligand
+            <KindMark kind="chemical" />
           </label>
           <ChoiceSelect
             id="bead-ligand"
@@ -439,7 +441,7 @@ export function BeadDiagram() {
         <div className="rounded-lg px-1 py-2" {...bind("load")}>
           <div className="flex items-baseline justify-between gap-3">
             <div>
-              <p className="text-sm font-medium">Carbon load</p>
+              <p className="text-sm font-medium">Carbon load <KindMark kind="chemical" /></p>
               <p className="text-xs text-muted-foreground">Percent</p>
             </div>
             <p className="font-heading text-lg text-[#144237] tabular-nums">{carbonLoad}%</p>
@@ -461,7 +463,7 @@ export function BeadDiagram() {
         </div>
         <div className="rounded-lg px-1 py-2" {...bind("particle")}>
           <div className="flex items-baseline justify-between gap-3">
-            <p className="text-sm font-medium">Particle size</p>
+            <p className="text-sm font-medium">Particle size <KindMark kind="mechanical" /></p>
             <p className="font-heading text-lg text-[#144237] tabular-nums">
               {formatMicrons(particleUm)} µm
             </p>
@@ -480,7 +482,7 @@ export function BeadDiagram() {
         </div>
         <div className="rounded-lg px-1 py-2" {...bind("pore")}>
           <div className="flex items-baseline justify-between gap-3">
-            <p className="text-sm font-medium">Pore size</p>
+            <p className="text-sm font-medium">Pore size <KindMark kind="chemical" /></p>
             <p className="font-heading text-lg text-[#144237] tabular-nums">{poreAngstroms} Å</p>
           </div>
           <input

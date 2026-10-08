@@ -154,6 +154,19 @@ describe("retention %B along the four lab files", () => {
     expect(decideRetention(samples, pathRules).nextPercentB).toBe(42);
   });
 
+  it("offers the 10-point drop and the line when the last peak is well inside the time", () => {
+    const decision = decideRetention(samples.slice(0, 2), pathRules);
+    expect(decision.move).toBe("drop-10");
+    expect(decision.nextPercentB).toBe(50);
+    expect(decision.bChoices?.map((choice) => choice.id)).toEqual(["drop-10", "minimum"]);
+    expect(decision.bChoices?.[0]?.expectedLastPeakMin).not.toBeNull();
+    expect(decision.bChoices?.[1]?.expectedLastPeakMin).not.toBeNull();
+    expect(decision.nextChange).toContain("tR = t0 × (1 + 10^logK)");
+    expect(decision.nextChange).toContain("pump");
+    expect(decision.following).toContain("40°C");
+    expect(decision.following).toContain("coating");
+  });
+
   it("uses the %B saved on the run, not the percent in the file name", () => {
     const decision = decideRetention([sampleFromRead(63, reads[0])], pathRules);
     expect(decision.move).toBe("drop-10");
@@ -362,6 +375,20 @@ describe("retention rule edges", () => {
     expect(decision.nextChange).toContain("5 percentage points");
     expect(decision.nextChange.toLowerCase()).toContain("another run");
     expect(decision.nextChange).not.toContain("10 percentage points");
+  });
+
+  it("does not lower %B when the last peak is past the time and the peak count is short", () => {
+    const decision = decideRetention(
+      [sample({ percentB: 70, peakCount: 2, lastPeakTimeMin: 12, firstPeakTimeMin: 1, maxBackPressurePsi: 100 })],
+      { requiredPeaks: 8, lastPeakTimeMin: 10, maxBackPressurePsi: 500 },
+    );
+    expect(decision.nextPercentB).toBe(70);
+    expect(decision.nextTemperature).toBe("40");
+    expect(decision.nextChange).toContain("40°C");
+    expect(decision.nextChange.toLowerCase()).toContain("do not lower %b");
+    expect(decision.nextChange).toContain("overlapping peaks separate");
+    expect(decision.nextChange).toContain("shortens retention");
+    expect(decision.following).toContain("coating last");
   });
 
   it("drops 10 points while the last peak is under half the time and switches once it reaches that line", () => {

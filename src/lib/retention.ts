@@ -1,4 +1,5 @@
 import { formatDecimal, resolutionForDecision } from "@/lib/evaluate";
+import { PERCENT_B_SENTENCE, SELECTIVITY_ORDER, TEMPERATURE_SENTENCE, selectivitySteps } from "@/lib/setting-kind";
 import type { PeakMeasurement } from "@/lib/lab-file";
 
 /**
@@ -57,6 +58,7 @@ export type LookStep = {
 export type EfficiencyNow = {
   question: string;
   why: string;
+  steps?: string[];
 };
 
 export const EFFICIENCY_MOVE_ON =
@@ -158,14 +160,27 @@ export type RetentionReason =
   | "look"
   | "cannot-calculate";
 
+export type PercentChoice = {
+  id: "drop-10" | "minimum";
+  percentB: number;
+  expectedLastPeakMin: number | null;
+  sentence: string;
+};
+
 export type RetentionDecision = {
   status: "recommend" | "finished" | "blocked" | "investigate" | "efficiency" | "specs-met" | "look" | "ask";
   reason: RetentionReason;
   move: "drop-10" | "drop-5" | "calculated" | null;
   nextPercentB: number | null;
+  /** Set when the next run should also change temperature, instead of only %B. */
+  nextTemperature?: string | null;
   nextChange: string;
+  /** The step after the next one, including why the order is that way. */
+  following?: string | null;
   why: string;
   fit: RetentionFit | null;
+  /** Two allowed %B values when a 10-point drop and the logK line are both allowed. */
+  bChoices?: PercentChoice[] | null;
   look?: LookStep;
   /** One question before the minimum %B, when the peak count already matches. */
   efficiencyNow?: EfficiencyNow | null;
@@ -266,9 +281,22 @@ export function decideRetention(
     );
   }
 
+  if (
+    current.peakCount! < complete.requiredPeaks &&
+    isPast(current.lastPeakTimeMin!, complete.lastPeakTimeMin)
+  ) {
+    const proposed = calculatePercentB(samples, complete);
+    const lowers =
+      proposed.nextPercentB != null && proposed.nextPercentB < current.percentB! - 1e-6;
+    if (lowers || proposed.move === "drop-5" || proposed.move === "drop-10") {
+      return returnToSelectivity(samples, complete);
+    }
+    return proposed;
+  }
+
   const line = retentionLine(complete.lastPeakTimeMin);
   if (isBelow(current.lastPeakTimeMin!, line)) {
-    return dropPoints(samples, complete, 10, "drop-10");
+    return dropOrBoth(samples, complete);
   }
   return calculatePercentB(samples, complete);
 }
@@ -548,6 +576,7 @@ function minimumPercentOnce(
     efficiencyNow: {
       question: efficiencyNowQuestion(judged.resolution, rules.minResolution!),
       why: [...ruleLines(current, rules, judged), resolutionGapSentence(judged)].join("\n\n"),
+      steps: selectivitySteps(judged.resolution, rules.minResolution),
     },
   };
 }
@@ -755,8 +784,8 @@ function dropPoints(
   const to = formatPercentB(next);
   const nextChange =
     reason === "drop-5"
-      ? `Lower %B by 5 percentage points. Run the next chromatogram at ${to}% B. Another run is needed before the %B that hits the last-peak time can be calculated.${clampNote}`
-      : `Run the next one at ${to}% B.${clampNote}`;
+      ? `Lower %B by 5 percentage points. Run the next chromatogram at ${to}% B. Another run is needed before the %B that hits the last-peak time can be calculated.${clampNote} ${PERCENT_B_SENTENCE}`
+      : `Run the next one at ${to}% B.${clampNote} ${PERCENT_B_SENTENCE}`;
 
   const whyParts = situationSentences(samples, rules);
   if (reason === "drop-10") {
@@ -775,7 +804,78 @@ function dropPoints(
     move: reason,
     nextPercentB: next,
     nextChange,
+    following: SELECTIVITY_ORDER,
     why: whyParts.join("\n\n"),
+    fit: null,
+  };
+}
+
+function dropOrBoth(samples: RetentionSample[], rules: CompleteRules): RetentionDecision {
+  const drop = dropPoints(samples, rules, 10, "drop-10");
+  if (samples.length < 2 || drop.nextPercentB == null) return drop;
+  const line = calculatePercentB(samples, rules);
+  if (line.reason !== "calculated" || line.fit == null || line.nextPercentB == null) return drop;
+  const dropExpected = expectedLastPeak(drop.nextPercentB, line.fit);
+  const minimumExpected = expectedLastPeak(line.nextPercentB, line.fit);
+  const choices: PercentChoice[] = [
+    {
+      id: "drop-10",
+      percentB: drop.nextPercentB,
+      expectedLastPeakMin: dropExpected,
+      sentence: choiceSentence("A 10-point drop", drop.nextPercentB, dropExpected),
+    },
+    {
+      id: "minimum",
+      percentB: line.nextPercentB,
+      expectedLastPeakMin: minimumExpected,
+      sentence: choiceSentence("The minimum %B from the logK line", line.nextPercentB, minimumExpected),
+    },
+  ];
+  return {
+    ...drop,
+    fit: line.fit,
+    bChoices: choices,
+    nextChange: `${choices[0].sentence} ${choices[1].sentence} Pick one. ${PERCENT_B_SENTENCE}`,
+    following: SELECTIVITY_ORDER,
+  };
+}
+
+function choiceSentence(name: string, percentB: number, expected: number | null): string {
+  const time =
+    expected == null
+      ? "The logK line cannot give an expected last-peak time for that %B."
+      : `The logK line expects the last peak at ${formatMinutes(expected)} min, from tR = t0 × (1 + 10^logK).`;
+  return `${name}: run at ${formatPercentB(percentB)}% B. ${time}`;
+}
+
+function expectedLastPeak(percentB: number, fit: RetentionFit): number | null {
+  const logK = fit.m * percentB + fit.c;
+  if (!Number.isFinite(logK) || !(fit.t0Average > 0)) return null;
+  const k = 10 ** logK;
+  if (!Number.isFinite(k)) return null;
+  return fit.t0Average * (1 + k);
+}
+
+function returnToSelectivity(samples: RetentionSample[], rules: CompleteRules): RetentionDecision {
+  const current = samples[samples.length - 1];
+  const previous = samples.length >= 2 ? samples[samples.length - 2] : null;
+  const back =
+    previous?.percentB != null && previous.percentB + 1e-6 >= current.percentB!
+      ? previous.percentB
+      : current.percentB!;
+  const percent = formatPercentB(back);
+  return {
+    status: "recommend",
+    reason: "drop-10",
+    move: null,
+    nextPercentB: back,
+    nextTemperature: "40",
+    nextChange: `Go back to ${percent}% B and change selectivity. Run the next chromatogram at 40°C, still at ${percent}% B. The goal is to change the conditions so the selectivity changes and the overlapping peaks separate. A higher temperature shortens retention. The %B stays the same. ${TEMPERATURE_SENTENCE} Do not lower %B. The last peak is already past the time and the peak count is still short.`,
+    following: SELECTIVITY_ORDER,
+    why: [
+      `This run has ${formatCount(current.peakCount!)} peaks, still under the specification of ${formatCount(rules.requiredPeaks)}.`,
+      `The last peak is at ${formatMinutes(current.lastPeakTimeMin!)} min, later than the specification of ${formatMinutes(rules.lastPeakTimeMin)} min. A lower %B would hold the compounds even longer. Go back to ${percent}% B and change selectivity instead.`,
+    ].join("\n\n"),
     fit: null,
   };
 }
@@ -921,7 +1021,7 @@ function calculatePercentB(
   };
 
   const percent = formatPercentB(rounded.value);
-  let nextChange = `Run the next chromatogram at ${percent}% B. That is the %B calculated to put the last peak at ${formatMinutes(rules.lastPeakTimeMin)} min.`;
+  let nextChange = `Run the next chromatogram at ${percent}% B. That is the %B calculated to put the last peak at ${formatMinutes(rules.lastPeakTimeMin)} min. ${PERCENT_B_SENTENCE}`;
   if (rounded.clamped === "high") {
     nextChange += " The calculated value was above 100, so it is held at 100.";
   } else if (rounded.clamped === "low") {
@@ -936,6 +1036,7 @@ function calculatePercentB(
     move: "calculated",
     nextPercentB: rounded.value,
     nextChange,
+    following: SELECTIVITY_ORDER,
     why,
     fit,
   };

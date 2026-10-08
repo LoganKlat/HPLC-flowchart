@@ -1,4 +1,5 @@
 import { resolutionForDecision } from "@/lib/evaluate";
+import { COATING_SENTENCE, PERCENT_B_SENTENCE, SELECTIVITY_ORDER, TEMPERATURE_SENTENCE } from "@/lib/setting-kind";
 import { carryForwardIndex, decideRetention, formatPercentB, roundTargetPercent, type RetentionRules, type RetentionSample } from "@/lib/retention";
 
 /**
@@ -134,6 +135,8 @@ export type SelectivityPlan = {
   status: "recommend" | "finished" | "blocked";
   step: SelectivityStep;
   nextChange: string;
+  /** The step after this one, and why the order is 40°C, then 60°C, then solvent, then coating. */
+  following?: string;
   why: string;
   prefill: SelectivityPrefill | null;
   nomograph: NomographEntry[] | null;
@@ -923,7 +926,8 @@ function plan40(
   return {
     status: "recommend",
     step: "temp-40",
-    nextChange: `Run the next chromatogram at 40°C, still at ${percent}% B. The goal is to change the conditions so the selectivity changes and the overlapping peaks separate. A higher temperature shortens retention. The %B stays the same.`,
+    nextChange: `Run the next chromatogram at 40°C, still at ${percent}% B. The goal is to change the conditions so the selectivity changes and the overlapping peaks separate. A higher temperature shortens retention. The %B stays the same. ${TEMPERATURE_SENTENCE}`,
+    following: `After 40°C, the next step is 60°C at the same %B. ${SELECTIVITY_ORDER}`,
     why: [
       `Selectivity starts from Run ${args.baselineNumber} at ${percent}% B.`,
       checksSentence(args.baseline, args.baselineNumber, args.setup),
@@ -968,7 +972,8 @@ function plan60(
   return {
     status: "recommend",
     step: "temp-60",
-    nextChange: `Run the next chromatogram at 60°C, at ${percent}% B. Stay at this %B because heat already helped.`,
+    nextChange: `Run the next chromatogram at 60°C, at ${percent}% B. Stay at this %B because heat already helped. ${TEMPERATURE_SENTENCE} A higher temperature shortens retention. The %B stays the same.`,
+    following: `After 60°C, the next step is the second solvent at the chart %B, tried at 40°C and 60°C, then the coating last. ${SELECTIVITY_ORDER}`,
     why: [
       `${what} at 40°C compared with Run ${args.baselineNumber}, the run from before the temperature change.`,
       compareSentence(args.baseline, args.baselineNumber, heated, args.setup.requiredPeaks),
@@ -1012,7 +1017,8 @@ function solventPlan(args: {
   return {
     status: "recommend",
     step: "solvent",
-    nextChange: `Go back to ${args.ambient.celsius}°C and change the solvent. ${pick}`,
+    nextChange: `Go back to ${args.ambient.celsius}°C and change the solvent. ${pick} The solvent is in the bottles. ${PERCENT_B_SENTENCE}`,
+    following: `After the solvent, try 40°C and then 60°C at the chart %B. ${SELECTIVITY_ORDER}`,
     why: [
       solventLead(args),
       [oldSentence, pick, readings].filter(Boolean).join(" ") + cap,
@@ -1057,6 +1063,7 @@ function ligandPlan(args: {
     status: "recommend",
     step: "ligand",
     nextChange: `${pick} Go back to 100% B, ${args.ambient.celsius}°C, and ${solventWords}, then start the %B steps over.`,
+    following: `${COATING_SENTENCE} ${SELECTIVITY_ORDER}`,
     why: [
       "The coating is last. Temperature is tried first, then a new solvent, because a new coating means starting over. The temperature steps and the solvent change still do not meet the peak count and the resolution check. A new ligand is a selectivity change: peaks can pull apart or change order. It is the last one.",
       `${pick} Already used: ${triedText}.`,

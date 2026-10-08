@@ -5,7 +5,10 @@ import { BeadDiagram } from "@/components/bead-diagram";
 import { ColumnDiagram } from "@/components/column-diagram";
 import { ColumnRetentionAnimation } from "@/components/column-retention-animation";
 import { FunctionNoteView, type FunctionNote } from "@/components/function-note";
+import { HplcSketch } from "@/components/hplc-drawing";
+import { KindMark, SettingLegend } from "@/components/setting-legend";
 import { Button } from "@/components/ui/button";
+import type { SettingKind } from "@/lib/setting-kind";
 
 type Box = { left: number; top: number; width: number; height: number };
 
@@ -222,6 +225,13 @@ const setups: Setup[] = [
   },
 ];
 
+function partKind(id: string): SettingKind | null {
+  if (id === "solvents") return "chemical";
+  if (id === "pump" || id.startsWith("pump") || id === "oven") return "both";
+  if (id === "uv" || id === "detector" || id === "injector" || id === "autosampler") return "mechanical";
+  return null;
+}
+
 function annotationName(part: Part): string {
   if (part.id === "controller") return "Controller";
   if (part.id === "pump") return "Pump";
@@ -362,7 +372,7 @@ function HplcDiagram({
             }}
           />
           <div ref={imageRef} className="relative min-w-0">
-            <img src={setup.src} alt="" width={setup.width} height={setup.height} className="block h-auto w-full" />
+            <HplcSketch id={setup.id} width={setup.width} height={setup.height} />
             {setup.parts.map((part) => {
               const active = openId === part.id;
               return (
@@ -453,6 +463,7 @@ export function EquipmentPanel({ onOpenNav }: { onOpenNav: () => void }) {
         <p className="text-xs tracking-[0.16em] text-[#0f6b56] uppercase">Lab setups</p>
         <h1 className="mt-1 font-heading text-3xl text-foreground sm:text-4xl">Equipment</h1>
       </header>
+      <SettingLegend />
       <div id="equipment-tabs" className="flex flex-wrap gap-2">
         {equipmentTabs.map((tab) => {
           const selected = tab.id === view;
@@ -530,7 +541,10 @@ export function EquipmentPanel({ onOpenNav }: { onOpenNav: () => void }) {
         className="rounded-xl bg-card px-4 py-4 text-sm leading-relaxed text-foreground ring-1 ring-foreground/10 lg:sticky lg:top-4"
       >
         {open ? (
-          <FunctionNoteView title={open.label} note={open.note} />
+          <div className="flex flex-col gap-3">
+            {partKind(open.id) ? <KindMark kind={partKind(open.id) as SettingKind} /> : null}
+            <FunctionNoteView title={open.label} note={open.note} />
+          </div>
         ) : (
           <p className="text-muted-foreground">Hover or tap a part of the instrument.</p>
         )}

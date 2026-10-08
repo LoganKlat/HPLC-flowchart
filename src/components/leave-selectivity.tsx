@@ -56,7 +56,7 @@ export function LeaveSelectivityAsk({
   onYes,
   onNo,
 }: {
-  ask: { question: string; why: string };
+  ask: { question: string; why: string; steps?: string[] };
   onYes: () => void;
   onNo: () => void;
 }) {
@@ -65,6 +65,13 @@ export function LeaveSelectivityAsk({
       <section id="next-change" className="scroll-mt-16 rounded-xl bg-[#e7f3ee] px-4 py-4 text-[#144237]">
         <h2 className="font-heading text-base">Next change</h2>
         <p className="mt-1 text-sm leading-relaxed">{ask.question}</p>
+        {ask.steps && ask.steps.length > 0 ? (
+          <ol id="selectivity-steps" className="mt-3 list-decimal space-y-2 pl-5 text-sm leading-relaxed">
+            {ask.steps.map((step) => (
+              <li key={step}>{step}</li>
+            ))}
+          </ol>
+        ) : null}
         <div className="mt-3 grid grid-cols-2 gap-2">
           <button type="button" className={`${choiceClass} border-primary bg-accent text-foreground`} onClick={onYes}>
             Yes

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { FunctionNoteView, type FunctionNote } from "@/components/function-note";
+import { KindMark } from "@/components/setting-legend";
 import { columnMultiples } from "@/lib/column-shape";
 
 const LENGTH_MIN = 50;
@@ -245,7 +246,7 @@ export function ColumnDiagram() {
         <div className="flex flex-col gap-1">
           <div className={sliderRowClass(openId === "length")} {...bind("length")}>
             <div className="flex items-baseline justify-between gap-3">
-              <p className="text-sm font-medium">Length</p>
+              <p className="text-sm font-medium">Length <KindMark kind="mechanical" /></p>
               <p className="font-heading text-lg text-[#144237] tabular-nums">{Math.round(lengthMm)} mm</p>
             </div>
             <input
@@ -263,7 +264,7 @@ export function ColumnDiagram() {
           <div className={sliderRowClass(openId === "width")} {...bind("width")}>
             <div className="flex items-baseline justify-between gap-3">
               <div>
-                <p className="text-sm font-medium">Width</p>
+                <p className="text-sm font-medium">Width <KindMark kind="mechanical" /></p>
                 <p className="text-xs text-muted-foreground">Internal diameter</p>
               </div>
               <p className="font-heading text-lg text-[#144237] tabular-nums">{widthMm.toFixed(1)} mm</p>

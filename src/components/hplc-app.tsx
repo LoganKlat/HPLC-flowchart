@@ -12,6 +12,7 @@ import { ResultsPanel } from "@/components/results-panel";
 import { RunForm } from "@/components/run-form";
 import { SelectivityDecisionView } from "@/components/selectivity-decision";
 import { EquipmentPanel } from "@/components/equipment-panel";
+import { MeasurementGroups } from "@/components/measurement-groups";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -119,6 +120,7 @@ export function HplcApp() {
   const [tempPathByRun, setTempPathByRun] = useState<Record<number, TempPath>>({});
   const [hoveredRun, setHoveredRun] = useState<number | null>(null);
   const [linePercent, setLinePercent] = useState<number | null>(null);
+  const [pickedPercent, setPickedPercent] = useState<number | null>(null);
   const reportLinePercent = useCallback((percent: number | null) => {
     setLinePercent((current) => (current === percent ? current : percent));
   }, []);
@@ -145,6 +147,7 @@ export function HplcApp() {
     heat: heatChoice,
     continuePastEfficiency: latestFlags.continuePast,
     linePercent,
+    pickedPercent,
   });
   if (syncedRuns !== runs) {
     setRuns(syncedRuns);
@@ -516,6 +519,7 @@ export function HplcApp() {
               fileNameNote={fileNameNote}
               onToggleFillFromFileName={onToggleFillFromFileName}
               onLinePercent={index === readyCount - 1 ? reportLinePercent : undefined}
+              onPickPercent={index === readyCount - 1 ? setPickedPercent : undefined}
             />
           </TabsContent>
         ))}
@@ -671,6 +675,7 @@ function RunPane({
   fileNameNote,
   onToggleFillFromFileName,
   onLinePercent,
+  onPickPercent,
 }: {
   index: number;
   run: RunState;
@@ -711,6 +716,7 @@ function RunPane({
   fileNameNote: string | null;
   onToggleFillFromFileName: (checked: boolean) => void;
   onLinePercent?: (percent: number | null) => void;
+  onPickPercent?: (percent: number) => void;
 }) {
   if (run.afterRetention) {
     const prior = index > 0 ? explainRun(runs, index - 1, details, checks, { choice, heat }) : null;
@@ -793,6 +799,7 @@ function RunPane({
               </Button>
             </div>
             <ResultsPanel fileName={run.fileName} read={run.read} rows={rows} />
+            <MeasurementGroups read={run.read} minimumPercentB={retention?.fit?.nextPercentB ?? null} />
             {leftSelectivity ? (
               <LeaveSelectivityDone duringRetention={explanation?.kind === "retention"} />
             ) : ask ? (
@@ -821,7 +828,11 @@ function RunPane({
             ) : (
               <>
                 {retention ? (
-                  <RetentionDecisionView decision={retention} onLinePercent={onLinePercent} />
+                  <RetentionDecisionView
+                    decision={retention}
+                    onLinePercent={onLinePercent}
+                    onPickPercent={onPickPercent}
+                  />
                 ) : null}
                 {selectivity ? (
                   <SelectivityDecisionView
@@ -1029,6 +1040,7 @@ function syncNextRun(
     heat: HeatStart | null;
     continuePastEfficiency: boolean;
     linePercent: number | null;
+    pickedPercent: number | null;
   },
 ): RunState[] {
   const count = readyPrefix(runs);
@@ -1047,7 +1059,15 @@ function syncNextRun(
     { heat: options.heat, continuePastEfficiency: options.continuePastEfficiency },
   );
   const next = runs[count];
-  const prefill = prefillFor(ready, history, details, checks, options.choice, options.linePercent);
+  const prefill = prefillFor(
+    ready,
+    history,
+    details,
+    checks,
+    options.choice,
+    options.linePercent,
+    options.pickedPercent,
+  );
 
   if (!prefill) {
     if (!next || next.status !== "empty" || runWasEdited(next)) return runs;
@@ -1074,19 +1094,25 @@ function prefillFor(
   checks: RuleNumbers,
   choice: RetentionChoice,
   linePercent: number | null,
+  pickedPercent: number | null,
 ): SelectivityPrefill | null {
   if (history.phase === "selectivity") {
     return history.plan.status === "recommend" ? history.plan.prefill : null;
   }
   const decision = decideRetention(ready.slice(history.segmentStart).map(toSample), checks, choice);
   if (decision.status !== "recommend" || decision.nextPercentB == null) return null;
+  const picked =
+    pickedPercent != null && decision.bChoices?.some((item) => item.percentB === pickedPercent)
+      ? pickedPercent
+      : null;
   const percent =
-    decision.move === "calculated" && linePercent != null ? linePercent : decision.nextPercentB;
+    picked ??
+    (decision.move === "calculated" && linePercent != null ? linePercent : decision.nextPercentB);
   const lastIndex = ready.length - 1;
   const inherited = inheritedConditions(ready[lastIndex], lastIndex, details);
   return {
     percentB: formatPercentB(percent),
-    temperature: inherited.temperature,
+    temperature: decision.nextTemperature ?? inherited.temperature,
     solvent: inherited.solvent,
     ligand: inherited.ligand,
   };

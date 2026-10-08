@@ -128,8 +128,10 @@ describe("selectivity checks", () => {
   });
 
   it("sends a late run that already has the peaks to efficiency", () => {
-    const workbook =
-      "/home/ubuntu/.cursor/projects/workspace/uploads/GR09-14-4-ACN-3-ISO-35-1.5-20u-CP-0.1-C18aqP-150x4.6x5-amb-254_ae4e.xlsx";
+    const workbook = path.join(
+      process.cwd(),
+      "fixtures/lab/GR09-14-4-ACN-3-ISO-35-1.5-20u-CP-0.1-C18aqP-150x4.6x5-amb-254_ae4e.xlsx",
+    );
     const read = readLabFile(readFileSync(workbook));
     const rules = {
       requiredPeaks: 7,
