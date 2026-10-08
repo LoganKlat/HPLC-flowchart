@@ -778,6 +778,7 @@ export function HplcApp() {
               onBackwardsContinue={() => setBackwardsChoice("continue")}
               onBackwardsRedo={() => setBackwardsChoice("redo")}
               ligands={columns}
+              solvents={solvents}
               runTabs={
                 index === shown ? (
                   <div
@@ -996,6 +997,7 @@ function RunPane({
   onBackwardsContinue,
   onBackwardsRedo,
   ligands,
+  solvents,
   runTabs,
 }: {
   index: number;
@@ -1035,6 +1037,7 @@ function RunPane({
   onBackwardsContinue: () => void;
   onBackwardsRedo: () => void;
   ligands: readonly string[];
+  solvents: readonly string[];
   runTabs?: ReactNode;
 }) {
   if (run.afterRetention) {
@@ -1145,7 +1148,7 @@ function RunPane({
                         solventId={next?.solvent || ""}
                         ligand={next?.ligand || selectivity.recommendedLigand || ""}
                         solvents={solvents}
-                        ligands={columns}
+                        ligands={ligands}
                         onSolvent={onChooseSolvent}
                         onLigand={onChooseLigand}
                         tempPath={tempPath}
