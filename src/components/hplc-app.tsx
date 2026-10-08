@@ -2,7 +2,6 @@
 
 import { useCallback, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Gauge, GitBranch, Info, type LucideIcon } from "lucide-react";
-import { ChoiceSelect } from "@/components/choice-select";
 import { FileDrop } from "@/components/file-drop";
 import { AboutPanel } from "@/components/about-panel";
 import { EfficiencyChoiceView, LeaveSelectivityAsk, LeaveSelectivityDone } from "@/components/leave-selectivity";
@@ -15,8 +14,6 @@ import { type ColumnRunTrace } from "@/components/column-diagram";
 import { EquipmentPanel } from "@/components/equipment-panel";
 import { NotePop } from "@/components/note-pop";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { evaluateRun, parseUserCount, parseUserNumber, type RuleNumbers } from "@/lib/evaluate";
 import { FILE_NAME_CHECKBOX_LABEL, FILE_NAME_STRUCTURE_NOTE, parseRunFileName } from "@/lib/filename-details";
@@ -367,30 +364,6 @@ export function HplcApp() {
     });
   }
 
-  function setRunPercent(index: number, value: string) {
-    setRuns((current) => {
-      const copy = current.slice();
-      copy[index] = { ...copy[index], percentB: value, percentEdited: true };
-      return copy;
-    });
-  }
-
-  function setRunTemperature(index: number, value: string) {
-    setRuns((current) => {
-      const copy = current.slice();
-      copy[index] = { ...copy[index], temperature: value, temperatureEdited: true };
-      return copy;
-    });
-  }
-
-  function setRunSolvent(index: number, value: string) {
-    setRuns((current) => {
-      const copy = current.slice();
-      copy[index] = { ...copy[index], solvent: value, solventEdited: true };
-      return copy;
-    });
-  }
-
   function setRunLigand(index: number, value: string) {
     setRuns((current) => {
       if (!current[index]) return current;
@@ -606,10 +579,6 @@ export function HplcApp() {
               details={details}
               rules={rules}
               checks={checks}
-              onPercent={(value) => setRunPercent(index, value)}
-              onTemperature={(value) => setRunTemperature(index, value)}
-              onSolvent={(value) => setRunSolvent(index, value)}
-              onLigand={(value) => setRunLigand(index, value)}
               onChooseSolvent={(solventId) => chooseNextSolvent(index + 1, solventId)}
               onChooseLigand={(value) => setRunLigand(index + 1, value)}
               tempPath={tempPathByRun[index] ?? null}
@@ -894,10 +863,6 @@ function RunPane({
   details,
   rules,
   checks,
-  onPercent,
-  onTemperature,
-  onSolvent,
-  onLigand,
   onChooseSolvent,
   onChooseLigand,
   tempPath,
@@ -935,10 +900,6 @@ function RunPane({
   details: RunDetails;
   rules: RuleInputs;
   checks: RuleNumbers;
-  onPercent: (value: string) => void;
-  onTemperature: (value: string) => void;
-  onSolvent: (value: string) => void;
-  onLigand: (value: string) => void;
   onChooseSolvent: (solventId: string) => void;
   onChooseLigand: (value: string) => void;
   tempPath: TempPath | null;
@@ -1007,15 +968,7 @@ function RunPane({
       ) : null}
       {index === 0 ? null : (
         <div className="shrink-0">
-        <RunSummary
-          index={index}
-          rules={rules}
-          run={run}
-          onPercent={onPercent}
-          onTemperature={onTemperature}
-          onSolvent={onSolvent}
-          onLigand={onLigand}
-        />
+        <RunSummary index={index} runs={runs} details={details} />
         </div>
       )}
 
@@ -1169,92 +1122,71 @@ function RunPane({
   );
 }
 
-function RunSummary({
-  index,
-  rules,
-  run,
-  onPercent,
-  onTemperature,
-  onSolvent,
-  onLigand,
-}: {
-  index: number;
-  rules: RuleInputs;
-  run: RunState;
-  onPercent: (value: string) => void;
-  onTemperature: (value: string) => void;
-  onSolvent: (value: string) => void;
-  onLigand: (value: string) => void;
-}) {
-  const ruleLine = [
-    rules.requiredPeaks.trim() ? `${rules.requiredPeaks.trim()} peaks` : "peak count not set",
-    rules.lastPeakTimeMin.trim()
-      ? `last peak at or before ${rules.lastPeakTimeMin.trim()} min`
-      : "last peak time not set",
-    rules.minResolution.trim()
-      ? `resolution at least ${rules.minResolution.trim()}`
-      : "resolution not set",
-    rules.maxBackPressurePsi.trim()
-      ? `back-pressure at or below ${rules.maxBackPressurePsi.trim()} psi`
-      : "back-pressure not set",
-  ].join(" · ");
-
+function RunSummary({ index, runs, details }: { index: number; runs: RunState[]; details: RunDetails }) {
+  const lines = decisionChangeLines(index, runs, details);
+  if (lines.length === 0) return null;
   return (
-    <section id="run-context" className="rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10">
-      <p className="text-sm text-muted-foreground">Starting details stay on Run 1.</p>
-      <p className="mt-1 text-sm leading-snug text-foreground">
-        <span className="font-medium">Rules. </span>
-        {ruleLine}
-      </p>
-      <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Field label="Temperature (°C)" id={`run-${index + 1}-temperature`}>
-          <Input
-            id={`run-${index + 1}-temperature`}
-            value={run.temperature}
-            inputMode="decimal"
-            className="h-10"
-            onChange={(event) => onTemperature(event.target.value)}
-          />
-        </Field>
-        <Field label="%B" id={`run-${index + 1}-percent-b`}>
-          <Input
-            id={`run-${index + 1}-percent-b`}
-            value={run.percentB}
-            inputMode="decimal"
-            className="h-10"
-            onChange={(event) => onPercent(event.target.value)}
-          />
-        </Field>
-        <Field label="Solvent" id={`run-${index + 1}-solvent`}>
-          <ChoiceSelect
-            id={`run-${index + 1}-solvent`}
-            value={run.solvent}
-            placeholder="Choose a solvent"
-            options={SOLVENTS.map((solvent) => ({ value: solvent.label, label: solvent.label }))}
-            onChange={onSolvent}
-          />
-        </Field>
-        <Field label="Ligand" id={`run-${index + 1}-ligand`}>
-          <ChoiceSelect
-            id={`run-${index + 1}-ligand`}
-            value={run.ligand}
-            placeholder="select a ligand"
-            options={LIGANDS.map((name) => ({ value: name, label: name }))}
-            onChange={onLigand}
-          />
-        </Field>
-      </div>
+    <section id="run-context" className="rounded-xl bg-card px-4 py-3 ring-1 ring-foreground/10">
+      {lines.map((line) => (
+        <p key={line} className="text-base font-medium text-foreground">
+          {line}
+        </p>
+      ))}
     </section>
   );
 }
 
-function Field({ label, id, children }: { label: string; id: string; children: ReactNode }) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <Label htmlFor={id}>{label}</Label>
-      {children}
-    </div>
-  );
+function decisionChangeLines(index: number, runs: RunState[], details: RunDetails): string[] {
+  const before = runConditions(index - 1, runs, details);
+  const after = runConditions(index, runs, details);
+  const lines: string[] = [];
+  if (before.percentB !== after.percentB) {
+    lines.push(`Change %B: ${percentMark(before.percentB)} → ${percentMark(after.percentB)}`);
+  }
+  if (before.temperature !== after.temperature) {
+    lines.push(`Change temperature: ${temperatureMark(before.temperature)} → ${temperatureMark(after.temperature)}`);
+  }
+  if (before.solvent !== after.solvent) {
+    lines.push(`Change solvent: ${plainMark(before.solvent)} → ${plainMark(after.solvent)}`);
+  }
+  if (before.ligand !== after.ligand) {
+    lines.push(`Change ligand: ${plainMark(before.ligand)} → ${plainMark(after.ligand)}`);
+  }
+  return lines;
+}
+
+function runConditions(index: number, runs: RunState[], details: RunDetails) {
+  if (index <= 0) {
+    const run = runs[0];
+    return {
+      percentB: (details.percentB || run?.percentB || "").trim(),
+      temperature: details.temperature.trim(),
+      solvent: details.solvent.trim(),
+      ligand: details.ligand.trim(),
+    };
+  }
+  const run = runs[index];
+  return {
+    percentB: (run?.percentB || "").trim(),
+    temperature: (run?.temperature || "").trim() || details.temperature.trim(),
+    solvent: (run?.solvent || "").trim() || details.solvent.trim(),
+    ligand: (run?.ligand || "").trim() || details.ligand.trim(),
+  };
+}
+
+function percentMark(value: string): string {
+  if (!value) return "—";
+  return value.endsWith("%") ? value : `${value}%`;
+}
+
+function temperatureMark(value: string): string {
+  if (!value) return "—";
+  if (/ambient/i.test(value) || /°/.test(value)) return value;
+  return `${value}°C`;
+}
+
+function plainMark(value: string): string {
+  return value || "—";
 }
 
 type Explanation =
