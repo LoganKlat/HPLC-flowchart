@@ -300,7 +300,7 @@ export function RunForm({ title, details, rules, onDetails, onRules, fileNameFil
         </CardContent>
       </Card>
 
-      <Card size="sm" className="flex-1" style={{ ["--card-spacing" as string]: "0.5rem" }}>
+      <Card size="sm" className="min-h-min flex-1" style={{ ["--card-spacing" as string]: "0.5rem" }}>
         <CardHeader className="pb-2">
           <CardTitle id="run-details-title" className={cardTitleClass}>
             {title}

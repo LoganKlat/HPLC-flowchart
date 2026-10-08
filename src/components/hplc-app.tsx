@@ -725,7 +725,7 @@ export function HplcApp() {
       </footer>
       <aside
         id="setup-column"
-        className="order-1 flex w-full shrink-0 flex-col overflow-y-auto max-lg:max-h-[40vh] lg:col-start-1 lg:row-start-2 lg:h-full lg:max-h-full lg:w-auto"
+        className="order-1 flex min-h-0 w-full shrink-0 flex-col overflow-y-auto overscroll-y-contain max-lg:max-h-[40vh] lg:col-start-1 lg:row-start-2 lg:h-full lg:max-h-full lg:w-auto"
       >
         <RunForm
           title={runTabLabel(shown, syncedRuns, details, checks, {
