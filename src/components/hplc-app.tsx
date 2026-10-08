@@ -11,6 +11,7 @@ import { LaterChangeNote, RetentionDecisionView, StartHighBNote } from "@/compon
 import { ResultsPanel } from "@/components/results-panel";
 import { RunForm } from "@/components/run-form";
 import { SelectivityDecisionView } from "@/components/selectivity-decision";
+import { type ColumnRunTrace } from "@/components/column-diagram";
 import { EquipmentPanel } from "@/components/equipment-panel";
 import { NotePop } from "@/components/note-pop";
 import { Button } from "@/components/ui/button";
@@ -297,6 +298,32 @@ export function HplcApp() {
   if (syncedRuns !== runs) {
     setRuns(syncedRuns);
   }
+  const columnRuns = useMemo<ColumnRunTrace[]>(() => {
+    return syncedRuns.flatMap((run, index) => {
+      if (run.status !== "ready" || !run.read?.chromatogram || run.read.chromatogramMissingMessage) return [];
+      const info = detailsForRun(index, syncedRuns, details);
+      const parsed = run.fileName ? parseRunFileName(run.fileName) : null;
+      const named = parsed?.ok ? parsed.fields : {};
+      const lengthMm = parseUserNumber(info.lengthMm) ?? parseUserNumber(named.lengthMm ?? "") ?? 150;
+      const widthMm = parseUserNumber(info.diameterMm) ?? parseUserNumber(named.diameterMm ?? "") ?? 4.6;
+      return [
+        {
+          id: `run-${index}`,
+          tabLabel: runTabLabel(index, syncedRuns, details, checks, {
+            choice,
+            heat: heatChoice,
+            continued: continuedSelectivity,
+          }),
+          fileName: run.fileName ?? `Run ${index + 1}`,
+          points: run.read.chromatogram,
+          peakTimesMin: run.read.peakTimesMin,
+          yLabel: run.read.chromatogramYAxis,
+          baselineLengthMm: lengthMm,
+          baselineWidthMm: widthMm,
+        },
+      ];
+    });
+  }, [syncedRuns, details, checks, choice, heatChoice, continuedSelectivity]);
   const shown = Math.min(active, Math.max(0, syncedRuns.length - 1));
 
   function onDetails(next: RunDetails) {
@@ -536,7 +563,9 @@ export function HplcApp() {
       <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 py-6 sm:px-6 sm:py-8">
       <Watermark />
       {section === "about" ? <AboutPanel onOpenNav={() => setNavOpen(true)} /> : null}
-      {section === "equipment" ? <EquipmentPanel onOpenNav={() => setNavOpen(true)} /> : null}
+      {section === "equipment" ? (
+        <EquipmentPanel onOpenNav={() => setNavOpen(true)} columnRuns={columnRuns} />
+      ) : null}
       </div>
       ) : null}
 

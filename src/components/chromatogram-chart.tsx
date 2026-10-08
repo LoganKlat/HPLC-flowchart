@@ -7,6 +7,9 @@ type ChromatogramChartProps = {
   peakTimesMin?: number[];
   fileName?: string;
   onRemove?: () => void;
+  /** Keep the original axis when a scaled trace sits inside it, so peaks can move. */
+  frame?: { minTime: number; maxTime: number; minY: number; maxY: number };
+  multipliers?: { label: string; value: string }[];
 };
 
 const LABEL_W = 64;
@@ -27,17 +30,31 @@ export type PlacedPeakLabel = {
   anchorY: number;
 };
 
-export function ChromatogramChart({ points, yLabel, peakTimesMin = [], fileName, onRemove }: ChromatogramChartProps) {
+export function ChromatogramChart({
+  points,
+  yLabel,
+  peakTimesMin = [],
+  fileName,
+  onRemove,
+  frame,
+  multipliers,
+}: ChromatogramChartProps) {
   const width = 720;
   const plotBottom = 58;
   const plotLeft = 72;
   const plotRight = 18;
   const times = points.map((point) => point.timeMin);
   const intensities = points.map((point) => point.intensity);
-  const minTime = Math.min(...times);
+  let minTime = Math.min(...times);
   let maxTime = Math.max(...times);
   let minY = Math.min(...intensities);
   let maxY = Math.max(...intensities);
+  if (frame) {
+    minTime = Math.min(minTime, frame.minTime);
+    maxTime = Math.max(maxTime, frame.maxTime);
+    minY = Math.min(minY, frame.minY);
+    maxY = Math.max(maxY, frame.maxY);
+  }
   if (minTime === maxTime) maxTime = minTime + 1;
   if (minY === maxY) {
     minY -= 1;
@@ -100,6 +117,16 @@ export function ChromatogramChart({ points, yLabel, peakTimesMin = [], fileName,
             </Button>
           ) : null}
         </div>
+      ) : null}
+      {multipliers && multipliers.length > 0 ? (
+        <ul id="column-multipliers" className="flex flex-wrap gap-x-4 gap-y-1 px-4 pt-2 text-sm text-[#144237]">
+          {multipliers.map((item) => (
+            <li key={item.label}>
+              <span className="text-muted-foreground">{item.label}</span>{" "}
+              <span className="font-semibold tabular-nums">{item.value}</span>
+            </li>
+          ))}
+        </ul>
       ) : null}
       <figcaption className="flex items-baseline justify-between gap-3 px-4 pt-3">
         <span className="font-heading text-base text-foreground">Chromatogram</span>

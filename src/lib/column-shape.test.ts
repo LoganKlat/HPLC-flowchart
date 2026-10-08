@@ -1,37 +1,68 @@
 import { describe, expect, it } from "vitest";
-import { columnMultiples } from "@/lib/column-shape";
+import { columnScale, formatColumnMultiple, scaleChromatogram } from "@/lib/column-shape";
 
-describe("column multiples", () => {
-  it("is 1× for the 150 mm × 4.6 mm column", () => {
-    const at = columnMultiples(150, 4.6);
+describe("column scale", () => {
+  it("is 1 for the column that produced the run", () => {
+    const at = columnScale(150, 4.6, 150, 4.6);
     expect(at.resolution).toBeCloseTo(1, 8);
     expect(at.retentionTime).toBeCloseTo(1, 8);
-    expect(at.backPressure).toBeCloseTo(1, 8);
+    expect(at.pressure).toBeCloseTo(1, 8);
+    expect(at.peakWidth).toBeCloseTo(1, 8);
+    expect(at.peakHeight).toBeCloseTo(1, 8);
+    expect(formatColumnMultiple(at.resolution)).toBe("1×");
   });
 
-  it("raises all three with length, resolution with the square root", () => {
-    const base = columnMultiples(150, 4.6);
-    const longer = columnMultiples(250, 4.6);
+  it("raises retention and pressure with length, and resolution with the square root", () => {
+    const longer = columnScale(250, 4.6, 150, 4.6);
     const ratio = 250 / 150;
     expect(longer.resolution).toBeCloseTo(Math.sqrt(ratio), 8);
+    expect(longer.peakWidth).toBeCloseTo(Math.sqrt(ratio), 8);
     expect(longer.retentionTime).toBeCloseTo(ratio, 8);
-    expect(longer.backPressure).toBeCloseTo(ratio, 8);
-    expect(longer.resolution).toBeGreaterThan(base.resolution);
-    expect(longer.retentionTime).toBeGreaterThan(base.retentionTime);
-    expect(longer.backPressure).toBeGreaterThan(base.backPressure);
+    expect(longer.pressure).toBeCloseTo(ratio, 8);
+    expect(longer.peakHeight).toBeCloseTo(1 / Math.sqrt(ratio), 8);
   });
 
-  it("raises resolution and back-pressure and lowers retention when the column is narrower", () => {
-    const base = columnMultiples(150, 4.6);
-    const narrow = columnMultiples(150, 2.1);
-    const rawWidth = (4.6 / 2.1) ** 2;
-    expect(narrow.resolution).toBeGreaterThan(1);
-    expect(narrow.resolution).toBeLessThan(rawWidth);
-    expect(narrow.backPressure).toBeCloseTo(rawWidth, 8);
-    expect(narrow.backPressure).not.toBeCloseTo(rawWidth ** 2, 0);
-    expect(narrow.retentionTime).toBeCloseTo((2.1 / 4.6) ** 2, 8);
-    expect(narrow.resolution).toBeGreaterThan(base.resolution);
-    expect(narrow.backPressure).toBeGreaterThan(base.backPressure);
-    expect(narrow.retentionTime).toBeLessThan(base.retentionTime);
+  it("keeps resolution the same when only the width changes", () => {
+    const narrow = columnScale(150, 2.1, 150, 4.6);
+    const widthRatio = 2.1 / 4.6;
+    expect(narrow.resolution).toBeCloseTo(1, 8);
+    expect(narrow.retentionTime).toBeCloseTo(widthRatio ** 2, 8);
+    expect(narrow.peakWidth).toBeCloseTo(widthRatio ** 2, 8);
+    expect(narrow.pressure).toBeCloseTo(1 / widthRatio ** 2, 8);
+    expect(narrow.peakHeight).toBeCloseTo(1 / widthRatio, 8);
+    expect(narrow.pressure).not.toBeCloseTo(1 / widthRatio ** 4, 0);
+  });
+
+  it("moves a peak by retention time and its width by the peak-width multiplier", () => {
+    const center = 4;
+    const sigma = 0.2;
+    const height = 1000;
+    const points = Array.from({ length: 401 }, (_, index) => {
+      const timeMin = index * 0.02;
+      const intensity = height * Math.exp(-0.5 * ((timeMin - center) / sigma) ** 2);
+      return { timeMin, intensity };
+    });
+    const scale = columnScale(250, 4.6, 150, 4.6);
+    const scaled = scaleChromatogram(points, [center], scale);
+    const top = scaled.reduce((best, point) => (point.intensity > best.intensity ? point : best));
+    expect(top.timeMin).toBeCloseTo(center * scale.retentionTime, 2);
+    expect(top.intensity).toBeCloseTo(height * scale.peakHeight, 0);
+
+    const half = top.intensity / 2;
+    const above = scaled.filter((point) => point.intensity >= half);
+    const width = above[above.length - 1].timeMin - above[0].timeMin;
+    const originalHalf = points.filter((point) => point.intensity >= height / 2);
+    const originalWidth = originalHalf[originalHalf.length - 1].timeMin - originalHalf[0].timeMin;
+    expect(width / originalWidth).toBeCloseTo(scale.peakWidth, 1);
+  });
+
+  it("leaves the trace unchanged when every multiplier is 1", () => {
+    const points = [
+      { timeMin: 0, intensity: 1 },
+      { timeMin: 1, intensity: 8 },
+      { timeMin: 2, intensity: 1 },
+    ];
+    const scaled = scaleChromatogram(points, [1], columnScale(100, 3, 100, 3));
+    expect(scaled).toEqual(points);
   });
 });

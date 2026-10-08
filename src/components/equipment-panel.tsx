@@ -2,7 +2,7 @@
 
 import { useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { BeadDiagram } from "@/components/bead-diagram";
-import { ColumnDiagram } from "@/components/column-diagram";
+import { ColumnDiagram, type ColumnRunTrace } from "@/components/column-diagram";
 import { ColumnRetentionAnimation } from "@/components/column-retention-animation";
 import { FunctionNoteView, type FunctionNote } from "@/components/function-note";
 import { HplcSketch } from "@/components/hplc-drawing";
@@ -442,7 +442,13 @@ function HplcDiagram({
   );
 }
 
-export function EquipmentPanel({ onOpenNav }: { onOpenNav: () => void }) {
+export function EquipmentPanel({
+  onOpenNav,
+  columnRuns,
+}: {
+  onOpenNav: () => void;
+  columnRuns: ColumnRunTrace[];
+}) {
   const [view, setView] = useState<(typeof equipmentTabs)[number]["id"]>("hplc");
   const [hoveredView, setHoveredView] = useState<string | null>(null);
   const [setupId, setSetupId] = useState(setups[0].id);
@@ -484,7 +490,7 @@ export function EquipmentPanel({ onOpenNav }: { onOpenNav: () => void }) {
       </div>
       {view === "column" ? (
         <>
-          <ColumnDiagram />
+          <ColumnDiagram runs={columnRuns} />
           <ColumnRetentionAnimation />
         </>
       ) : null}

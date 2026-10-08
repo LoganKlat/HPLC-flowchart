@@ -1,26 +1,139 @@
-const REF_LENGTH_MM = 150;
-const REF_WIDTH_MM = 4.6;
+import type { ChromatogramPoint } from "@/lib/lab-file";
 
-export type ColumnMultiples = {
+export type ColumnScale = {
+  /** New length divided by the column that produced the run. */
+  lengthRatio: number;
+  /** New width divided by the column that produced the run. */
+  widthRatio: number;
+  /** √XL. Width does not change resolution. */
   resolution: number;
+  /** XL × (XW)². Peak positions move by this. */
   retentionTime: number;
-  backPressure: number;
+  /** √XL × (XW)². */
+  peakWidth: number;
+  /** 1 / √(XL × (XW)²). */
+  peakHeight: number;
+  /** XL / (XW)². Pressure rises with length and falls with 1/ID². */
+  pressure: number;
 };
 
-/**
- * Multiples of a 150 mm × 4.6 mm column at the same flow and particle size.
- * Resolution eases off the raw 1/ID² gain as the column gets narrow, so the
- * instrument's own peak width (system peaks) keeps it from climbing without limit.
- * Back-pressure stays 1/ID², the fixed-flow case, not 1/ID⁴.
- */
-export function columnMultiples(lengthMm: number, widthMm: number): ColumnMultiples {
-  const lengthRatio = lengthMm / REF_LENGTH_MM;
-  const rawWidth = (REF_WIDTH_MM / widthMm) ** 2;
-  const extra = rawWidth - 1;
-  const resolutionWidth = rawWidth > 1 ? 1 + extra / (1 + extra / 2.5) : rawWidth;
+export function columnScale(
+  lengthMm: number,
+  widthMm: number,
+  baselineLengthMm: number,
+  baselineWidthMm: number,
+): ColumnScale {
+  const lengthRatio = lengthMm / baselineLengthMm;
+  const widthRatio = widthMm / baselineWidthMm;
+  const widthSq = widthRatio * widthRatio;
   return {
-    resolution: Math.sqrt(lengthRatio) * resolutionWidth,
-    retentionTime: lengthRatio * (widthMm / REF_WIDTH_MM) ** 2,
-    backPressure: lengthRatio * rawWidth,
+    lengthRatio,
+    widthRatio,
+    resolution: Math.sqrt(lengthRatio),
+    retentionTime: lengthRatio * widthSq,
+    peakWidth: Math.sqrt(lengthRatio) * widthSq,
+    peakHeight: 1 / Math.sqrt(lengthRatio * widthSq),
+    pressure: lengthRatio / widthSq,
   };
+}
+
+export function formatColumnMultiple(value: number): string {
+  if (!Number.isFinite(value)) return "—";
+  if (Math.abs(value - 1) < 0.0005) return "1×";
+  return `${value.toFixed(2)}×`;
+}
+
+export function scaledPeakTimes(peakTimesMin: readonly number[], retentionTime: number): number[] {
+  return peakTimesMin.map((time) => time * retentionTime);
+}
+
+/**
+ * Moves a measured trace with the column multipliers.
+ * Peak centers follow retention time. The width of each peak follows peak width.
+ * Height above the trace floor follows peak height. At 1× the points are unchanged.
+ */
+export function scaleChromatogram(
+  points: readonly ChromatogramPoint[],
+  peakTimesMin: readonly number[],
+  scale: ColumnScale,
+): ChromatogramPoint[] {
+  if (points.length === 0) return [];
+  const unchanged =
+    Math.abs(scale.retentionTime - 1) < 1e-12 &&
+    Math.abs(scale.peakWidth - 1) < 1e-12 &&
+    Math.abs(scale.peakHeight - 1) < 1e-12;
+  if (unchanged) return points.map((point) => ({ timeMin: point.timeMin, intensity: point.intensity }));
+
+  const floor = points.reduce((min, point) => Math.min(min, point.intensity), Infinity);
+  const peaks = peakTimesMin.filter((time) => Number.isFinite(time)).slice().sort((a, b) => a - b);
+  const retention = scale.retentionTime;
+  const width = scale.peakWidth;
+  const height = scale.peakHeight;
+
+  if (peaks.length === 0) {
+    return points.map((point) => ({
+      timeMin: point.timeMin * retention,
+      intensity: floor + (point.intensity - floor) * height,
+    }));
+  }
+
+  const groups: ChromatogramPoint[][] = peaks.map(() => []);
+  for (const point of points) {
+    let nearest = 0;
+    let best = Math.abs(point.timeMin - peaks[0]);
+    for (let index = 1; index < peaks.length; index++) {
+      const distance = Math.abs(point.timeMin - peaks[index]);
+      if (distance < best) {
+        best = distance;
+        nearest = index;
+      }
+    }
+    groups[nearest].push({
+      timeMin: peaks[nearest] * retention + (point.timeMin - peaks[nearest]) * width,
+      intensity: floor + (point.intensity - floor) * height,
+    });
+  }
+  for (const group of groups) group.sort((a, b) => a.timeMin - b.timeMin);
+
+  let tMin = Infinity;
+  let tMax = -Infinity;
+  for (const group of groups) {
+    for (const point of group) {
+      if (point.timeMin < tMin) tMin = point.timeMin;
+      if (point.timeMin > tMax) tMax = point.timeMin;
+    }
+  }
+  if (!(tMax > tMin)) return points.map((point) => ({ timeMin: point.timeMin, intensity: point.intensity }));
+
+  const count = Math.min(4000, Math.max(points.length, 2));
+  const step = (tMax - tMin) / (count - 1);
+  const out: ChromatogramPoint[] = [];
+  for (let index = 0; index < count; index++) {
+    const timeMin = tMin + step * index;
+    let intensity = floor;
+    for (const group of groups) {
+      const sample = sampleGroup(group, timeMin);
+      if (sample != null && sample > intensity) intensity = sample;
+    }
+    out.push({ timeMin, intensity });
+  }
+  return out;
+}
+
+function sampleGroup(group: readonly ChromatogramPoint[], time: number): number | null {
+  if (group.length === 0) return null;
+  if (time < group[0].timeMin || time > group[group.length - 1].timeMin) return null;
+  let lo = 0;
+  let hi = group.length - 1;
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1;
+    if (group[mid].timeMin <= time) lo = mid;
+    else hi = mid;
+  }
+  const left = group[lo];
+  const right = group[hi];
+  const span = right.timeMin - left.timeMin;
+  if (span <= 0) return Math.max(left.intensity, right.intensity);
+  const fraction = (time - left.timeMin) / span;
+  return left.intensity + (right.intensity - left.intensity) * fraction;
 }
