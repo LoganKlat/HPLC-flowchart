@@ -444,7 +444,7 @@ export function HplcApp() {
       <div className="order-2 mx-auto flex w-full min-w-0 max-w-6xl flex-1 flex-col px-4 py-6 sm:px-6 sm:py-8 lg:order-1 lg:max-w-none">
       <Watermark />
       <div id="decision-layout" className="flex flex-col gap-6 lg:flex-row lg:items-start">
-      <div className="order-2 flex min-w-0 flex-1 flex-col lg:order-1">
+      <div className="order-2 flex min-w-0 flex-1 flex-col">
       <header className="mb-5">
         <div className="mb-3 md:hidden">
           <Button type="button" variant="outline" className="h-10 px-3" onClick={() => setNavOpen(true)}>
@@ -589,7 +589,7 @@ export function HplcApp() {
       </div>
       <aside
         id="setup-column"
-        className="order-1 w-full shrink-0 lg:sticky lg:top-4 lg:order-2 lg:max-h-[calc(100dvh-2rem)] lg:w-[22rem] lg:overflow-y-auto"
+        className="order-1 w-full shrink-0 lg:sticky lg:top-4 lg:max-h-[calc(100dvh-2rem)] lg:w-80 lg:overflow-y-auto"
       >
         <RunForm details={details} rules={rules} onDetails={onDetails} onRules={setRules} />
       </aside>

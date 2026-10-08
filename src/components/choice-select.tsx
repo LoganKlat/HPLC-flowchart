@@ -1,3 +1,5 @@
+import { cn } from "cn";
+
 const choiceClass =
   "h-10 w-full appearance-auto rounded-lg border border-input bg-transparent px-2.5 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
 
@@ -8,6 +10,7 @@ export function ChoiceSelect({
   options,
   placeholder,
   placeholderInList = true,
+  className,
 }: {
   id: string;
   value: string;
@@ -16,10 +19,11 @@ export function ChoiceSelect({
   placeholder: string;
   /** When false, the empty prompt stays on the closed control and is not a listed choice. */
   placeholderInList?: boolean;
+  className?: string;
 }) {
   const known = options.some((option) => option.value === value);
   return (
-    <select id={id} className={choiceClass} value={value} onChange={(event) => onChange(event.target.value)}>
+    <select id={id} className={cn(choiceClass, className)} value={value} onChange={(event) => onChange(event.target.value)}>
       <option value="" disabled={!placeholderInList} hidden={!placeholderInList}>
         {placeholder}
       </option>

@@ -26,13 +26,13 @@ export function RunForm({ details, rules, onDetails, onRules }: RunFormProps) {
   }
 
   return (
-    <div id="setup-boxes" className="flex flex-col gap-4">
-      <Card>
+    <div id="setup-boxes" className="flex flex-col gap-2">
+      <Card size="sm" style={{ ["--card-spacing" as string]: "0.5rem" }}>
         <CardHeader>
           <CardTitle>Rules to meet</CardTitle>
           <CardDescription>Leave a box empty if you are not checking it yet.</CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-3">
+        <CardContent className="grid gap-1.5">
           <TextField
             label="Number of peaks to separate"
             value={rules.requiredPeaks}
@@ -93,12 +93,12 @@ export function RunForm({ details, rules, onDetails, onRules }: RunFormProps) {
         </CardContent>
       </Card>
 
-      <Card className="@container">
+      <Card size="sm" className="@container" style={{ ["--card-spacing" as string]: "0.5rem" }}>
         <CardHeader>
           <CardTitle>Initial run details</CardTitle>
           <CardDescription>Saved with this session, even if a check does not use them yet.</CardDescription>
         </CardHeader>
-        <CardContent className="grid grid-cols-1 gap-x-4 gap-y-3 @min-[28rem]:grid-cols-2">
+        <CardContent className="grid grid-cols-1 gap-x-2 gap-y-1.5 @min-[28rem]:grid-cols-2">
           <ChoiceField
             label="Solvent"
             value={details.solvent}
@@ -242,11 +242,12 @@ function ChoiceField({
 }) {
   const id = label.toLowerCase().replace(/[^a-z0-9]+/g, "-");
   return (
-    <div className="flex min-w-0 flex-col gap-1.5">
-      <Label htmlFor={id} className="h-auto whitespace-normal leading-snug">
+    <div className="flex min-w-0 flex-col gap-1">
+      <Label htmlFor={id} className="h-auto whitespace-normal text-sm leading-snug">
         {label}
       </Label>
       <ChoiceSelect
+        className="h-8"
         id={id}
         value={value}
         onChange={onChange}
@@ -277,9 +278,9 @@ function TextField({
 }) {
   const id = label.toLowerCase().replace(/[^a-z0-9]+/g, "-");
   return (
-    <div className="flex min-w-0 flex-col gap-1.5">
+    <div className="flex min-w-0 flex-col gap-1">
       <div className="flex items-start gap-1.5">
-        <Label htmlFor={id} className="h-auto whitespace-normal leading-snug">
+        <Label htmlFor={id} className="h-auto whitespace-normal text-sm leading-snug">
           {label}
         </Label>
         {note ? <NotePop text={note} label={label} /> : null}
@@ -289,7 +290,7 @@ function TextField({
         value={value}
         inputMode={inputMode}
         aria-invalid={invalid || undefined}
-        className="h-10"
+        className="h-8 text-sm"
         onChange={(event) => onChange(event.target.value)}
       />
       {hint ? <p className="text-xs leading-snug text-muted-foreground">{hint}</p> : null}
