@@ -32,6 +32,11 @@ export function ResultsPanel({ fileName, read, rows, aside, onRemove }: ResultsP
           peakTimesMin={read.peakTimesMin}
           fileName={fileName}
           onRemove={onRemove}
+          pressure={
+            read.pressureTrace && read.pressureTrace.length > 0
+              ? { points: read.pressureTrace, unit: read.pressureUnits }
+              : null
+          }
         />
       ) : (
         <div className="rounded-xl bg-card text-sm ring-1 ring-foreground/10" role="status">

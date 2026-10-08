@@ -11,6 +11,12 @@ export type ChromatogramPoint = {
   intensity: number;
 };
 
+/** One point from the pump-pressure section. Pressure is intensity times that section’s multiplier. */
+export type PressurePoint = {
+  timeMin: number;
+  pressure: number;
+};
+
 export type PeakMeasurement = {
   timeMin: number | null;
   area: number | null;
@@ -38,6 +44,8 @@ export type LabFileRead = {
   maxBackPressurePsi: number | null;
   pressureFound: boolean;
   pressureUnits: string | null;
+  /** Pump-pressure series. Null when that section is missing or cannot be scaled. */
+  pressureTrace: PressurePoint[] | null;
   chromatogram: ChromatogramPoint[] | null;
   chromatogramSectionName: string | null;
   /** Label for the vertical axis. */
@@ -171,6 +179,7 @@ export function readLabFile(input: string | ArrayBuffer | Uint8Array): LabFileRe
     maxBackPressurePsi: pressure.maxPsi,
     pressureFound: pressure.found,
     pressureUnits: pressure.units,
+    pressureTrace: pressure.trace,
     chromatogram: chromatogram.points,
     chromatogramSectionName: chromatogram.sectionName,
     chromatogramYAxis: chromatogram.yAxis,
@@ -279,6 +288,7 @@ function emptyRead(): LabFileRead {
     maxBackPressurePsi: null,
     pressureFound: false,
     pressureUnits: null,
+    pressureTrace: null,
     chromatogram: null,
     chromatogramSectionName: null,
     chromatogramYAxis: "Absorbance",
@@ -412,10 +422,10 @@ function readPressure(
   lines: string[] | undefined,
   delimiter: "," | "\t",
   notes: string[],
-): { found: boolean; maxPsi: number | null; units: string | null } {
+): { found: boolean; maxPsi: number | null; units: string | null; trace: PressurePoint[] | null } {
   if (!lines) {
     notes.push("The pressure trace (Pump A) is not in this file, so max back-pressure is not available.");
-    return { found: false, maxPsi: null, units: null };
+    return { found: false, maxPsi: null, units: null, trace: null };
   }
 
   const table = parseTable(lines, delimiter, ["R.Time (min)", "Intensity"]);
@@ -430,25 +440,33 @@ function readPressure(
     notes.push(
       "The pressure trace is missing its intensity multiplier, so back-pressure could not be worked out.",
     );
-    return { found: true, maxPsi: null, units };
+    return { found: true, maxPsi: null, units, trace: null };
   }
 
   if (!table.headerFound) {
     notes.push("The pressure trace is missing the time and intensity columns.");
-    return { found: true, maxPsi: null, units };
+    return { found: true, maxPsi: null, units, trace: null };
   }
 
+  const timeCol = columnIndex(table.headers, "R.Time (min)");
   const intensityCol = columnIndex(table.headers, "Intensity");
   const intensities = table.rows
     .map((row) => parseFileNumber(row[intensityCol] ?? ""))
     .filter((value): value is number => value != null);
-  if (intensities.length === 0) {
+  const trace: PressurePoint[] = [];
+  for (const row of table.rows) {
+    const timeMin = parseFileNumber(row[timeCol] ?? "");
+    const raw = parseFileNumber(row[intensityCol] ?? "");
+    if (timeMin == null || raw == null) continue;
+    trace.push({ timeMin, pressure: raw * multiplier });
+  }
+  if (intensities.length === 0 || trace.length === 0) {
     notes.push("The pressure trace has no intensity points.");
-    return { found: true, maxPsi: null, units };
+    return { found: true, maxPsi: null, units, trace: null };
   }
 
   const maxRaw = Math.max(...intensities);
-  return { found: true, maxPsi: maxRaw * multiplier, units };
+  return { found: true, maxPsi: maxRaw * multiplier, units, trace };
 }
 
 function readChromatogram(

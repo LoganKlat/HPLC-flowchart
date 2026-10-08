@@ -8,9 +8,10 @@ import {
   columnScale,
   formatColumnMultiple,
   scaleChromatogram,
+  scalePressureTrace,
   scaledPeakTimes,
 } from "@/lib/column-shape";
-import { readLabFile, type ChromatogramPoint } from "@/lib/lab-file";
+import { readLabFile, type ChromatogramPoint, type PressurePoint } from "@/lib/lab-file";
 
 const LENGTH_MIN = 50;
 const LENGTH_MAX = 250;
@@ -29,6 +30,8 @@ export type ColumnRunTrace = {
   points: ChromatogramPoint[];
   peakTimesMin: number[];
   yLabel: string;
+  pressurePoints: PressurePoint[];
+  pressureUnit: string | null;
   baselineLengthMm: number;
   baselineWidthMm: number;
 };
@@ -222,6 +225,8 @@ export function ColumnDiagram({ runs }: { runs: ColumnRunTrace[] }) {
           points: read.chromatogram,
           peakTimesMin: read.peakTimesMin,
           yLabel: read.chromatogramYAxis,
+          pressurePoints: read.pressureTrace ?? [],
+          pressureUnit: read.pressureUnits,
           baselineLengthMm: 150,
           baselineWidthMm: 4.6,
         });
@@ -242,6 +247,8 @@ export function ColumnDiagram({ runs }: { runs: ColumnRunTrace[] }) {
       points: [],
       peakTimesMin: [],
       yLabel: "mAU",
+      pressurePoints: [],
+      pressureUnit: null,
       baselineLengthMm: 150,
       baselineWidthMm: 4.6,
     },
@@ -258,6 +265,7 @@ export function ColumnDiagram({ runs }: { runs: ColumnRunTrace[] }) {
 
   const scale = columnScale(lengthMm, widthMm, selected.baselineLengthMm, selected.baselineWidthMm);
   const scaled = selected.points.length > 0 ? scaleChromatogram(selected.points, selected.peakTimesMin, scale) : [];
+  const scaledPressure = scalePressureTrace(selected.pressurePoints, selected.peakTimesMin, scale);
   const frame = selected.points.length > 0 ? traceFrame(selected.points) : undefined;
   const open = openId ? notes[openId] : null;
   const multipliers = [
@@ -348,6 +356,11 @@ export function ColumnDiagram({ runs }: { runs: ColumnRunTrace[] }) {
                 fileName={selected.fileName}
                 frame={frame}
                 multipliers={multipliers}
+                pressure={
+                  scaledPressure.length > 0
+                    ? { points: scaledPressure, unit: selected.pressureUnit }
+                    : null
+                }
               />
             ) : (
               <div className="rounded-xl bg-[#f7fbf8] px-4 py-6 text-sm ring-1 ring-foreground/10" role="status">

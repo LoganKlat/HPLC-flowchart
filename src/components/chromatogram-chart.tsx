@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import type { ChromatogramPoint } from "@/lib/lab-file";
+import type { ChromatogramPoint, PressurePoint } from "@/lib/lab-file";
 
 type ChromatogramChartProps = {
   points: ChromatogramPoint[];
@@ -10,6 +10,8 @@ type ChromatogramChartProps = {
   /** Keep the original axis when a scaled trace sits inside it, so peaks can move. */
   frame?: { minTime: number; maxTime: number; minY: number; maxY: number };
   multipliers?: { label: string; value: string }[];
+  /** Pump-pressure series from the same file. Omitted when that section is not there. */
+  pressure?: { points: PressurePoint[]; unit: string | null } | null;
 };
 
 const LABEL_W = 64;
@@ -38,11 +40,17 @@ export function ChromatogramChart({
   onRemove,
   frame,
   multipliers,
+  pressure,
 }: ChromatogramChartProps) {
+  const pressurePoints = (pressure?.points ?? []).filter(
+    (point) => Number.isFinite(point.timeMin) && Number.isFinite(point.pressure),
+  );
+  const showPressure = pressurePoints.length > 0;
+  const pressureUnit = (pressure?.unit ?? "").trim();
   const width = 720;
   const plotBottom = 58;
   const plotLeft = 72;
-  const plotRight = 18;
+  const plotRight = showPressure ? 78 : 18;
   const times = points.map((point) => point.timeMin);
   const intensities = points.map((point) => point.intensity);
   let minTime = Math.min(...times);
@@ -55,6 +63,10 @@ export function ChromatogramChart({
     minY = Math.min(minY, frame.minY);
     maxY = Math.max(maxY, frame.maxY);
   }
+  for (const point of pressurePoints) {
+    if (point.timeMin < minTime) minTime = point.timeMin;
+    if (point.timeMin > maxTime) maxTime = point.timeMin;
+  }
   if (minTime === maxTime) maxTime = minTime + 1;
   if (minY === maxY) {
     minY -= 1;
@@ -64,11 +76,27 @@ export function ChromatogramChart({
   minY -= ySlack;
   maxY += ySlack;
 
+  let pressureMin = 0;
+  let pressureMax = 1;
+  if (showPressure) {
+    pressureMin = Math.min(...pressurePoints.map((point) => point.pressure));
+    pressureMax = Math.max(...pressurePoints.map((point) => point.pressure));
+    if (pressureMin === pressureMax) {
+      pressureMin -= 1;
+      pressureMax += 1;
+    }
+    const pressureSlack = (pressureMax - pressureMin) * 0.08;
+    pressureMin -= pressureSlack;
+    pressureMax += pressureSlack;
+  }
+
   const innerWidth = width - plotLeft - plotRight;
   const innerHeight = 260;
   const xOf = (time: number) => plotLeft + ((time - minTime) / (maxTime - minTime)) * innerWidth;
   const yOf = (intensity: number, plotTop: number) =>
     plotTop + ((maxY - intensity) / (maxY - minY)) * innerHeight;
+  const yOfPressure = (value: number, plotTop: number) =>
+    plotTop + ((pressureMax - value) / (pressureMax - pressureMin)) * innerHeight;
 
   const marksAt = (plotTop: number): PeakMark[] =>
     peakTimesMin
@@ -100,11 +128,25 @@ export function ChromatogramChart({
       return `${command}${xOf(point.timeMin).toFixed(1)},${yOf(point.intensity, plotTop).toFixed(1)}`;
     })
     .join(" ");
+  const pressurePath = showPressure
+    ? pressurePoints
+        .map((point, index) => {
+          const command = index === 0 ? "M" : "L";
+          return `${command}${xOf(point.timeMin).toFixed(1)},${yOfPressure(point.pressure, plotTop).toFixed(1)}`;
+        })
+        .join(" ")
+    : "";
 
   const xTicks = axisTicks(minTime, maxTime);
   const yTicks = axisTicks(minY, maxY);
+  const pressureTicks = showPressure ? axisTicks(pressureMin, pressureMax) : [];
   const axisY = height - plotBottom;
   const peakList = labels.map((label) => label.text).join(", ");
+  const pressureWords = showPressure
+    ? pressureUnit
+      ? ` Back-pressure (${pressureUnit}) on the right.`
+      : " Back-pressure on the right."
+    : "";
 
   return (
     <figure className="overflow-hidden rounded-xl bg-[#f7fbf8] ring-1 ring-foreground/10">
@@ -137,8 +179,8 @@ export function ChromatogramChart({
         role="img"
         aria-label={
           peakList
-            ? `Chromatogram. Time (min) across, ${yLabel} up and down. Peak times: ${peakList}.`
-            : `Chromatogram. Time (min) across, ${yLabel} up and down.`
+            ? `Chromatogram. Time (min) across, ${yLabel} up and down. Peak times: ${peakList}.${pressureWords}`
+            : `Chromatogram. Time (min) across, ${yLabel} up and down.${pressureWords}`
         }
         className="h-auto w-full"
       >
@@ -207,6 +249,50 @@ export function ChromatogramChart({
           stroke="currentColor"
           className="text-foreground/30"
         />
+        {showPressure ? (
+          <g id="pressure-axis">
+            <line
+              x1={width - plotRight}
+              x2={width - plotRight}
+              y1={plotTop}
+              y2={height - plotBottom}
+              stroke="currentColor"
+              className="text-foreground/25"
+            />
+            {pressureTicks.map((tick) => (
+              <g key={`p-${tick}`}>
+                <line
+                  x1={width - plotRight}
+                  x2={width - plotRight + 5}
+                  y1={yOfPressure(tick, plotTop)}
+                  y2={yOfPressure(tick, plotTop)}
+                  stroke="currentColor"
+                  className="text-foreground/35"
+                />
+                <text
+                  x={width - plotRight + 8}
+                  y={yOfPressure(tick, plotTop)}
+                  textAnchor="start"
+                  dominantBaseline="middle"
+                  className="fill-muted-foreground text-[8px]"
+                >
+                  {formatAxisTick(tick)}
+                </text>
+              </g>
+            ))}
+            {pressureUnit ? (
+              <text
+                x={width - 14}
+                y={plotTop + innerHeight / 2}
+                transform={`rotate(-90 ${width - 14} ${plotTop + innerHeight / 2})`}
+                textAnchor="middle"
+                className="fill-muted-foreground text-[12px]"
+              >
+                {pressureUnit}
+              </text>
+            ) : null}
+          </g>
+        ) : null}
         <line
           x1={plotLeft}
           x2={width - plotRight}
@@ -215,6 +301,16 @@ export function ChromatogramChart({
           stroke="currentColor"
           className="text-foreground/30"
         />
+        {showPressure ? (
+          <path
+            id="pressure-trace"
+            d={pressurePath}
+            fill="none"
+            stroke="#7d746c"
+            strokeOpacity="0.55"
+            strokeWidth="1.35"
+          />
+        ) : null}
         <path d={path} fill="none" stroke="#0f6b56" strokeWidth="1.7" />
         {labels.map((label) => (
           <g key={`${label.text}-${label.anchorX.toFixed(1)}`}>

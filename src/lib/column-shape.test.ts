@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { columnScale, formatColumnMultiple, scaleChromatogram } from "@/lib/column-shape";
+import { columnScale, formatColumnMultiple, scaleChromatogram, scalePressureTrace } from "@/lib/column-shape";
 
 describe("column scale", () => {
   it("is 1 for the column that produced the run", () => {
@@ -64,5 +64,19 @@ describe("column scale", () => {
     ];
     const scaled = scaleChromatogram(points, [1], columnScale(100, 3, 100, 3));
     expect(scaled).toEqual(points);
+  });
+
+  it("keeps the pressure trace and stretches it with the column", () => {
+    const trace = [
+      { timeMin: 0, pressure: 1000 },
+      { timeMin: 2, pressure: 1200 },
+    ];
+    const same = scalePressureTrace(trace, [2], columnScale(150, 4.6, 150, 4.6));
+    expect(same).toEqual(trace);
+    const longer = columnScale(250, 4.6, 150, 4.6);
+    const scaled = scalePressureTrace(trace, [2], longer);
+    expect(scaled[1]?.timeMin).toBeCloseTo(2 * longer.retentionTime, 8);
+    expect(scaled[1]?.pressure).toBeCloseTo(1200 * longer.pressure, 8);
+    expect(scaled[0]?.pressure).toBeCloseTo(1000 * longer.pressure, 8);
   });
 });

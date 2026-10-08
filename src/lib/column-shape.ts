@@ -1,4 +1,4 @@
-import type { ChromatogramPoint } from "@/lib/lab-file";
+import type { ChromatogramPoint, PressurePoint } from "@/lib/lab-file";
 
 export type ColumnScale = {
   /** New length divided by the column that produced the run. */
@@ -45,6 +45,43 @@ export function formatColumnMultiple(value: number): string {
 
 export function scaledPeakTimes(peakTimesMin: readonly number[], retentionTime: number): number[] {
   return peakTimesMin.map((time) => time * retentionTime);
+}
+
+/**
+ * Keeps the pump trace on the same time warp as the chromatogram.
+ * Pressure rises with the column pressure multiplier. At 1× the points are unchanged.
+ */
+export function scalePressureTrace(
+  points: readonly PressurePoint[],
+  peakTimesMin: readonly number[],
+  scale: ColumnScale,
+): PressurePoint[] {
+  if (points.length === 0) return [];
+  const unchanged =
+    Math.abs(scale.retentionTime - 1) < 1e-12 &&
+    Math.abs(scale.peakWidth - 1) < 1e-12 &&
+    Math.abs(scale.pressure - 1) < 1e-12;
+  if (unchanged) return points.map((point) => ({ timeMin: point.timeMin, pressure: point.pressure }));
+
+  const peaks = peakTimesMin.filter((time) => Number.isFinite(time)).slice().sort((a, b) => a - b);
+  return points.map((point) => ({
+    timeMin: warpTraceTime(point.timeMin, peaks, scale),
+    pressure: point.pressure * scale.pressure,
+  }));
+}
+
+function warpTraceTime(time: number, peaks: readonly number[], scale: ColumnScale): number {
+  if (peaks.length === 0) return time * scale.retentionTime;
+  let nearest = peaks[0];
+  let best = Math.abs(time - peaks[0]);
+  for (let index = 1; index < peaks.length; index++) {
+    const distance = Math.abs(time - peaks[index]);
+    if (distance < best) {
+      best = distance;
+      nearest = peaks[index];
+    }
+  }
+  return nearest * scale.retentionTime + (time - nearest) * scale.peakWidth;
 }
 
 /**

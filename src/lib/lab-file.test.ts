@@ -40,6 +40,11 @@ describe("stand-in lab file", () => {
     expect(read.maxBackPressurePsi!).toBeGreaterThan(1025);
     expect(read.maxBackPressurePsi!).toBeLessThan(1026);
     expect(read.maxBackPressurePsi).toBeGreaterThan(40 * 14.2233);
+    expect(read.pressureUnits).toBe("psi");
+    expect(read.pressureTrace?.map((point) => point.timeMin)).toEqual([0, 1, 2]);
+    expect(read.pressureTrace?.[0]?.pressure).toBeCloseTo(40 * 14.2233, 5);
+    expect(read.pressureTrace?.[1]?.pressure).toBeCloseTo(72.1 * 14.2233, 5);
+    expect(read.pressureTrace?.[2]?.pressure).toBeCloseTo(55.2 * 14.2233, 5);
   });
 
   it("ignores the first peak when finding minimum resolution", () => {
@@ -94,6 +99,9 @@ describe("real LabSolutions exports", () => {
     ]);
     expect(read.lastPeakTimeMin).toBeCloseTo(1.952, 5);
     expect(read.maxBackPressurePsi).toBeCloseTo(73.1 * 14.2233, 4);
+    expect(read.pressureUnits).toBe("psi");
+    expect(read.pressureTrace?.length).toBeGreaterThan(100);
+    expect(read.pressureTrace?.[0]?.pressure).toBeCloseTo(72.1 * 14.2233, 4);
     expect(read.minResolutionExcludingFirst).toBeCloseTo(0.64, 5);
     expect(read.chromatogramSectionName).toBe("LC Chromatogram(Detector A-Ch1)");
     expect(read.chromatogramYAxis).toBe("mAU");
@@ -245,6 +253,8 @@ R.Time (min),Intensity
     const read = readLabFile(text);
     expect(read.chromatogramYAxis).toBe("mV");
     expect(read.chromatogram?.[1]?.intensity).toBe(2000);
+    expect(read.pressureTrace).toBeNull();
+    expect(read.pressureFound).toBe(false);
   });
 });
 

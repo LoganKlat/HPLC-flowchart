@@ -315,6 +315,8 @@ export function HplcApp() {
           points: run.read.chromatogram,
           peakTimesMin: run.read.peakTimesMin,
           yLabel: run.read.chromatogramYAxis,
+          pressurePoints: run.read.pressureTrace ?? [],
+          pressureUnit: run.read.pressureUnits,
           baselineLengthMm: lengthMm,
           baselineWidthMm: widthMm,
         },
