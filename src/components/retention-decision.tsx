@@ -113,11 +113,16 @@ export function StartHighBNote() {
           up as its own peak.
         </p>
         <p>
-          First, find a %B where the peak count meets the specification and the last peak comes out
-          by the time that was set. Next, change the conditions — temperature, then the solvent,
-          then the column coating — so peaks that still sit together pull apart. After that, make
-          the peaks narrower. Last, change %B while the run is going. Those last two stages are not
-          built yet.
+          First, change %B so the last peak comes out by the time that was set. That step does not
+          have to make the peak count match the specification.
+        </p>
+        <p>
+          Next, change the conditions — temperature, then the solvent, then the column coating —
+          until the peak count meets the specification. You do not have to use all of those changes.
+        </p>
+        <p>
+          After that, make the peaks narrower. Last, change %B while the run is going. Those last two
+          stages are not built yet.
         </p>
         <p>Start the first run around 90–100% B. A higher %B lets the decision engine work better.</p>
         <p>Enter the initial run details. They update automatically after each decision.</p>
