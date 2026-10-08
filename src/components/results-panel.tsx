@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { ChromatogramChart } from "@/components/chromatogram-chart";
+import { Button } from "@/components/ui/button";
 import type { ResultRow } from "@/lib/evaluate";
 import type { LabFileRead } from "@/lib/lab-file";
 import { cn } from "@/lib/utils";
@@ -15,27 +16,30 @@ type ResultsPanelProps = {
   read: LabFileRead;
   rows: ResultRow[];
   aside?: ReactNode;
+  onRemove?: () => void;
 };
 
-export function ResultsPanel({ fileName, read, rows, aside }: ResultsPanelProps) {
+export function ResultsPanel({ fileName, read, rows, aside, onRemove }: ResultsPanelProps) {
   const rowNotes = new Set(rows.map((row) => row.note).filter((note): note is string => Boolean(note)));
   const extraNotes = read.notes.filter((note) => !rowNotes.has(note));
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-sm text-muted-foreground">
-        Showing <span className="font-medium text-foreground">{fileName}</span>
-      </p>
       {read.chromatogram && read.chromatogramMissingMessage == null ? (
         <ChromatogramChart
           points={read.chromatogram}
           yLabel={read.chromatogramYAxis}
           peakTimesMin={read.peakTimesMin}
+          fileName={fileName}
+          onRemove={onRemove}
         />
       ) : (
-        <div className="rounded-xl bg-card px-4 py-6 text-sm ring-1 ring-foreground/10" role="status">
-          {read.chromatogramMissingMessage ??
-            "The picture could not be drawn because the chromatogram (Detector A) was not in this file."}
+        <div className="rounded-xl bg-card text-sm ring-1 ring-foreground/10" role="status">
+          <FileBar fileName={fileName} onRemove={onRemove} />
+          <p className="px-4 py-4">
+            {read.chromatogramMissingMessage ??
+              "The picture could not be drawn because the chromatogram (Detector A) was not in this file."}
+          </p>
         </div>
       )}
       {extraNotes.length > 0 ? (
@@ -103,6 +107,19 @@ export function ResultsPanel({ fileName, read, rows, aside }: ResultsPanelProps)
       {aside ? <div className="contents">{aside}</div> : null}
       </div>
       </div>
+    </div>
+  );
+}
+
+function FileBar({ fileName, onRemove }: { fileName: string; onRemove?: () => void }) {
+  return (
+    <div className="flex items-center justify-between gap-3 px-4 pt-3">
+      <p className="min-w-0 text-sm font-medium text-foreground">{fileName}</p>
+      {onRemove ? (
+        <Button type="button" variant="outline" className="h-8 shrink-0 px-3" onClick={onRemove}>
+          Remove file
+        </Button>
+      ) : null}
     </div>
   );
 }

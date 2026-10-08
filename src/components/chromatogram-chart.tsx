@@ -1,9 +1,12 @@
+import { Button } from "@/components/ui/button";
 import type { ChromatogramPoint } from "@/lib/lab-file";
 
 type ChromatogramChartProps = {
   points: ChromatogramPoint[];
   yLabel: string;
   peakTimesMin?: number[];
+  fileName?: string;
+  onRemove?: () => void;
 };
 
 const LABEL_W = 64;
@@ -24,7 +27,7 @@ export type PlacedPeakLabel = {
   anchorY: number;
 };
 
-export function ChromatogramChart({ points, yLabel, peakTimesMin = [] }: ChromatogramChartProps) {
+export function ChromatogramChart({ points, yLabel, peakTimesMin = [], fileName, onRemove }: ChromatogramChartProps) {
   const width = 720;
   const plotBottom = 58;
   const plotLeft = 72;
@@ -88,6 +91,16 @@ export function ChromatogramChart({ points, yLabel, peakTimesMin = [] }: Chromat
 
   return (
     <figure className="overflow-hidden rounded-xl bg-[#f7fbf8] ring-1 ring-foreground/10">
+      {fileName ? (
+        <div className="flex items-center justify-between gap-3 px-4 pt-3">
+          <p className="min-w-0 text-sm font-medium text-foreground">{fileName}</p>
+          {onRemove ? (
+            <Button type="button" variant="outline" className="h-8 shrink-0 px-3" onClick={onRemove}>
+              Remove file
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
       <figcaption className="flex items-baseline justify-between gap-3 px-4 pt-3">
         <span className="font-heading text-base text-foreground">Chromatogram</span>
         <span className="text-xs text-muted-foreground">{yLabel}</span>

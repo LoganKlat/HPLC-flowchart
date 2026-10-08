@@ -1027,18 +1027,9 @@ function RunPane({
         ) : null}
         {run.status === "ready" && run.read && rows && run.fileName ? (
           <>
-            <div className="flex justify-end">
-              <Button
-                type="button"
-                variant="outline"
-                className="h-10 px-4"
-                onClick={() => onRemove(index)}
-              >
-                Remove file
-              </Button>
-            </div>
             <ResultsPanel
               fileName={run.fileName}
+              onRemove={() => onRemove(index)}
               read={run.read}
               rows={rows}
               aside={
