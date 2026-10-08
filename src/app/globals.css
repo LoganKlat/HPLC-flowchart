@@ -124,6 +124,15 @@
   cursor: pointer;
 }
 
+.column-slider-y {
+  accent-color: #0f6b56;
+  writing-mode: vertical-lr;
+  direction: rtl;
+  width: 1.75rem;
+  height: 100%;
+  cursor: pointer;
+}
+
 .column-slider[aria-disabled="true"] {
   cursor: default;
 }

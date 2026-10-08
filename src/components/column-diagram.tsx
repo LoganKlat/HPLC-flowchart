@@ -3,7 +3,6 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { ChromatogramChart } from "@/components/chromatogram-chart";
 import { FunctionNoteView, type FunctionNote } from "@/components/function-note";
-import { KindMark } from "@/components/setting-legend";
 import {
   columnScale,
   formatColumnMultiple,
@@ -172,8 +171,79 @@ function ColumnDrawing({ lengthMm, widthMm }: { lengthMm: number; widthMm: numbe
   );
 }
 
-function sliderRowClass(active: boolean) {
-  return active ? "rounded-lg bg-[#e7f3ee] px-3 py-2" : "rounded-lg px-3 py-2";
+type SliderEvents = {
+  onMouseEnter: () => void;
+  onMouseLeave: () => void;
+  onClick: () => void;
+};
+
+function ColumnWithSliders({
+  lengthMm,
+  widthMm,
+  onLength,
+  onWidth,
+  lengthEvents,
+  widthEvents,
+}: {
+  lengthMm: number;
+  widthMm: number;
+  onLength: (value: number) => void;
+  onWidth: (value: number) => void;
+  lengthEvents: SliderEvents;
+  widthEvents: SliderEvents;
+}) {
+  const { body, x, side, vbW } = columnGeometry(lengthMm, widthMm);
+  const lengthLeft = ((x + side) / vbW) * 100;
+  const lengthSpan = (body / vbW) * 100;
+  const widthAt = ((x + side + body * 0.18) / vbW) * 100;
+
+  return (
+    <figure className="min-w-0 rounded-xl bg-card px-3 py-3 ring-1 ring-foreground/10 sm:px-4">
+      <div className="relative">
+        <ColumnDrawing lengthMm={lengthMm} widthMm={widthMm} />
+        <div
+          className="absolute inset-y-1 z-10 flex w-8 -translate-x-1/2 flex-col items-center"
+          style={{ left: `${widthAt}%` }}
+          {...widthEvents}
+        >
+          <p className="rounded-md bg-card px-1.5 font-heading text-sm font-semibold text-[#144237] tabular-nums ring-1 ring-foreground/10">
+            {widthMm.toFixed(1)} mm
+          </p>
+          <input
+            id="column-width"
+            className="column-slider-y mt-1 min-h-0 flex-1"
+            type="range"
+            min={WIDTH_MIN}
+            max={WIDTH_MAX}
+            step={0.1}
+            value={widthMm}
+            aria-label="Width"
+            aria-valuetext={`${widthMm.toFixed(1)} mm internal diameter`}
+            onChange={(event) => onWidth(Number(event.target.value))}
+          />
+        </div>
+      </div>
+      <div className="relative mt-1 h-14" {...lengthEvents}>
+        <div className="absolute top-0" style={{ left: `${lengthLeft}%`, width: `${lengthSpan}%` }}>
+          <input
+            id="column-length"
+            className="column-slider"
+            type="range"
+            min={LENGTH_MIN}
+            max={LENGTH_MAX}
+            step={1}
+            value={lengthMm}
+            aria-label="Length"
+            aria-valuetext={`${Math.round(lengthMm)} mm`}
+            onChange={(event) => onLength(Number(event.target.value))}
+          />
+          <p className="text-center font-heading text-sm font-semibold whitespace-nowrap text-[#144237] tabular-nums">
+            {Math.round(lengthMm)} mm
+          </p>
+        </div>
+      </div>
+    </figure>
+  );
 }
 
 function clamp(value: number, min: number, max: number) {
@@ -295,54 +365,20 @@ export function ColumnDiagram({ runs }: { runs: ColumnRunTrace[] }) {
         <p className="text-xs tracking-[0.16em] text-[#0f6b56] uppercase">Column</p>
         <h2 className="mt-1 font-heading text-2xl text-[#144237]">Length and width</h2>
         <p className="mt-2 max-w-2xl text-base text-muted-foreground">
-          Drag the length and the width. The drawing changes shape, and the chromatogram is the
-          selected run stretched by those two sizes. Each multiplier starts at 1 for the column that
-          produced that run.
+          Drag along the column for length, and across it for width. The drawing changes shape, and
+          the chromatogram is the selected run stretched by those two sizes. Each multiplier starts
+          at 1 for the column that produced that run.
         </p>
       </header>
-      <figure className="min-w-0 rounded-xl bg-card px-3 py-3 ring-1 ring-foreground/10 sm:px-4 lg:col-start-1">
-        <ColumnDrawing lengthMm={lengthMm} widthMm={widthMm} />
-      </figure>
       <div className="flex min-w-0 flex-col gap-4 lg:col-start-1">
-        <div className="flex flex-col gap-1">
-          <div className={sliderRowClass(openId === "length")} {...bind("length")}>
-            <div className="flex items-baseline justify-between gap-3">
-              <p className="text-sm font-medium">Length <KindMark kind="mechanical" /></p>
-              <p className="font-heading text-lg text-[#144237] tabular-nums">{Math.round(lengthMm)} mm</p>
-            </div>
-            <input
-              id="column-length"
-              className="column-slider mt-1"
-              type="range"
-              min={LENGTH_MIN}
-              max={LENGTH_MAX}
-              step={1}
-              value={lengthMm}
-              aria-valuetext={`${Math.round(lengthMm)} mm`}
-              onChange={(event) => setLengthMm(Number(event.target.value))}
-            />
-          </div>
-          <div className={sliderRowClass(openId === "width")} {...bind("width")}>
-            <div className="flex items-baseline justify-between gap-3">
-              <div>
-                <p className="text-sm font-medium">Width <KindMark kind="mechanical" /></p>
-                <p className="text-xs text-muted-foreground">Internal diameter</p>
-              </div>
-              <p className="font-heading text-lg text-[#144237] tabular-nums">{widthMm.toFixed(1)} mm</p>
-            </div>
-            <input
-              id="column-width"
-              className="column-slider mt-1"
-              type="range"
-              min={WIDTH_MIN}
-              max={WIDTH_MAX}
-              step={0.1}
-              value={widthMm}
-              aria-valuetext={`${widthMm.toFixed(1)} mm internal diameter`}
-              onChange={(event) => setWidthMm(Number(event.target.value))}
-            />
-          </div>
-        </div>
+        <ColumnWithSliders
+          lengthMm={lengthMm}
+          widthMm={widthMm}
+          onLength={setLengthMm}
+          onWidth={setWidthMm}
+          lengthEvents={bind("length")}
+          widthEvents={bind("width")}
+        />
         <section
           id="column-chromatogram"
           className="flex flex-col overflow-hidden rounded-xl border-2 border-solid border-border bg-card lg:flex-row lg:items-stretch"
