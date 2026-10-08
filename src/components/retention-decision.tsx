@@ -115,6 +115,7 @@ export function StartHighBNote() {
           built yet.
         </p>
         <p>Start the first run around 90–100% B. A higher %B lets the decision engine work better.</p>
+        <p>Enter the initial run details. They update automatically after each decision.</p>
       </div>
     </section>
   );

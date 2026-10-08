@@ -12,6 +12,7 @@ import type { RuleInputs, RunDetails } from "@/lib/run-details";
 import { LIGANDS, SOLVENTS } from "@/lib/selectivity";
 
 type RunFormProps = {
+  title: string;
   details: RunDetails;
   rules: RuleInputs;
   onDetails: (details: RunDetails) => void;
@@ -210,7 +211,9 @@ function DetailNote({ explained }: { explained: Explained }) {
   );
 }
 
-export function RunForm({ details, rules, onDetails, onRules }: RunFormProps) {
+const cardTitleClass = "font-heading text-xl! leading-tight font-bold!";
+
+export function RunForm({ title, details, rules, onDetails, onRules }: RunFormProps) {
   function setDetail<K extends keyof RunDetails>(key: K, value: RunDetails[K]) {
     onDetails({ ...details, [key]: value });
   }
@@ -220,10 +223,10 @@ export function RunForm({ details, rules, onDetails, onRules }: RunFormProps) {
   }
 
   return (
-    <div id="setup-boxes" className="flex flex-col gap-2">
-      <Card size="sm" style={{ ["--card-spacing" as string]: "0.5rem" }}>
-        <CardHeader>
-          <CardTitle>Rules to meet</CardTitle>
+    <div id="setup-boxes" className="flex min-h-full flex-col gap-2">
+      <Card size="sm" className="shrink-0" style={{ ["--card-spacing" as string]: "0.5rem" }}>
+        <CardHeader className="pb-2">
+          <CardTitle className={cardTitleClass}>Rules to meet</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-1.5">
           <TextField
@@ -288,9 +291,11 @@ export function RunForm({ details, rules, onDetails, onRules }: RunFormProps) {
         </CardContent>
       </Card>
 
-      <Card size="sm" style={{ ["--card-spacing" as string]: "0.5rem" }}>
-        <CardHeader>
-          <CardTitle>Initial run details</CardTitle>
+      <Card size="sm" className="flex-1" style={{ ["--card-spacing" as string]: "0.5rem" }}>
+        <CardHeader className="pb-2">
+          <CardTitle id="run-details-title" className={cardTitleClass}>
+            {title}
+          </CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-1 gap-y-1.5">
           <ChoiceField

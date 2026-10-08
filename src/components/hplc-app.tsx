@@ -44,6 +44,25 @@ import {
   type TempPath,
 } from "@/lib/selectivity";
 
+type RestKey = Exclude<keyof RunDetails, "percentB" | "temperature" | "solvent" | "ligand">;
+type RestDetails = Pick<RunDetails, RestKey>;
+
+const REST_KEYS: readonly RestKey[] = [
+  "coreShell",
+  "poreSize",
+  "carbonLoad",
+  "lengthMm",
+  "diameterMm",
+  "particleSize",
+  "ph",
+  "method",
+  "flowRate",
+  "injectionVolume",
+  "sampleType",
+  "sampleConcentration",
+  "wavelength",
+];
+
 type RunState = {
   percentB: string;
   percentEdited: boolean;
@@ -53,6 +72,8 @@ type RunState = {
   solventEdited: boolean;
   ligand: string;
   ligandEdited: boolean;
+  /** Fields this run changed itself. Unedited fields stay with the earlier run. */
+  rest: Partial<RestDetails>;
   afterRetention: boolean;
   status: "empty" | "reading" | "ready" | "error";
   fileName: string | null;
@@ -70,6 +91,7 @@ function emptyRun(): RunState {
     solventEdited: false,
     ligand: "",
     ligandEdited: false,
+    rest: {},
     afterRetention: false,
     status: "empty",
     fileName: null,
@@ -83,6 +105,54 @@ const sections: readonly { id: "decision-engine" | "equipment" | "about"; label:
   { id: "equipment", label: "Equipment", icon: Gauge },
   { id: "about", label: "About", icon: Info },
 ];
+
+function pickRest(details: RunDetails): RestDetails {
+  return {
+    coreShell: details.coreShell,
+    poreSize: details.poreSize,
+    carbonLoad: details.carbonLoad,
+    lengthMm: details.lengthMm,
+    diameterMm: details.diameterMm,
+    particleSize: details.particleSize,
+    ph: details.ph,
+    method: details.method,
+    flowRate: details.flowRate,
+    injectionVolume: details.injectionVolume,
+    sampleType: details.sampleType,
+    sampleConcentration: details.sampleConcentration,
+    wavelength: details.wavelength,
+  };
+}
+
+function applyRest(rest: RestDetails, over: Partial<RestDetails> | undefined) {
+  if (!over) return;
+  for (const key of REST_KEYS) {
+    const value = over[key];
+    if (value !== undefined) Object.assign(rest, { [key]: value });
+  }
+}
+
+function inheritedRest(index: number, runs: RunState[], base: RunDetails): RestDetails {
+  const rest = pickRest(base);
+  for (let i = 1; i < index; i++) applyRest(rest, runs[i]?.rest);
+  return rest;
+}
+
+function detailsForRun(index: number, runs: RunState[], base: RunDetails): RunDetails {
+  if (index <= 0) return base;
+  const run = runs[index];
+  if (!run) return base;
+  const rest = inheritedRest(index, runs, base);
+  applyRest(rest, run.rest);
+  return {
+    ...base,
+    ...rest,
+    percentB: run.percentB,
+    temperature: run.temperature,
+    solvent: run.solvent,
+    ligand: run.ligand,
+  };
+}
 
 function percentWords(text: string): string {
   const trimmed = text.trim();
@@ -236,6 +306,37 @@ export function HplcApp() {
       if (current[0].percentB === next.percentB) return current;
       const copy = current.slice();
       copy[0] = { ...copy[0], percentB: next.percentB, percentEdited: true };
+      return copy;
+    });
+  }
+
+  function onShownDetails(next: RunDetails) {
+    if (shown <= 0) {
+      onDetails(next);
+      return;
+    }
+    setRuns((current) => {
+      const run = current[shown];
+      if (!run) return current;
+      const inherited = inheritedRest(shown, current, details);
+      const rest: Partial<RestDetails> = { ...run.rest };
+      for (const key of REST_KEYS) {
+        if (next[key] === inherited[key]) delete rest[key];
+        else Object.assign(rest, { [key]: next[key] });
+      }
+      const copy = current.slice();
+      copy[shown] = {
+        ...run,
+        percentB: next.percentB,
+        percentEdited: next.percentB !== run.percentB ? true : run.percentEdited,
+        temperature: next.temperature,
+        temperatureEdited: next.temperature !== run.temperature ? true : run.temperatureEdited,
+        solvent: next.solvent,
+        solventEdited: next.solvent !== run.solvent ? true : run.solventEdited,
+        ligand: next.ligand,
+        ligandEdited: next.ligand !== run.ligand ? true : run.ligandEdited,
+        rest,
+      };
       return copy;
     });
   }
@@ -409,6 +510,7 @@ export function HplcApp() {
         solventEdited: run.solventEdited,
         ligand: run.ligand,
         ligandEdited: run.ligandEdited,
+        rest: run.rest,
       };
       return next;
     });
@@ -449,7 +551,7 @@ export function HplcApp() {
         className="flex! h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden"
       >
       <div className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden pl-4 sm:pl-5">
-      <div id="decision-layout" className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden lg:grid lg:grid-cols-[28rem_minmax(0,1fr)] lg:grid-rows-[auto_minmax(0,1fr)] lg:gap-x-5 lg:gap-y-3">
+      <div id="decision-layout" className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden lg:grid lg:grid-cols-[28rem_minmax(0,1fr)] lg:grid-rows-[auto_minmax(0,1fr)_auto] lg:gap-x-5 lg:gap-y-3">
       <header className="order-2 flex shrink-0 items-start justify-between gap-4 lg:col-span-2 lg:col-start-1 lg:row-start-1">
         <div className="min-w-0">
         <div className="mb-3 md:hidden">
@@ -621,15 +723,25 @@ export function HplcApp() {
             />
           </TabsContent>
         ))}
-      <footer className="mt-3 shrink-0 border-t border-border pt-3 text-xs text-muted-foreground">
+      </div>
+      <footer className="order-4 mt-3 shrink-0 border-t border-border pt-3 text-xs text-muted-foreground lg:col-start-2 lg:row-start-3">
         Built by Logan Klat
       </footer>
-      </div>
       <aside
         id="setup-column"
-        className="order-1 w-full shrink-0 overflow-y-auto max-lg:max-h-[40vh] lg:col-start-1 lg:row-start-2 lg:h-full lg:max-h-full lg:w-auto"
+        className="order-1 flex w-full shrink-0 flex-col overflow-y-auto max-lg:max-h-[40vh] lg:col-start-1 lg:row-start-2 lg:h-full lg:max-h-full lg:w-auto"
       >
-        <RunForm details={details} rules={rules} onDetails={onDetails} onRules={setRules} />
+        <RunForm
+          title={runTabLabel(shown, syncedRuns, details, checks, {
+            choice,
+            heat: heatChoice,
+            continued: continuedSelectivity,
+          })}
+          details={detailsForRun(shown, syncedRuns, details)}
+          rules={rules}
+          onDetails={onShownDetails}
+          onRules={setRules}
+        />
       </aside>
       </div>
       </div>
