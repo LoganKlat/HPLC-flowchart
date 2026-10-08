@@ -415,7 +415,13 @@ export function HplcApp() {
   }
 
   return (
-    <div className="flex min-h-dvh flex-1 flex-col md:flex-row">
+    <div
+      className={
+        section === "decision-engine"
+          ? "flex h-dvh max-h-dvh w-full flex-none flex-col overflow-hidden md:flex-row"
+          : "flex min-h-dvh flex-1 flex-col md:flex-row"
+      }
+    >
       <AppSidebar
         open={navOpen}
         section={section}
@@ -440,13 +446,12 @@ export function HplcApp() {
           const index = Number(value);
           if (index >= 0 && index < syncedRuns.length) setActive(index);
         }}
-        className="flex! min-h-dvh w-full min-w-0 flex-1 flex-col"
+        className="flex! h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden"
       >
-      <div className="mx-auto flex w-full min-w-0 max-w-6xl flex-1 flex-col px-4 py-6 sm:px-6 sm:py-8 lg:max-w-none">
+      <div className="mx-auto flex h-full min-h-0 w-full min-w-0 max-w-6xl flex-col overflow-hidden px-4 py-4 sm:px-6 sm:py-5 lg:max-w-none">
       <Watermark />
-      <div id="decision-layout" className="flex flex-col gap-6 lg:flex-row lg:items-start">
-      <div className="order-2 flex min-w-0 flex-1 flex-col">
-      <header className="mb-5">
+      <div id="decision-layout" className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden lg:grid lg:grid-cols-[28rem_minmax(0,1fr)] lg:grid-rows-[auto_minmax(0,1fr)] lg:gap-x-5 lg:gap-y-3">
+      <header className="order-2 shrink-0 lg:col-start-2 lg:row-start-1">
         <div className="mb-3 md:hidden">
           <Button type="button" variant="outline" className="h-10 px-3" onClick={() => setNavOpen(true)}>
             Sections
@@ -459,8 +464,9 @@ export function HplcApp() {
           the step, the page says what to change next.
         </p>
       </header>
+      <div className="order-3 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden lg:col-start-2 lg:row-start-2">
         {syncedRuns.map((run, index) => (
-          <TabsContent key={index} value={String(index)} className="flex flex-col gap-5">
+          <TabsContent key={index} value={String(index)} className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
             <RunPane
               index={index}
               run={run}
@@ -585,9 +591,9 @@ export function HplcApp() {
                 index === shown ? (
                   <div
                     id="run-tabs"
-                    className="order-1 shrink-0 border-b border-border bg-card lg:order-2 lg:w-max lg:self-stretch lg:border-b-0 lg:border-l"
+                    className="order-1 shrink-0 border-b border-border bg-card lg:order-2 lg:w-max lg:min-h-0 lg:shrink lg:self-stretch lg:overflow-y-auto lg:border-b-0 lg:border-l"
                   >
-                    <div className="overflow-x-auto lg:h-full lg:overflow-visible">
+                    <div className="overflow-x-auto lg:h-full lg:overflow-x-visible lg:overflow-y-auto">
                       <TabsList className="flex! h-auto! w-max min-w-full flex-row! items-stretch justify-start gap-2 rounded-none bg-transparent p-2 group-data-horizontal/tabs:h-auto! lg:h-full! lg:w-full! lg:flex-col! lg:p-3">
                         {syncedRuns.map((_, tabIndex) => (
                           <TabsTrigger
@@ -613,13 +619,13 @@ export function HplcApp() {
             />
           </TabsContent>
         ))}
-      <footer className="mt-10 border-t border-border pt-4 text-xs text-muted-foreground">
+      <footer className="mt-3 shrink-0 border-t border-border pt-3 text-xs text-muted-foreground">
         Built by Logan Klat
       </footer>
       </div>
       <aside
         id="setup-column"
-        className="order-1 w-full shrink-0 lg:sticky lg:top-4 lg:max-h-[calc(100dvh-2rem)] lg:w-[28rem] lg:overflow-y-auto"
+        className="order-1 w-full shrink-0 overflow-y-auto max-lg:max-h-[40vh] lg:col-start-1 lg:row-start-2 lg:h-full lg:max-h-full lg:w-auto"
       >
         <RunForm details={details} rules={rules} onDetails={onDetails} onRules={setRules} />
       </aside>
@@ -633,7 +639,7 @@ export function HplcApp() {
 
 function Watermark() {
   return (
-    <div id="watermark" className="pointer-events-none mb-3 flex justify-end">
+    <div id="watermark" className="pointer-events-none mb-3 flex shrink-0 justify-end">
       <div className="flex items-center gap-1.5 text-[#144237]/40">
         <svg viewBox="0 0 64 28" className="h-5 w-11" aria-hidden="true">
           <path
@@ -816,8 +822,8 @@ function RunPane({
   if (run.afterRetention) {
     const prior = index > 0 ? explainRun(runs, index - 1, details, checks, { choice, heat }) : null;
     return (
-      <section className="flex flex-col overflow-hidden rounded-xl border-2 border-solid border-border bg-card lg:flex-row lg:items-stretch">
-        <div className="order-2 min-w-0 flex-1 p-4 sm:p-5 lg:order-1">
+      <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border-2 border-solid border-border bg-card lg:flex-row lg:items-stretch">
+        <div className="order-2 min-h-0 min-w-0 flex-1 overflow-y-auto p-4 sm:p-5 lg:order-1" data-chromatogram-scroll="">
           <LaterChangeNote decision={prior?.kind === "retention" ? prior.decision : null} />
         </div>
         {runTabs}
@@ -844,9 +850,12 @@ function RunPane({
   return (
     <>
       {index === 0 && run.status === "empty" ? (
-        <StartHighBNote />
+        <div className="shrink-0">
+          <StartHighBNote />
+        </div>
       ) : null}
       {index === 0 ? null : (
+        <div className="shrink-0">
         <RunSummary
           index={index}
           rules={rules}
@@ -856,15 +865,19 @@ function RunPane({
           onSolvent={onSolvent}
           onLigand={onLigand}
         />
+        </div>
       )}
 
       <section
         className={
-          "flex min-h-[28rem] flex-col overflow-hidden rounded-xl border-2 bg-card lg:flex-row lg:items-stretch " +
+          "flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border-2 bg-card lg:flex-row lg:items-stretch " +
           (run.status === "ready" ? "border-solid border-border" : "border-dashed border-border")
         }
       >
-        <div className="order-2 flex min-w-0 flex-1 flex-col gap-4 p-4 sm:p-5 lg:order-1">
+        <div
+          className="order-2 flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-4 sm:p-5 lg:order-1"
+          data-chromatogram-scroll=""
+        >
         {index === 0 ? (
           <div id="filename-fill" className="flex flex-col gap-2">
             <div className="flex items-start gap-2">

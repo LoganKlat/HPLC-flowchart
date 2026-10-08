@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { ChoiceSelect } from "@/components/choice-select";
 import { FunctionNoteView, type FunctionNote } from "@/components/function-note";
 import { NotePop } from "@/components/note-pop";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { parseUserCount, parseUserNumber } from "@/lib/evaluate";
@@ -291,7 +291,6 @@ export function RunForm({ details, rules, onDetails, onRules }: RunFormProps) {
       <Card size="sm" style={{ ["--card-spacing" as string]: "0.5rem" }}>
         <CardHeader>
           <CardTitle>Initial run details</CardTitle>
-          <CardDescription>Saved with this session, even if a check does not use them yet.</CardDescription>
         </CardHeader>
         <CardContent className="grid grid-cols-1 gap-y-1.5">
           <ChoiceField
@@ -597,7 +596,7 @@ function UnitInput({
       />
       <span
         id={`${id}-unit`}
-        className="flex items-center border-l border-input px-2 text-xs whitespace-nowrap text-muted-foreground"
+        className="flex w-[4.75rem] shrink-0 items-center justify-center border-l border-input px-1 text-center text-xs leading-none whitespace-nowrap text-muted-foreground"
       >
         {unit}
       </span>
