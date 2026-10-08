@@ -326,7 +326,7 @@ export function RunForm({ title, details, rules, onDetails, onRules, fileNameFil
                 <NotePop text={FILE_NAME_STRUCTURE_NOTE} label="Autofill from file name" />
               </div>
               {fileNameFill.note ? (
-                <p className="col-span-3 text-sm text-orange-950" role="status">
+                <p className="col-span-3 text-sm text-red-700" role="status">
                   {fileNameFill.note}
                 </p>
               ) : null}

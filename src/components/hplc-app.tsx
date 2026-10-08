@@ -15,7 +15,7 @@ import { EquipmentPanel } from "@/components/equipment-panel";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { evaluateRun, parseUserCount, parseUserNumber, type RuleNumbers } from "@/lib/evaluate";
-import { parseRunFileName } from "@/lib/filename-details";
+import { detailsFromFileName, parseRunFileName } from "@/lib/filename-details";
 import { readLabFile, type LabFileRead } from "@/lib/lab-file";
 import {
   decideRetention,
@@ -447,13 +447,30 @@ export function HplcApp() {
   }
 
   function applyFileName(fileName: string) {
-    const parsed = parseRunFileName(fileName);
-    if (!parsed.ok) {
-      setFileNameNote(parsed.message);
+    const next = detailsFromFileName(detailsRef.current, fileName);
+    if (!next.ok) {
+      setFileNameNote(next.note);
       return;
     }
     setFileNameNote(null);
-    onDetails({ ...detailsRef.current, ...parsed.fields });
+    onDetails(next.details);
+    setRuns((current) => {
+      const run = current[0];
+      if (!run) return current;
+      const copy = current.slice();
+      copy[0] = {
+        ...run,
+        percentB: next.details.percentB,
+        percentEdited: true,
+        temperature: next.details.temperature,
+        temperatureEdited: next.details.temperature.trim() !== "",
+        solvent: next.details.solvent,
+        solventEdited: next.details.solvent.trim() !== "",
+        ligand: next.details.ligand,
+        ligandEdited: next.details.ligand.trim() !== "",
+      };
+      return copy;
+    });
   }
 
   function onToggleFillFromFileName(checked: boolean) {

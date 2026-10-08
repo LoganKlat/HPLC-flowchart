@@ -13,8 +13,7 @@ export const FILE_NAME_STRUCTURE_NOTE =
   FILE_NAME_EXAMPLE +
   ".";
 
-export const FILE_NAME_MISMATCH =
-  "This file name does not follow that pattern, so the details you typed were left as they are.";
+export const FILE_NAME_MISMATCH = "This file name does not follow naming conventions.";
 
 export type FilenameParse =
   | { ok: true; fields: Partial<RunDetails> }
@@ -33,6 +32,41 @@ export function parseRunFileName(fileName: string): FilenameParse {
     if (parsed) return { ok: true, fields: parsed };
   }
   return { ok: false, message: FILE_NAME_MISMATCH };
+}
+
+/** Fields a file name can set. A new name replaces these, including ones it leaves blank. */
+const FILE_NAME_DETAIL_KEYS = [
+  "solvent",
+  "ph",
+  "method",
+  "percentB",
+  "flowRate",
+  "injectionVolume",
+  "sampleType",
+  "sampleConcentration",
+  "ligand",
+  "lengthMm",
+  "diameterMm",
+  "particleSize",
+  "temperature",
+  "wavelength",
+] as const satisfies readonly (keyof RunDetails)[];
+
+/**
+ * Autofill is on. A name that matches replaces the file-name fields.
+ * A name that does not match leaves the current details and returns the mismatch note.
+ */
+export function detailsFromFileName(
+  current: RunDetails,
+  fileName: string,
+): { ok: true; details: RunDetails } | { ok: false; details: RunDetails; note: string } {
+  const parsed = parseRunFileName(fileName);
+  if (!parsed.ok) return { ok: false, details: current, note: parsed.message };
+  const details = { ...current };
+  for (const key of FILE_NAME_DETAIL_KEYS) {
+    details[key] = parsed.fields[key] ?? "";
+  }
+  return { ok: true, details };
 }
 
 function nameStems(fileName: string): string[] {

@@ -6,10 +6,12 @@ import {
   FILE_NAME_EXAMPLE,
   FILE_NAME_MISMATCH,
   FILE_NAME_STRUCTURE_NOTE,
+  detailsFromFileName,
   parseRunFileName,
 } from "@/lib/filename-details";
 import { readLabFile } from "@/lib/lab-file";
 import { decideRetention } from "@/lib/retention";
+import { emptyRunDetails } from "@/lib/run-details";
 
 const uploads = path.join(process.cwd(), "fixtures/lab");
 const workbook90 = `${uploads}/GR09-05-3-ACN-3-ISO-90-1.5-20-CP-0.1-C18aqP-150x4.6x5-amb-254_f959.xlsx`;
@@ -19,6 +21,7 @@ const name80 = "GR09-06-3-ACN-3-ISO-80-1.5-20-CP-0.1-C18aqP-150x4.6x5-amb-254.xl
 
 describe("run file names", () => {
   it("explains the pattern with the GR09 90% B name", () => {
+    expect(FILE_NAME_MISMATCH).toBe("This file name does not follow naming conventions.");
     expect(FILE_NAME_CHECKBOX_LABEL).toBe("Check this box to autofill details from file name.");
     expect(FILE_NAME_STRUCTURE_NOTE).toBe(
       "Structure must be group number-injection number-HPLC number-solvent-pH-method-%B-flow rate-injection volume-sample type-sample concentration-ligand-length x diameter x particle size-oven temperature-wavelength. For example, GR09-05-3-ACN-3-ISO-90-1.5-20-CP-0.1-C18aqP-150x4.6x5-amb-254.",
@@ -255,5 +258,61 @@ describe("run file names", () => {
     expect(spaced.fields.flowRate).toBe("1.5");
     expect(spaced.fields.injectionVolume).toBe("20");
     expect(spaced.fields.temperature).toBe("60");
+  });
+
+  it("replaces the details when autofill stays on and a second file is loaded", () => {
+    const firstName = "GR09-05-3-ACN-3-ISO-90-1.5-20-CP-0.1-C18aqP-150x4.6x5-amb-254.csv";
+    const secondName = "GR09-16-4-MeOH-3-ISO-35-1.5-20u-CP-0.1-C8-150x4.6x5-T60-254.csv";
+    const first = detailsFromFileName(emptyRunDetails(), firstName);
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    expect(first.details).toMatchObject({
+      solvent: "ACN",
+      percentB: "90",
+      temperature: "ambient",
+      ligand: "C18aq",
+      injectionVolume: "20",
+    });
+
+    const removed = first.details;
+    expect(removed.solvent).toBe("ACN");
+
+    const second = detailsFromFileName(removed, secondName);
+    expect(second.ok).toBe(true);
+    if (!second.ok) return;
+    expect(second.details).toMatchObject({
+      solvent: "MeOH",
+      ph: "3",
+      method: "ISO",
+      percentB: "35",
+      flowRate: "1.5",
+      injectionVolume: "20",
+      sampleType: "CP",
+      sampleConcentration: "0.1",
+      ligand: "C8",
+      lengthMm: "150",
+      diameterMm: "4.6",
+      particleSize: "5",
+      temperature: "60",
+      wavelength: "254",
+    });
+    expect(second.details.solvent).not.toBe("ACN");
+    expect(second.details.percentB).not.toBe("90");
+    expect(second.details.temperature).not.toBe("ambient");
+    expect(second.details.ligand).not.toBe("C18aq");
+
+    const shorter = detailsFromFileName(first.details, "GR09-16-35-T60.csv");
+    expect(shorter.ok).toBe(true);
+    if (!shorter.ok) return;
+    expect(shorter.details.percentB).toBe("35");
+    expect(shorter.details.temperature).toBe("60");
+    expect(shorter.details.solvent).toBe("");
+    expect(shorter.details.ligand).toBe("");
+
+    const mismatch = detailsFromFileName(second.details, "notes.csv");
+    expect(mismatch.ok).toBe(false);
+    if (mismatch.ok) return;
+    expect(mismatch.note).toBe("This file name does not follow naming conventions.");
+    expect(mismatch.details).toEqual(second.details);
   });
 });
