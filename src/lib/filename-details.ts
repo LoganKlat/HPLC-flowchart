@@ -4,9 +4,12 @@ import type { RunDetails } from "@/lib/run-details";
 export const FILE_NAME_EXAMPLE =
   "GR09-05-3-ACN-3-ISO-90-1.5-20-CP-0.1-C18aqP-150x4.6x5-amb-254";
 
-/** Shown beside the Run 1 checkbox. One real name, broken into its pieces. */
-export const FILE_NAME_CHECKBOX_LABEL =
-  "Check this box to autofill details from file name. Structure must be group number-injection number-HPLC number-solvent-pH-method-%B-flow rate-injection volume-sample type-sample concentration-ligand-length x diameter x particle size-oven temperature-wavelength. For example, " +
+/** Short label beside the Run 1 checkbox. The pattern lives in the note. */
+export const FILE_NAME_CHECKBOX_LABEL = "Check this box to autofill details from file name.";
+
+/** Opened from the control next to the checkbox. One real name, broken into its pieces. */
+export const FILE_NAME_STRUCTURE_NOTE =
+  "Structure must be group number-injection number-HPLC number-solvent-pH-method-%B-flow rate-injection volume-sample type-sample concentration-ligand-length x diameter x particle size-oven temperature-wavelength. For example, " +
   FILE_NAME_EXAMPLE +
   ".";
 

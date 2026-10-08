@@ -1,7 +1,13 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { FILE_NAME_CHECKBOX_LABEL, FILE_NAME_EXAMPLE, FILE_NAME_MISMATCH, parseRunFileName } from "@/lib/filename-details";
+import {
+  FILE_NAME_CHECKBOX_LABEL,
+  FILE_NAME_EXAMPLE,
+  FILE_NAME_MISMATCH,
+  FILE_NAME_STRUCTURE_NOTE,
+  parseRunFileName,
+} from "@/lib/filename-details";
 import { readLabFile } from "@/lib/lab-file";
 import { decideRetention } from "@/lib/retention";
 
@@ -13,9 +19,11 @@ const name80 = "GR09-06-3-ACN-3-ISO-80-1.5-20-CP-0.1-C18aqP-150x4.6x5-amb-254.xl
 
 describe("run file names", () => {
   it("explains the pattern with the GR09 90% B name", () => {
-    expect(FILE_NAME_CHECKBOX_LABEL).toBe(
-      "Check this box to autofill details from file name. Structure must be group number-injection number-HPLC number-solvent-pH-method-%B-flow rate-injection volume-sample type-sample concentration-ligand-length x diameter x particle size-oven temperature-wavelength. For example, GR09-05-3-ACN-3-ISO-90-1.5-20-CP-0.1-C18aqP-150x4.6x5-amb-254.",
+    expect(FILE_NAME_CHECKBOX_LABEL).toBe("Check this box to autofill details from file name.");
+    expect(FILE_NAME_STRUCTURE_NOTE).toBe(
+      "Structure must be group number-injection number-HPLC number-solvent-pH-method-%B-flow rate-injection volume-sample type-sample concentration-ligand-length x diameter x particle size-oven temperature-wavelength. For example, GR09-05-3-ACN-3-ISO-90-1.5-20-CP-0.1-C18aqP-150x4.6x5-amb-254.",
     );
+    expect(FILE_NAME_STRUCTURE_NOTE).toContain(FILE_NAME_EXAMPLE);
   });
 
   it("parses both workbook names, including the extra upload suffix", () => {

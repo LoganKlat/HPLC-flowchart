@@ -13,12 +13,13 @@ import { RunForm } from "@/components/run-form";
 import { SelectivityDecisionView } from "@/components/selectivity-decision";
 import { EquipmentPanel } from "@/components/equipment-panel";
 import { MeasurementGroups } from "@/components/measurement-groups";
+import { NotePop } from "@/components/note-pop";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { evaluateRun, parseUserCount, parseUserNumber, type RuleNumbers } from "@/lib/evaluate";
-import { FILE_NAME_CHECKBOX_LABEL, parseRunFileName } from "@/lib/filename-details";
+import { FILE_NAME_CHECKBOX_LABEL, FILE_NAME_STRUCTURE_NOTE, parseRunFileName } from "@/lib/filename-details";
 import { readLabFile, type LabFileRead } from "@/lib/lab-file";
 import {
   decideRetention,
@@ -82,6 +83,80 @@ const sections: readonly { id: "decision-engine" | "equipment" | "about"; label:
   { id: "equipment", label: "Equipment", icon: Gauge },
   { id: "about", label: "About", icon: Info },
 ];
+
+function percentWords(text: string): string {
+  const trimmed = text.trim();
+  if (!trimmed) return "%B";
+  const value = parseUserNumber(trimmed);
+  return value == null ? `${trimmed}% B` : `${formatPercentB(value)}% B`;
+}
+
+function degreeWords(text: string): string {
+  const trimmed = text.trim().replace(/°\s*C$/i, "");
+  return trimmed ? `${trimmed}°C` : "°C";
+}
+
+/** Short name for the decision that opened this run. Run 1 is only its %B. */
+function runTabLabel(
+  index: number,
+  runs: RunState[],
+  details: RunDetails,
+  checks: RuleNumbers,
+  options: {
+    choice: RetentionChoice;
+    heat: HeatStart | null;
+    continued: Record<number, boolean>;
+  },
+): string {
+  if (index <= 0) return percentWords(details.percentB || runs[0]?.percentB || "");
+  const flags = selectivityFlags(index - 1, options.heat, options.continued);
+  const explanation = explainRun(runs, index - 1, details, checks, {
+    choice: options.choice,
+    heat: options.heat,
+    continuePastEfficiency: flags.continuePast,
+    continueToLook: flags.continueToLook,
+  });
+  const named = explanation ? decisionTabLabel(explanation, runs[index]) : null;
+  if (named) return named;
+  return openedRunFallback(index, runs, details);
+}
+
+function decisionTabLabel(explanation: Explanation, run: RunState | undefined): string | null {
+  if (explanation.kind === "retention") {
+    const decision = explanation.decision;
+    if (decision.nextTemperature) return degreeWords(decision.nextTemperature);
+    if (decision.nextPercentB != null) return percentWords(run?.percentB || String(decision.nextPercentB));
+    if (decision.status === "investigate" || decision.reason === "investigate") return "investigate";
+    if (decision.status === "efficiency" || decision.reason === "efficiency") return "efficiency";
+    return null;
+  }
+  const plan = explanation.plan;
+  if (plan.step === "temp-40" || plan.step === "temp-adjust") return "40°C";
+  if (plan.step === "temp-60") return "60°C";
+  if (plan.step === "ligand") return "new coating";
+  if (plan.step === "solvent") return run?.solvent.trim() || "solvent";
+  if (plan.step === "temp-choice") {
+    if (run?.temperature.trim() === "60") return "60°C";
+    if (run?.ligand.trim()) return "new coating";
+    if (run?.solvent.trim()) return run.solvent.trim();
+    return plan.tempChoice?.other === "ligand" ? "new coating" : "60°C";
+  }
+  return null;
+}
+
+function openedRunFallback(index: number, runs: RunState[], details: RunDetails): string {
+  const run = runs[index];
+  if (!run) return "%B";
+  const prev = runs[index - 1];
+  const prevTemp = (index === 1 ? details.temperature : prev?.temperature || details.temperature).trim();
+  const prevSolvent = (index === 1 ? details.solvent : prev?.solvent || details.solvent).trim();
+  const prevLigand = (index === 1 ? details.ligand : prev?.ligand || details.ligand).trim();
+  if (run.temperature.trim() && run.temperature.trim() !== prevTemp) return degreeWords(run.temperature);
+  if (run.solvent.trim() && run.solvent.trim() !== prevSolvent) return run.solvent.trim();
+  if (run.ligand.trim() && run.ligand.trim() !== prevLigand) return "new coating";
+  if (run.percentB.trim()) return percentWords(run.percentB);
+  return "%B";
+}
 
 function runTabStyle(selected: boolean, hovered: boolean): CSSProperties {
   if (selected && hovered) {
@@ -349,14 +424,27 @@ export function HplcApp() {
           setNavOpen(false);
         }}
       />
+      {section === "about" || section === "equipment" ? (
       <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 py-6 sm:px-6 sm:py-8">
       <Watermark />
       {section === "about" ? <AboutPanel onOpenNav={() => setNavOpen(true)} /> : null}
-
       {section === "equipment" ? <EquipmentPanel onOpenNav={() => setNavOpen(true)} /> : null}
+      </div>
+      ) : null}
 
       {section === "decision-engine" ? (
-      <>
+      <Tabs
+        value={String(shown)}
+        onValueChange={(value) => {
+          const index = Number(value);
+          if (index >= 0 && index < syncedRuns.length) setActive(index);
+        }}
+        className="flex! min-h-dvh w-full min-w-0 flex-1 flex-col lg:flex-row!"
+      >
+      <div className="order-2 mx-auto flex w-full min-w-0 max-w-6xl flex-1 flex-col px-4 py-6 sm:px-6 sm:py-8 lg:order-1 lg:max-w-none">
+      <Watermark />
+      <div id="decision-layout" className="flex flex-col gap-6 lg:flex-row lg:items-start">
+      <div className="order-2 flex min-w-0 flex-1 flex-col lg:order-1">
       <header className="mb-5">
         <div className="mb-3 md:hidden">
           <Button type="button" variant="outline" className="h-10 px-3" onClick={() => setNavOpen(true)}>
@@ -370,32 +458,6 @@ export function HplcApp() {
           the step, the page says what to change next.
         </p>
       </header>
-      <Tabs
-        value={String(shown)}
-        onValueChange={(value) => {
-          const index = Number(value);
-          if (index >= 0 && index < syncedRuns.length) setActive(index);
-        }}
-      >
-        <div id="run-tabs" className="sticky top-0 z-20 -mx-4 mb-5 bg-background/95 px-4 pt-3 backdrop-blur sm:-mx-6 sm:px-6">
-          <div className="overflow-x-auto py-1">
-            <TabsList className="h-auto! w-max min-w-0 items-stretch justify-start gap-2 rounded-none bg-transparent p-0 group-data-horizontal/tabs:h-auto!">
-              {syncedRuns.map((_, index) => (
-                <TabsTrigger
-                  key={index}
-                  value={String(index)}
-                  className="h-10! flex-none! rounded-md border border-solid px-4 text-sm shadow-none! transition-none! after:hidden!"
-                  style={runTabStyle(index === shown, hoveredRun === index)}
-                  onMouseEnter={() => setHoveredRun(index)}
-                  onMouseLeave={() => setHoveredRun((current) => (current === index ? null : current))}
-                >
-                  Run {index + 1}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </div>
-        </div>
-
         {syncedRuns.map((run, index) => (
           <TabsContent key={index} value={String(index)} className="flex flex-col gap-5">
             <RunPane
@@ -405,8 +467,6 @@ export function HplcApp() {
               details={details}
               rules={rules}
               checks={checks}
-              onDetails={onDetails}
-              onRules={setRules}
               onPercent={(value) => setRunPercent(index, value)}
               onTemperature={(value) => setRunTemperature(index, value)}
               onSolvent={(value) => setRunSolvent(index, value)}
@@ -523,13 +583,45 @@ export function HplcApp() {
             />
           </TabsContent>
         ))}
-      </Tabs>
       <footer className="mt-10 border-t border-border pt-4 text-xs text-muted-foreground">
         Built by Logan Klat
       </footer>
-      </>
-      ) : null}
       </div>
+      <aside
+        id="setup-column"
+        className="order-1 w-full shrink-0 lg:sticky lg:top-4 lg:order-2 lg:max-h-[calc(100dvh-2rem)] lg:w-[22rem] lg:overflow-y-auto"
+      >
+        <RunForm details={details} rules={rules} onDetails={onDetails} onRules={setRules} />
+      </aside>
+      </div>
+      </div>
+      <div
+        id="run-tabs"
+        className="order-1 sticky top-0 z-30 border-b border-border bg-background/95 backdrop-blur lg:order-2 lg:sticky lg:top-0 lg:z-20 lg:h-dvh lg:w-28 lg:shrink-0 lg:self-start lg:overflow-y-auto lg:border-b-0 lg:border-l lg:bg-card lg:backdrop-blur-none"
+      >
+        <div className="overflow-x-auto lg:overflow-visible">
+          <TabsList className="flex! h-auto! w-max min-w-full flex-row! items-stretch justify-start gap-2 rounded-none bg-transparent p-2 group-data-horizontal/tabs:h-auto! lg:w-full! lg:flex-col! lg:p-3">
+            {syncedRuns.map((_, index) => (
+              <TabsTrigger
+                key={index}
+                value={String(index)}
+                className="h-10! w-auto! flex-none! rounded-md border border-solid px-3 text-sm shadow-none! transition-none! after:hidden! lg:w-full! lg:px-2"
+                style={runTabStyle(index === shown, hoveredRun === index)}
+                onMouseEnter={() => setHoveredRun(index)}
+                onMouseLeave={() => setHoveredRun((current) => (current === index ? null : current))}
+              >
+                {runTabLabel(index, syncedRuns, details, checks, {
+                  choice,
+                  heat: heatChoice,
+                  continued: continuedSelectivity,
+                })}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </div>
+      </div>
+      </Tabs>
+      ) : null}
     </div>
   );
 }
@@ -642,8 +734,6 @@ function RunPane({
   details,
   rules,
   checks,
-  onDetails,
-  onRules,
   onPercent,
   onTemperature,
   onSolvent,
@@ -683,8 +773,6 @@ function RunPane({
   details: RunDetails;
   rules: RuleInputs;
   checks: RuleNumbers;
-  onDetails: (details: RunDetails) => void;
-  onRules: (rules: RuleInputs) => void;
   onPercent: (value: string) => void;
   onTemperature: (value: string) => void;
   onSolvent: (value: string) => void;
@@ -744,9 +832,7 @@ function RunPane({
       {index === 0 && run.status === "empty" ? (
         <StartHighBNote />
       ) : null}
-      {index === 0 ? (
-        <RunForm details={details} rules={rules} onDetails={onDetails} onRules={onRules} />
-      ) : (
+      {index === 0 ? null : (
         <RunSummary
           index={index}
           rules={rules}
@@ -766,19 +852,22 @@ function RunPane({
       >
         {index === 0 ? (
           <div id="filename-fill" className="flex flex-col gap-2">
-            <label
-              htmlFor="fill-from-filename"
-              className="flex items-start gap-3 text-sm leading-relaxed text-foreground"
-            >
-              <input
-                id="fill-from-filename"
-                type="checkbox"
-                className="mt-1 size-4 shrink-0 accent-[#0f6b56]"
-                checked={fillFromFileName}
-                onChange={(event) => onToggleFillFromFileName(event.target.checked)}
-              />
-              <span>{FILE_NAME_CHECKBOX_LABEL}</span>
-            </label>
+            <div className="flex items-start gap-2">
+              <label
+                htmlFor="fill-from-filename"
+                className="flex items-start gap-3 text-sm leading-relaxed text-foreground"
+              >
+                <input
+                  id="fill-from-filename"
+                  type="checkbox"
+                  className="mt-1 size-4 shrink-0 accent-[#0f6b56]"
+                  checked={fillFromFileName}
+                  onChange={(event) => onToggleFillFromFileName(event.target.checked)}
+                />
+                <span>{FILE_NAME_CHECKBOX_LABEL}</span>
+              </label>
+              <NotePop text={FILE_NAME_STRUCTURE_NOTE} label="Autofill from file name" />
+            </div>
             {fileNameNote ? (
               <p className="text-sm text-orange-950" role="status">
                 {fileNameNote}

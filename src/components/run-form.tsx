@@ -1,6 +1,7 @@
 "use client";
 
 import { ChoiceSelect } from "@/components/choice-select";
+import { NotePop } from "@/components/note-pop";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -25,8 +26,74 @@ export function RunForm({ details, rules, onDetails, onRules }: RunFormProps) {
   }
 
   return (
-    <div id="setup-boxes" className="grid grid-cols-1 items-stretch gap-4 md:grid-cols-2">
-      <Card className="@container h-full">
+    <div id="setup-boxes" className="flex flex-col gap-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>Rules to meet</CardTitle>
+          <CardDescription>Leave a box empty if you are not checking it yet.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3">
+          <TextField
+            label="Number of peaks to separate"
+            value={rules.requiredPeaks}
+            onChange={(value) => setRule("requiredPeaks", value)}
+            inputMode="numeric"
+            note="Met when the file has at least this many peaks."
+            hint={
+              rules.requiredPeaks.trim() && parseUserCount(rules.requiredPeaks) == null
+                ? "Use a whole number."
+                : undefined
+            }
+            invalid={rules.requiredPeaks.trim() !== "" && parseUserCount(rules.requiredPeaks) == null}
+          />
+          <TextField
+            label="Last peak time (minutes)"
+            value={rules.lastPeakTimeMin}
+            onChange={(value) => setRule("lastPeakTimeMin", value)}
+            inputMode="decimal"
+            note="Met when the last peak comes out at or before this many minutes. Later than that is not met."
+            hint={
+              rules.lastPeakTimeMin.trim() && parseUserNumber(rules.lastPeakTimeMin) == null
+                ? "Use a number."
+                : undefined
+            }
+            invalid={
+              rules.lastPeakTimeMin.trim() !== "" && parseUserNumber(rules.lastPeakTimeMin) == null
+            }
+          />
+          <TextField
+            label="Minimum resolution"
+            value={rules.minResolution}
+            onChange={(value) => setRule("minResolution", value)}
+            inputMode="decimal"
+            note="Met when the smallest resolution, leaving out the t0 peak, is at least this number. If the file has fewer peaks than the specification, this shows NA and is not met."
+            hint={
+              rules.minResolution.trim() && parseUserNumber(rules.minResolution) == null
+                ? "Use a number."
+                : undefined
+            }
+            invalid={rules.minResolution.trim() !== "" && parseUserNumber(rules.minResolution) == null}
+          />
+          <TextField
+            label="Max back-pressure (psi)"
+            value={rules.maxBackPressurePsi}
+            onChange={(value) => setRule("maxBackPressurePsi", value)}
+            inputMode="decimal"
+            note="Met when the highest pressure is at or below this number."
+            hint={
+              rules.maxBackPressurePsi.trim() && parseUserNumber(rules.maxBackPressurePsi) == null
+                ? "Use a number."
+                : undefined
+            }
+            invalid={
+              rules.maxBackPressurePsi.trim() !== "" &&
+              parseUserNumber(rules.maxBackPressurePsi) == null
+            }
+          />
+        </CardContent>
+      </Card>
+
+      <Card className="@container">
         <CardHeader>
           <CardTitle>Initial run details</CardTitle>
           <CardDescription>Saved with this session, even if a check does not use them yet.</CardDescription>
@@ -154,68 +221,6 @@ export function RunForm({ details, rules, onDetails, onRules }: RunFormProps) {
           />
         </CardContent>
       </Card>
-
-      <Card className="h-full">
-        <CardHeader>
-          <CardTitle>Rules to meet</CardTitle>
-          <CardDescription>Leave a box empty if you are not checking it yet.</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-3">
-          <TextField
-            label="Number of peaks to separate"
-            value={rules.requiredPeaks}
-            onChange={(value) => setRule("requiredPeaks", value)}
-            inputMode="numeric"
-            hint={
-              rules.requiredPeaks.trim() && parseUserCount(rules.requiredPeaks) == null
-                ? "Use a whole number."
-                : "Met when the file has at least this many peaks."
-            }
-            invalid={rules.requiredPeaks.trim() !== "" && parseUserCount(rules.requiredPeaks) == null}
-          />
-          <TextField
-            label="Last peak time (minutes)"
-            value={rules.lastPeakTimeMin}
-            onChange={(value) => setRule("lastPeakTimeMin", value)}
-            inputMode="decimal"
-            hint={
-              rules.lastPeakTimeMin.trim() && parseUserNumber(rules.lastPeakTimeMin) == null
-                ? "Use a number."
-                : "Met when the last peak comes out at or before this many minutes. Later than that is not met."
-            }
-            invalid={
-              rules.lastPeakTimeMin.trim() !== "" && parseUserNumber(rules.lastPeakTimeMin) == null
-            }
-          />
-          <TextField
-            label="Minimum resolution"
-            value={rules.minResolution}
-            onChange={(value) => setRule("minResolution", value)}
-            inputMode="decimal"
-            hint={
-              rules.minResolution.trim() && parseUserNumber(rules.minResolution) == null
-                ? "Use a number."
-                : "Met when the smallest resolution, leaving out the t0 peak, is at least this number. If the file has fewer peaks than the specification, this shows NA and is not met."
-            }
-            invalid={rules.minResolution.trim() !== "" && parseUserNumber(rules.minResolution) == null}
-          />
-          <TextField
-            label="Max back-pressure (psi)"
-            value={rules.maxBackPressurePsi}
-            onChange={(value) => setRule("maxBackPressurePsi", value)}
-            inputMode="decimal"
-            hint={
-              rules.maxBackPressurePsi.trim() && parseUserNumber(rules.maxBackPressurePsi) == null
-                ? "Use a number."
-                : "Met when the highest pressure is at or below this number."
-            }
-            invalid={
-              rules.maxBackPressurePsi.trim() !== "" &&
-              parseUserNumber(rules.maxBackPressurePsi) == null
-            }
-          />
-        </CardContent>
-      </Card>
     </div>
   );
 }
@@ -258,6 +263,7 @@ function TextField({
   value,
   onChange,
   hint,
+  note,
   inputMode,
   invalid,
 }: {
@@ -265,15 +271,19 @@ function TextField({
   value: string;
   onChange: (value: string) => void;
   hint?: string;
+  note?: string;
   inputMode?: "decimal" | "numeric" | "text";
   invalid?: boolean;
 }) {
   const id = label.toLowerCase().replace(/[^a-z0-9]+/g, "-");
   return (
     <div className="flex min-w-0 flex-col gap-1.5">
-      <Label htmlFor={id} className="h-auto whitespace-normal leading-snug">
-        {label}
-      </Label>
+      <div className="flex items-start gap-1.5">
+        <Label htmlFor={id} className="h-auto whitespace-normal leading-snug">
+          {label}
+        </Label>
+        {note ? <NotePop text={note} label={label} /> : null}
+      </div>
       <Input
         id={id}
         value={value}
