@@ -1,3 +1,4 @@
+import { decisionBesideClass, decisionUnderClass } from "@/components/decision-layout";
 import { Button } from "@/components/ui/button";
 import { NO_CHANGE_YET } from "@/lib/change-label";
 import { EFFICIENCY_CONTINUE, EFFICIENCY_MOVE_ON } from "@/lib/retention";
@@ -7,8 +8,8 @@ const choiceClass =
 
 export function EfficiencyChoiceView({ why, onEfficiency, onContinue }: { why: string; onEfficiency: () => void; onContinue: () => void }) {
   return (
-    <div className="flex flex-col gap-4" id="efficiency-choice">
-      <section id="next-change" className="scroll-mt-16 rounded-xl bg-[#e7f3ee] px-4 py-4 text-[#144237]">
+    <div className="contents" id="efficiency-choice">
+      <section id="next-change" className={`scroll-mt-16 rounded-xl bg-[#e7f3ee] px-4 py-4 text-[#144237] ${decisionBesideClass}`}>
         <h2 className="font-heading text-base">Next change</h2>
         <p className="mt-1 text-base font-semibold">{NO_CHANGE_YET}</p>
         <div id="efficiency-or-selectivity" className="mt-3 flex flex-col gap-2">
@@ -40,7 +41,7 @@ export function EfficiencyChoiceView({ why, onEfficiency, onContinue }: { why: s
           </Button>
         </div>
       </section>
-      <section className="rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10">
+      <section className={`rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10 ${decisionUnderClass}`}>
         <h2 className="font-heading text-base">Why</h2>
         <div className="mt-1 flex flex-col gap-2 text-sm leading-relaxed text-foreground">
           <p>{EFFICIENCY_MOVE_ON}</p>
@@ -63,8 +64,8 @@ export function LeaveSelectivityAsk({
   onNo: () => void;
 }) {
   return (
-    <div className="flex flex-col gap-4" id="leave-selectivity-ask">
-      <section id="next-change" className="scroll-mt-16 rounded-xl bg-[#e7f3ee] px-4 py-4 text-[#144237]">
+    <div className="contents" id="leave-selectivity-ask">
+      <section id="next-change" className={`scroll-mt-16 rounded-xl bg-[#e7f3ee] px-4 py-4 text-[#144237] ${decisionBesideClass}`}>
         <h2 className="font-heading text-base">Next change</h2>
         <p className="mt-1 text-base font-semibold">{NO_CHANGE_YET}</p>
         <div className="mt-3 grid grid-cols-2 gap-2">
@@ -80,7 +81,7 @@ export function LeaveSelectivityAsk({
           </button>
         </div>
       </section>
-      <section className="rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10">
+      <section className={`rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10 ${decisionUnderClass}`}>
         <h2 className="font-heading text-base">Why</h2>
         <div className="mt-1 flex flex-col gap-2 text-sm leading-relaxed text-foreground">
           <p>{ask.question}</p>
@@ -105,12 +106,12 @@ export function LeaveSelectivityDone({ duringRetention }: { duringRetention: boo
     ? "Retention and selectivity are finished. Efficiency is next. That stage is not built yet."
     : "Selectivity is finished. Efficiency is next. That stage is not built yet.";
   return (
-    <div className="flex flex-col gap-4" id="leave-selectivity-done">
-      <section id="next-change" className="scroll-mt-16 rounded-xl bg-[#e7f3ee] px-4 py-4 text-[#144237]">
+    <div className="contents" id="leave-selectivity-done">
+      <section id="next-change" className={`scroll-mt-16 rounded-xl bg-[#e7f3ee] px-4 py-4 text-[#144237] ${decisionBesideClass}`}>
         <h2 className="font-heading text-base">Next change</h2>
         <p className="mt-1 text-base font-semibold">{NO_CHANGE_YET}</p>
       </section>
-      <section className="rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10">
+      <section className={`rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10 ${decisionUnderClass}`}>
         <h2 className="font-heading text-base">Why</h2>
         <div className="mt-1 flex flex-col gap-2 text-sm leading-relaxed text-foreground">
           <p>{nextChange}</p>

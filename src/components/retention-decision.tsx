@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { NO_CHANGE_YET, retentionChangeLabel } from "@/lib/change-label";
+import { decisionBesideClass, decisionUnderClass } from "@/components/decision-layout";
 import {
   formatPercentB,
   minimumPercentNote,
@@ -11,6 +12,7 @@ import {
   type RetentionDecision,
   type RetentionFit,
 } from "@/lib/retention";
+import { PERCENT_B_SENTENCE, SELECTIVITY_ORDER } from "@/lib/setting-kind";
 
 export function RetentionDecisionView({
   decision,
@@ -40,7 +42,6 @@ export function RetentionDecisionView({
   useEffect(() => {
     onLinePercent?.(reported);
   }, [onLinePercent, reported]);
-  const nextChange = fit && overridden ? nextChangeForSelection(fit, solved) : decision.nextChange;
   const shownPercent = overridden && solved ? solved.nextPercentB : (pickedPercent ?? decision.nextPercentB);
   const label = retentionChangeLabel(
     shownPercent === decision.nextPercentB ? decision : { ...decision, nextPercentB: shownPercent },
@@ -48,10 +49,10 @@ export function RetentionDecisionView({
   );
 
   return (
-    <div className="flex flex-col gap-4" id="retention-decision">
+    <div className="contents" id="retention-decision">
       <section
         id="next-change"
-        className="scroll-mt-16 rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10"
+        className={`scroll-mt-16 rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10 ${decisionBesideClass}`}
       >
         <h2 className="font-heading text-base">Next change</h2>
         <p className="mt-1 text-base font-semibold text-foreground">{label}</p>
@@ -70,13 +71,11 @@ export function RetentionDecisionView({
           </div>
         ) : null}
       </section>
-      <section id="min-b-note" className="rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10">
+      <section id="min-b-note" className={`rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10 ${decisionUnderClass}`}>
         <h2 className="font-heading text-base">Why</h2>
         <div className="mt-1 flex flex-col gap-2 text-sm leading-relaxed text-foreground">
-          {whyParagraphs(nextChange, decision.why, decision.following).map((paragraph, index) => (
-            <p key={index} id={paragraph === decision.following ? "following-step" : undefined}>
-              {paragraph}
-            </p>
+          {whyParagraphs(decision.why).map((paragraph, index) => (
+            <p key={index}>{paragraph}</p>
           ))}
           {decision.bChoices && decision.bChoices.length > 1
             ? decision.bChoices.map((choice) => <p key={choice.id}>{choice.sentence}</p>)
@@ -147,7 +146,7 @@ export function LaterChangeNote({ decision }: { decision: RetentionDecision | nu
       <section className="rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10">
         <h2 className="font-heading text-base">Why</h2>
         <div className="mt-1 flex flex-col gap-2 text-sm leading-relaxed text-foreground">
-          {whyParagraphs(explanation, decision?.why ?? "").map((paragraph, index) => (
+          {(decision?.why?.trim() ? whyParagraphs(decision.why) : [explanation]).map((paragraph, index) => (
             <p key={index}>{paragraph}</p>
           ))}
         </div>
@@ -156,15 +155,23 @@ export function LaterChangeNote({ decision }: { decision: RetentionDecision | nu
   );
 }
 
-function whyParagraphs(nextChange: string, why: string, following?: string | null): string[] {
-  const reason = why.trim();
-  const parts: string[] = [];
-  const change = nextChange.trim();
-  if (change && !reason.includes(change)) parts.push(change);
-  const later = following?.trim() ?? "";
-  if (later && later !== change && !reason.includes(later) && !parts.includes(later)) parts.push(later);
-  if (reason) parts.push(...reason.split("\n\n"));
+function whyParagraphs(why: string): string[] {
+  const parts = why
+    .split("\n\n")
+    .map((paragraph) => paragraph.trim())
+    .filter((paragraph) => paragraph.length > 0 && !isOtherStage(paragraph));
   return parts.length > 0 ? parts : [NO_CHANGE_YET];
+}
+
+/** The pump range and the later selectivity sequence stay off this step. */
+function isOtherStage(paragraph: string): boolean {
+  if (paragraph.includes(SELECTIVITY_ORDER)) return true;
+  if (paragraph.includes(PERCENT_B_SENTENCE)) return true;
+  if (paragraph.startsWith("The order is")) return true;
+  if (paragraph.startsWith("After 40°C") || paragraph.startsWith("After 60°C") || paragraph.startsWith("After the solvent")) {
+    return true;
+  }
+  return false;
 }
 
 function MinimumPercentFit({
@@ -240,14 +247,6 @@ function MinimumPercentFit({
       </div>
     </div>
   );
-}
-
-function nextChangeForSelection(fit: RetentionFit, solved: MinimumFit | null): string {
-  if (!solved) return "The line cannot be drawn yet. A %B is not recommended from the runs selected now.";
-  let next = `Run the next chromatogram at ${formatPercentB(solved.nextPercentB)}% B. That is the %B calculated to put the last peak at ${fit.specifiedTimeMin.toFixed(3)} min.`;
-  if (solved.clamped === "high") next += " The calculated value was above 100, so it is held at 100.";
-  else if (solved.clamped === "low") next += " The calculated value was below 0, so it is held at 0.";
-  return next;
 }
 
 function selectedLine(catalog: readonly FitCatalogRun[], selected: readonly number[]): string {
