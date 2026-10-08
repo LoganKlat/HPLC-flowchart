@@ -62,7 +62,7 @@ describe("run file names", () => {
     expect(full.ok).toBe(true);
     if (!full.ok) return;
     expect(full.fields.ligand).toBe("biphenyl");
-    expect(full.fields.injectionVolume).toBe("20u");
+    expect(full.fields.injectionVolume).toBe("20");
     expect(full.fields.percentB).toBe("70");
 
     const short = parseRunFileName("GR41-04-90.csv");
@@ -193,5 +193,67 @@ describe("run file names", () => {
     );
     expect(decision.nextChange.length).toBeGreaterThan(0);
     expect(decision.nextChange.toLowerCase()).not.toContain("file name");
+  });
+
+  it("reads T60, a unit stuck on a number, and a trailing upload suffix", () => {
+    const stem = "GR09-16-4-ACN-3-ISO-35-1.5-20u-CP-0.1-C18aqP-150x4.6x5-T60-254";
+    for (const fileName of [stem, `${stem}.xlsx`, `${stem}_493a.xlsx`]) {
+      const parsed = parseRunFileName(fileName);
+      expect(parsed.ok, fileName).toBe(true);
+      if (!parsed.ok) return;
+      expect(parsed.fields).toMatchObject({
+        solvent: "ACN",
+        ph: "3",
+        method: "ISO",
+        percentB: "35",
+        flowRate: "1.5",
+        injectionVolume: "20",
+        sampleType: "CP",
+        sampleConcentration: "0.1",
+        ligand: "C18aq",
+        lengthMm: "150",
+        diameterMm: "4.6",
+        particleSize: "5",
+        temperature: "60",
+        wavelength: "254",
+      });
+    }
+
+    const microliters = parseRunFileName(
+      "GR09-16-4-ACN-3-ISO-35-1.5mL/min-20µL-CP-0.1-C18aqP-150x4.6x5-60°C-254.xlsx",
+    );
+    expect(microliters.ok).toBe(true);
+    if (!microliters.ok) return;
+    expect(microliters.fields.flowRate).toBe("1.5");
+    expect(microliters.fields.injectionVolume).toBe("20");
+    expect(microliters.fields.temperature).toBe("60");
+    expect(microliters.fields.percentB).toBe("35");
+
+    const ul = parseRunFileName("GR09-16-4-acn-3-iso-35-1.5-20uL-CP-0.1-C18aqP-150x4.6x5-t60-254.xlsx");
+    expect(ul.ok).toBe(true);
+    if (!ul.ok) return;
+    expect(ul.fields.solvent).toBe("ACN");
+    expect(ul.fields.method).toBe("ISO");
+    expect(ul.fields.injectionVolume).toBe("20");
+    expect(ul.fields.temperature).toBe("60");
+
+    const micro = parseRunFileName("GR09-16-4-ACN-3-ISO-35-1.5-20μL-CP-0.1-C18aqP-150x4.6x5-60C-254.xlsx");
+    expect(micro.ok).toBe(true);
+    if (!micro.ok) return;
+    expect(micro.fields.injectionVolume).toBe("20");
+    expect(micro.fields.temperature).toBe("60");
+
+    const thf = parseRunFileName("GR09-16-4-thf-3-ISO-35-1.5-20-CP-0.1-C18aqP-150x4.6x5-amb-254.xlsx");
+    expect(thf.ok).toBe(true);
+    if (!thf.ok) return;
+    expect(thf.fields.solvent).toBe("THF");
+    expect(thf.fields.temperature).toBe("ambient");
+
+    const spaced = parseRunFileName("GR09-16-4-ACN-3-ISO-35-1.5 mL/min-20 uL-CP-0.1-C18aqP-150x4.6x5-60 °C-254.xlsx");
+    expect(spaced.ok).toBe(true);
+    if (!spaced.ok) return;
+    expect(spaced.fields.flowRate).toBe("1.5");
+    expect(spaced.fields.injectionVolume).toBe("20");
+    expect(spaced.fields.temperature).toBe("60");
   });
 });

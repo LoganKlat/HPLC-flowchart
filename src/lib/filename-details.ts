@@ -36,8 +36,14 @@ export function parseRunFileName(fileName: string): FilenameParse {
 }
 
 function nameStems(fileName: string): string[] {
-  let stem = fileName.trim().replace(/^.*[/\\]/, "");
-  stem = stem.replace(/\.(csv|txt|xlsx)$/i, "");
+  const trimmed = fileName.trim();
+  const base = trimmed.replace(/^.*[/\\]/, "");
+  const seeds = base === trimmed ? [trimmed] : [trimmed, base];
+  return seeds.flatMap((seed) => stemVariants(seed));
+}
+
+function stemVariants(seed: string): string[] {
+  let stem = seed.replace(/\.(csv|txt|xlsx)$/i, "");
   stem = stem.replace(/\s+\(\d+\)$/, "");
   const stems = [stem];
   const withoutUploadSuffix = stem.replace(/_[A-Za-z0-9]+$/, "");
@@ -78,20 +84,20 @@ function parseShort(parts: string[], oven: string | null): Partial<RunDetails> |
 
 function parseFull(parts: string[]): Partial<RunDetails> | null {
   const [group, injection, hplc, solvent, ph, method, percentB, flow, injectionVolume, sampleType, concentration, ligand, dimensions, oven, wavelength] = parts;
-  const size = dimensions.match(/^(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)$/i);
+  const size = dimensions.match(/^(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)(?:u|um|µm|μm)?$/i);
   const temperature = ovenText(oven);
   if (
     !isGroup(group) ||
     !isDigits(injection) ||
     !isDigits(hplc) ||
     !/^[A-Za-z]+$/.test(solvent) ||
-    !isNumber(ph) ||
+    !numericValue(ph) ||
     !/^[A-Za-z]+$/.test(method) ||
-    !isNumber(percentB) ||
-    !isNumber(flow) ||
-    !/^\d+(?:\.\d+)?u?$/i.test(injectionVolume) ||
+    !numericValue(percentB) ||
+    !numericValue(flow) ||
+    !numericValue(injectionVolume) ||
     !/^[A-Za-z]+$/.test(sampleType) ||
-    !isNumber(concentration) ||
+    !numericValue(concentration) ||
     !/^[A-Za-z0-9]+$/.test(ligand) ||
     !size ||
     !temperature ||
@@ -101,11 +107,11 @@ function parseFull(parts: string[]): Partial<RunDetails> | null {
   }
 
   const fields: Partial<RunDetails> = {
-    ph,
-    percentB,
-    flowRate: flow,
-    injectionVolume,
-    sampleConcentration: concentration,
+    ph: numericValue(ph)!,
+    percentB: numericValue(percentB)!,
+    flowRate: numericValue(flow)!,
+    injectionVolume: numericValue(injectionVolume)!,
+    sampleConcentration: numericValue(concentration)!,
     lengthMm: size[1],
     diameterMm: size[2],
     particleSize: size[3],
@@ -143,10 +149,23 @@ function solventLabelFor(token: string): string | null {
 }
 
 function ovenText(token: string): string | null {
-  if (/^(amb|ambient)$/i.test(token)) return "ambient";
-  const degrees = token.match(/^(\d+(?:\.\d+)?)c?$/i);
+  const cleaned = token.trim().replace(/\s+/g, "").replace(/°/g, "");
+  if (/^(amb|ambient)$/i.test(cleaned)) return "ambient";
+  const prefixed = cleaned.match(/^t(\d+(?:\.\d+)?)c?$/i);
+  if (prefixed) return prefixed[1];
+  const degrees = cleaned.match(/^(\d+(?:\.\d+)?)c?$/i);
   if (!degrees) return null;
   return degrees[1];
+}
+
+/** Leading number, with a unit such as u, µL, or mL/min left off the stored value. */
+function numericValue(token: string): string | null {
+  const compact = token.trim().replace(/\s+/g, "");
+  const match = compact.match(/^(\d+(?:\.\d+)?)(.*)$/);
+  if (!match) return null;
+  const rest = match[2];
+  if (rest === "" || /^(?:u|ul|µl|μl|ml\/min|%)$/i.test(rest)) return match[1];
+  return null;
 }
 
 function isGroup(value: string): boolean {
