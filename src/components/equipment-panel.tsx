@@ -6,7 +6,7 @@ import { ColumnDiagram } from "@/components/column-diagram";
 import { ColumnRetentionAnimation } from "@/components/column-retention-animation";
 import { FunctionNoteView, type FunctionNote } from "@/components/function-note";
 import { HplcSketch } from "@/components/hplc-drawing";
-import { KindMark, SettingLegend } from "@/components/setting-legend";
+import { KindMark } from "@/components/setting-legend";
 import { Button } from "@/components/ui/button";
 import type { SettingKind } from "@/lib/setting-kind";
 
@@ -463,7 +463,6 @@ export function EquipmentPanel({ onOpenNav }: { onOpenNav: () => void }) {
         <p className="text-xs tracking-[0.16em] text-[#0f6b56] uppercase">Lab setups</p>
         <h1 className="mt-1 font-heading text-3xl text-foreground sm:text-4xl">Equipment</h1>
       </header>
-      <SettingLegend />
       <div id="equipment-tabs" className="flex flex-wrap gap-2">
         {equipmentTabs.map((tab) => {
           const selected = tab.id === view;
