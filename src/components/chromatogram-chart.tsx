@@ -170,9 +170,8 @@ export function ChromatogramChart({
           ))}
         </ul>
       ) : null}
-      <figcaption className="flex items-baseline justify-between gap-3 px-4 pt-3">
+      <figcaption className="px-4 pt-3">
         <span className="font-heading text-base text-foreground">Chromatogram</span>
-        <span className="text-xs text-muted-foreground">{yLabel}</span>
       </figcaption>
       <svg
         viewBox={`0 0 ${width} ${height}`}
@@ -282,10 +281,9 @@ export function ChromatogramChart({
             ))}
             {pressureUnit ? (
               <text
-                x={width - 14}
-                y={plotTop + innerHeight / 2}
-                transform={`rotate(-90 ${width - 14} ${plotTop + innerHeight / 2})`}
-                textAnchor="middle"
+                x={width - 8}
+                y={16}
+                textAnchor="end"
                 className="fill-muted-foreground text-[12px]"
               >
                 {pressureUnit}
@@ -345,13 +343,7 @@ export function ChromatogramChart({
             </text>
           </g>
         ))}
-        <text
-          x={16}
-          y={plotTop + innerHeight / 2}
-          transform={`rotate(-90 16 ${plotTop + innerHeight / 2})`}
-          textAnchor="middle"
-          className="fill-foreground text-[12px]"
-        >
+        <text x={8} y={16} textAnchor="start" className="fill-foreground text-[12px]">
           {yLabel}
         </text>
       </svg>
