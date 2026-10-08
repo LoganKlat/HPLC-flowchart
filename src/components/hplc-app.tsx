@@ -418,7 +418,7 @@ export function HplcApp() {
     <div
       className={
         section === "decision-engine"
-          ? "flex h-dvh max-h-dvh w-full flex-none flex-col overflow-hidden md:flex-row"
+          ? "flex h-dvh max-h-dvh w-full flex-none flex-col overflow-hidden p-3 sm:p-4 md:flex-row md:items-stretch"
           : "flex min-h-dvh flex-1 flex-col md:flex-row"
       }
     >
@@ -448,10 +448,10 @@ export function HplcApp() {
         }}
         className="flex! h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden"
       >
-      <div className="mx-auto flex h-full min-h-0 w-full min-w-0 max-w-6xl flex-col overflow-hidden px-4 py-4 sm:px-6 sm:py-5 lg:max-w-none">
-      <Watermark />
+      <div className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden pl-4 sm:pl-5">
       <div id="decision-layout" className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden lg:grid lg:grid-cols-[28rem_minmax(0,1fr)] lg:grid-rows-[auto_minmax(0,1fr)] lg:gap-x-5 lg:gap-y-3">
-      <header className="order-2 shrink-0 lg:col-start-2 lg:row-start-1">
+      <header className="order-2 flex shrink-0 items-start justify-between gap-4 lg:col-span-2 lg:col-start-1 lg:row-start-1">
+        <div className="min-w-0">
         <div className="mb-3 md:hidden">
           <Button type="button" variant="outline" className="h-10 px-3" onClick={() => setNavOpen(true)}>
             Sections
@@ -463,6 +463,8 @@ export function HplcApp() {
           See whether this chromatogram meets the specification. While retention or selectivity is
           the step, the page says what to change next.
         </p>
+        </div>
+        <Watermark className="mt-1" />
       </header>
       <div className="order-3 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden lg:col-start-2 lg:row-start-2">
         {syncedRuns.map((run, index) => (
@@ -591,15 +593,15 @@ export function HplcApp() {
                 index === shown ? (
                   <div
                     id="run-tabs"
-                    className="order-1 shrink-0 border-b border-border bg-card lg:order-2 lg:w-max lg:min-h-0 lg:shrink lg:self-stretch lg:overflow-y-auto lg:border-b-0 lg:border-l"
+                    className="order-1 flex shrink-0 border-b border-border bg-card lg:order-2 lg:w-max lg:min-h-0 lg:shrink lg:flex-col lg:self-stretch lg:overflow-y-auto lg:border-b-0 lg:border-l"
                   >
-                    <div className="overflow-x-auto lg:h-full lg:overflow-x-visible lg:overflow-y-auto">
-                      <TabsList className="flex! h-auto! w-max min-w-full flex-row! items-stretch justify-start gap-2 rounded-none bg-transparent p-2 group-data-horizontal/tabs:h-auto! lg:h-full! lg:w-full! lg:flex-col! lg:p-3">
+                    <div className="overflow-x-auto lg:overflow-visible">
+                      <TabsList className="flex! h-auto! w-max flex-row! items-stretch justify-start gap-0! rounded-none bg-transparent p-0! group-data-horizontal/tabs:h-auto! lg:w-full! lg:flex-col!">
                         {syncedRuns.map((_, tabIndex) => (
                           <TabsTrigger
                             key={tabIndex}
                             value={String(tabIndex)}
-                            className="h-10! w-auto! flex-none! rounded-md border border-solid px-3 text-sm shadow-none! transition-none! after:hidden! lg:w-full! lg:px-2"
+                            className="h-10! w-auto! flex-none! rounded-none! border-0! border-r border-solid px-3 text-sm shadow-none! transition-none! after:hidden! last:border-r-0 lg:w-full! lg:border-r-0 lg:border-b lg:px-2 lg:last:border-b-0"
                             style={runTabStyle(tabIndex === shown, hoveredRun === tabIndex)}
                             onMouseEnter={() => setHoveredRun(tabIndex)}
                             onMouseLeave={() => setHoveredRun((current) => (current === tabIndex ? null : current))}
@@ -637,9 +639,9 @@ export function HplcApp() {
   );
 }
 
-function Watermark() {
+function Watermark({ className = "mb-3" }: { className?: string }) {
   return (
-    <div id="watermark" className="pointer-events-none mb-3 flex shrink-0 justify-end">
+    <div id="watermark" className={`pointer-events-none flex shrink-0 justify-end ${className}`}>
       <div className="flex items-center gap-1.5 text-[#144237]/40">
         <svg viewBox="0 0 64 28" className="h-5 w-11" aria-hidden="true">
           <path
@@ -713,8 +715,14 @@ function AppSidebar({
 
   return (
     <>
-      <aside className="hidden w-60 shrink-0 border-r border-border bg-card md:block">
-        <div className="sticky top-0 px-3 py-6">{nav}</div>
+      <aside
+        className={
+          section === "decision-engine"
+            ? "hidden h-full min-h-0 w-60 shrink-0 flex-col self-stretch border-r border-border bg-card md:flex"
+            : "hidden w-60 shrink-0 border-r border-border bg-card md:block"
+        }
+      >
+        <div className={section === "decision-engine" ? "px-3 py-4" : "sticky top-0 px-3 py-6"}>{nav}</div>
       </aside>
       {open ? (
         <div className="fixed inset-0 z-40 md:hidden">

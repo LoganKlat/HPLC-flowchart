@@ -104,18 +104,17 @@ export function StartHighBNote() {
       <h2 className="font-heading text-base">What we’re doing</h2>
       <div className="mt-1 flex flex-col gap-2 text-sm leading-relaxed">
         <p>
-          Retention comes first. It finds a %B where the peak count meets the specification and the
-          last peak comes out by the specified time.
+          The main goal is to separate the compounds in a composite sample, so each compound shows
+          up as its own peak.
         </p>
         <p>
-          Selectivity is next. It changes temperature, then solvent, then the column coating, to
-          pull the peaks apart.
+          First, find a %B where the peak count meets the specification and the last peak comes out
+          by the time that was set. Next, change the conditions — temperature, then the solvent,
+          then the column coating — so peaks that still sit together pull apart. After that, make
+          the peaks narrower. Last, change %B while the run is going. Those last two stages are not
+          built yet.
         </p>
-        <p>
-          Efficiency is after that. It makes the peaks narrower. Gradient is last. It changes %B
-          while the run is going. Those two are not built yet.
-        </p>
-        <p>Start around 90–100% B. A higher %B lets the decision engine work better.</p>
+        <p>Start the first run around 90–100% B. A higher %B lets the decision engine work better.</p>
       </div>
     </section>
   );
