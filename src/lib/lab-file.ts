@@ -478,11 +478,11 @@ function readChromatogram(
   yAxis: string;
   missingMessage: string | null;
 } {
+  const names = [...sections.keys()];
   const sectionName =
-    [...sections.keys()].find(
-      (name) => name.includes("Chromatogram") && name.includes("Detector A"),
-    ) ??
-    [...sections.keys()].find((name) => name.includes("Chromatogram")) ??
+    names.find((name) => name.includes("Chromatogram") && name.includes("Detector A-Ch1")) ??
+    names.find((name) => name.includes("Chromatogram") && name.includes("Detector A")) ??
+    names.find((name) => name.includes("Chromatogram")) ??
     null;
 
   if (!sectionName) {
@@ -503,7 +503,10 @@ function readChromatogram(
   const multiplierRaw = metaGet(table.meta, "Intensity Multiplier");
   const multiplier = multiplierRaw == null ? null : parseFileNumber(multiplierRaw);
   const yAxis = units || "Absorbance";
-  const applyMultiplier = multiplier != null && isAbsorbanceUnit(units);
+  const absorbance = isAbsorbanceUnit(units);
+  // Detector A-Ch1 stores counts with Intensity Multiplier 0.001, which is mAU.
+  // A PDA export can label those same counts mAU and leave the multiplier at 1.
+  const fileFactor = absorbance && multiplier != null ? multiplier : 1;
 
   if (!table.headerFound) {
     return {
@@ -524,8 +527,11 @@ function readChromatogram(
     if (timeMin == null || raw == null) continue;
     points.push({
       timeMin,
-      intensity: applyMultiplier ? raw * multiplier : raw,
+      intensity: raw * fileFactor,
     });
+  }
+  if (absorbance && fileFactor === 1 && points.some((point) => Math.abs(point.intensity) >= 10000)) {
+    for (const point of points) point.intensity *= 0.001;
   }
 
   if (points.length === 0) {

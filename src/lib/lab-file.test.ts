@@ -256,6 +256,44 @@ R.Time (min),Intensity
     expect(read.pressureTrace).toBeNull();
     expect(read.pressureFound).toBe(false);
   });
+
+  it("turns PDA counts labeled mAU into mAU with the 0.001 conversion", () => {
+    const text = `
+[Peak Table(Detector A)]
+# of Peaks,1
+Peak#,R.Time
+1,1.0
+[PDA Multi Chromatogram(Ch1)]
+Intensity Units,mAU
+Intensity Multiplier,1
+R.Time (min),Intensity
+0,-485
+1,1903813
+`;
+    const read = readLabFile(text);
+    expect(read.chromatogramSectionName).toBe("PDA Multi Chromatogram(Ch1)");
+    expect(read.chromatogramYAxis).toBe("mAU");
+    expect(read.chromatogram?.[0]?.intensity).toBeCloseTo(-0.485, 5);
+    expect(read.chromatogram?.[1]?.intensity).toBeCloseTo(1903.813, 3);
+  });
+
+  it("leaves a small mAU trace with multiplier 1 unchanged", () => {
+    const text = `
+[Peak Table(Detector A)]
+# of Peaks,1
+Peak#,R.Time
+1,1.0
+[LC Chromatogram(Detector A-Ch1)]
+Intensity Units,mAU
+Intensity Multiplier,1
+R.Time (min),Intensity
+0,12
+1,840
+`;
+    const read = readLabFile(text);
+    expect(read.chromatogramSectionName).toBe("LC Chromatogram(Detector A-Ch1)");
+    expect(read.chromatogram?.[1]?.intensity).toBe(840);
+  });
 });
 
 function encodeUtf16(text: string, endian: "le" | "be"): Uint8Array {
