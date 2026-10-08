@@ -1,4 +1,4 @@
-import { decisionBesideClass, decisionUnderClass } from "@/components/decision-layout";
+import { decisionBesideClass, decisionUnderClass, nextChangeValueClass } from "@/components/decision-layout";
 import { Button } from "@/components/ui/button";
 import { selectivityChangeLabel } from "@/lib/change-label";
 import { LIGANDS, SOLVENTS, chartX, findSolvent, type SelectivityPlan, type TempPath } from "@/lib/selectivity";
@@ -38,9 +38,9 @@ export function SelectivityDecisionView({
 
   return (
     <div className="contents" id="selectivity-decision">
-      <section id="next-change" className={`scroll-mt-16 rounded-xl bg-[#e7f3ee] px-4 py-4 text-[#144237] ${decisionBesideClass}`}>
+      <section id="next-change" className={`flex flex-col scroll-mt-16 rounded-xl bg-[#e7f3ee] px-4 py-4 text-[#144237] ${decisionBesideClass}`}>
         <h2 className="font-heading text-base">Next change</h2>
-        <p className="mt-1 text-base font-semibold">{label}</p>
+        <p className={nextChangeValueClass}>{label}</p>
         {choice ? (
           <div id="temp-choice" className="mt-3 flex flex-col gap-2">
             <Button

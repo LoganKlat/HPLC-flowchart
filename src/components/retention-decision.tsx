@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { NO_CHANGE_YET, retentionChangeLabel } from "@/lib/change-label";
-import { decisionBesideClass, decisionUnderClass } from "@/components/decision-layout";
+import { decisionBesideClass, decisionUnderClass, nextChangeValueClass } from "@/components/decision-layout";
 import {
   formatPercentB,
   minimumPercentNote,
@@ -52,10 +52,10 @@ export function RetentionDecisionView({
     <div className="contents" id="retention-decision">
       <section
         id="next-change"
-        className={`scroll-mt-16 rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10 ${decisionBesideClass}`}
+        className={`flex flex-col scroll-mt-16 rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10 ${decisionBesideClass}`}
       >
         <h2 className="font-heading text-base">Next change</h2>
-        <p className="mt-1 text-base font-semibold text-foreground">{label}</p>
+        <p className={nextChangeValueClass}>{label}</p>
         {decision.bChoices && decision.bChoices.length > 1 ? (
           <div id="percent-choices" className="mt-3 flex flex-col gap-2">
             {decision.bChoices.map((choice) => (

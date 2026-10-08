@@ -1,4 +1,4 @@
-import { decisionBesideClass, decisionUnderClass } from "@/components/decision-layout";
+import { decisionBesideClass, decisionUnderClass, nextChangeValueClass } from "@/components/decision-layout";
 import { Button } from "@/components/ui/button";
 import { NO_CHANGE_YET } from "@/lib/change-label";
 import { EFFICIENCY_CONTINUE, EFFICIENCY_MOVE_ON } from "@/lib/retention";
@@ -9,9 +9,9 @@ const choiceClass =
 export function EfficiencyChoiceView({ why, onEfficiency, onContinue }: { why: string; onEfficiency: () => void; onContinue: () => void }) {
   return (
     <div className="contents" id="efficiency-choice">
-      <section id="next-change" className={`scroll-mt-16 rounded-xl bg-[#e7f3ee] px-4 py-4 text-[#144237] ${decisionBesideClass}`}>
+      <section id="next-change" className={`flex flex-col scroll-mt-16 rounded-xl bg-[#e7f3ee] px-4 py-4 text-[#144237] ${decisionBesideClass}`}>
         <h2 className="font-heading text-base">Next change</h2>
-        <p className="mt-1 text-base font-semibold">{NO_CHANGE_YET}</p>
+        <p className={nextChangeValueClass}>{NO_CHANGE_YET}</p>
         <div id="efficiency-or-selectivity" className="mt-3 flex flex-col gap-2">
           <Button
             type="button"
@@ -65,9 +65,9 @@ export function LeaveSelectivityAsk({
 }) {
   return (
     <div className="contents" id="leave-selectivity-ask">
-      <section id="next-change" className={`scroll-mt-16 rounded-xl bg-[#e7f3ee] px-4 py-4 text-[#144237] ${decisionBesideClass}`}>
+      <section id="next-change" className={`flex flex-col scroll-mt-16 rounded-xl bg-[#e7f3ee] px-4 py-4 text-[#144237] ${decisionBesideClass}`}>
         <h2 className="font-heading text-base">Next change</h2>
-        <p className="mt-1 text-base font-semibold">{NO_CHANGE_YET}</p>
+        <p className={nextChangeValueClass}>{NO_CHANGE_YET}</p>
         <div className="mt-3 grid grid-cols-2 gap-2">
           <button type="button" className={`${choiceClass} border-primary bg-accent text-foreground`} onClick={onYes}>
             Yes
@@ -107,9 +107,9 @@ export function LeaveSelectivityDone({ duringRetention }: { duringRetention: boo
     : "Selectivity is finished. Efficiency is next. That stage is not built yet.";
   return (
     <div className="contents" id="leave-selectivity-done">
-      <section id="next-change" className={`scroll-mt-16 rounded-xl bg-[#e7f3ee] px-4 py-4 text-[#144237] ${decisionBesideClass}`}>
+      <section id="next-change" className={`flex flex-col scroll-mt-16 rounded-xl bg-[#e7f3ee] px-4 py-4 text-[#144237] ${decisionBesideClass}`}>
         <h2 className="font-heading text-base">Next change</h2>
-        <p className="mt-1 text-base font-semibold">{NO_CHANGE_YET}</p>
+        <p className={nextChangeValueClass}>{NO_CHANGE_YET}</p>
       </section>
       <section className={`rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10 ${decisionUnderClass}`}>
         <h2 className="font-heading text-base">Why</h2>

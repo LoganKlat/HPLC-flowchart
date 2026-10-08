@@ -322,7 +322,6 @@ export function BeadDiagram() {
   const [hoveredChoice, setHoveredChoice] = useState<BeadKind | null>(null);
   const [openId, setOpenId] = useState<NoteId | null>(null);
   const [pinnedId, setPinnedId] = useState<NoteId | null>(null);
-  const [carbonTip, setCarbonTip] = useState(false);
   const surface = beadSurface(carbonLoad);
   const sentence = LIGANDS.find((name) => name === ligand);
   const open =
@@ -448,7 +447,12 @@ export function BeadDiagram() {
           />
           {sentence ? <p className="text-sm text-muted-foreground">{ligandSentences[sentence]}</p> : null}
         </div>
-        <div className="rounded-lg px-1 py-2">
+        <div
+          className="rounded-lg px-1 py-2"
+          onMouseEnter={() => setOpenId("load")}
+          onMouseLeave={() => setOpenId((current) => (current === "load" ? null : current))}
+          onClick={() => setOpenId("load")}
+        >
           <div className="flex items-baseline justify-between gap-3">
             <div>
               <p className="text-sm font-medium">Carbon load <KindMark kind="chemical" /></p>
@@ -456,34 +460,18 @@ export function BeadDiagram() {
             </div>
             <p className="font-heading text-lg text-[#144237] tabular-nums">{carbonLoad}%</p>
           </div>
-          <div
-            className="relative mt-1"
-            onMouseEnter={() => setCarbonTip(true)}
-            onMouseLeave={() => setCarbonTip(false)}
-          >
-            <input
-              id="bead-carbon-load"
-              className="column-slider"
-              type="range"
-              min={0}
-              max={100}
-              step={1}
-              value={carbonLoad}
-              aria-valuetext={`${carbonLoad} percent`}
-              aria-describedby={carbonTip ? "carbon-load-note" : undefined}
-              onChange={(event) => setCarbonLoad(Number(event.target.value))}
-              onClick={() => setCarbonTip(true)}
-            />
-            {carbonTip ? (
-              <div
-                id="carbon-load-note"
-                role="tooltip"
-                className="absolute bottom-full left-0 z-30 mb-2 w-[min(100%,36rem)] rounded-xl bg-card p-4 text-sm leading-relaxed text-foreground shadow-lg ring-1 ring-foreground/10"
-              >
-                <FunctionNoteView title={notes.load.label} note={notes.load.note} />
-              </div>
-            ) : null}
-          </div>
+          <input
+            id="bead-carbon-load"
+            className="column-slider mt-1"
+            type="range"
+            min={0}
+            max={100}
+            step={1}
+            value={carbonLoad}
+            aria-valuetext={`${carbonLoad} percent`}
+            aria-describedby={openId === "load" ? "carbon-load-note" : undefined}
+            onChange={(event) => setCarbonLoad(Number(event.target.value))}
+          />
         </div>
         <div className="rounded-lg px-1 py-2" {...bind("particle")}>
           <div className="flex items-baseline justify-between gap-3">
@@ -527,7 +515,9 @@ export function BeadDiagram() {
         className="rounded-xl bg-card px-4 py-4 text-sm leading-relaxed text-foreground ring-1 ring-foreground/10 lg:sticky lg:top-4 lg:col-start-2 lg:row-start-1"
       >
         {open ? (
-          <FunctionNoteView title={open.label} note={open.note} />
+          <div id={openId === "load" ? "carbon-load-note" : undefined}>
+            <FunctionNoteView title={open.label} note={open.note} />
+          </div>
         ) : (
           <p className="text-muted-foreground">Hover or tap a control, or the bead.</p>
         )}

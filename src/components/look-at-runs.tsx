@@ -1,4 +1,4 @@
-import { decisionBesideClass, decisionUnderClass } from "@/components/decision-layout";
+import { decisionBesideClass, decisionUnderClass, nextChangeValueClass } from "@/components/decision-layout";
 import { NO_CHANGE_YET } from "@/lib/change-label";
 import { formatPercentB, type LookRun, type LookStep } from "@/lib/retention";
 
@@ -35,9 +35,9 @@ export function LookAtRuns({
 
   return (
     <div className="contents" id="look-at-runs">
-      <section id="next-change" className={`scroll-mt-16 rounded-xl bg-[#e7f3ee] px-4 py-4 text-[#144237] ${decisionBesideClass}`}>
+      <section id="next-change" className={`flex flex-col scroll-mt-16 rounded-xl bg-[#e7f3ee] px-4 py-4 text-[#144237] ${decisionBesideClass}`}>
         <h2 className="font-heading text-base">Next change</h2>
-        <p className="mt-1 text-base font-semibold">{NO_CHANGE_YET}</p>
+        <p className={nextChangeValueClass}>{NO_CHANGE_YET}</p>
       </section>
       <section className={`rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10 ${decisionUnderClass}`}>
         <h2 className="font-heading text-base">Why</h2>
