@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type CSSProperties } from "react";
+import { useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { BeadDiagram } from "@/components/bead-diagram";
 import { ColumnDiagram } from "@/components/column-diagram";
 import { ColumnRetentionAnimation } from "@/components/column-retention-animation";
@@ -256,26 +256,179 @@ const equipmentTabs = [
   { id: "beads", label: "Beads" },
 ] as const;
 
-function PartNames({ parts, side }: { parts: Part[]; side: "left" | "right" }) {
+function NameColumn({
+  parts,
+  side,
+  setLabel,
+}: {
+  parts: Part[];
+  side: "left" | "right";
+  setLabel: (id: string, node: HTMLParagraphElement | null) => void;
+}) {
   return (
-    <div className="relative min-w-0">
+    <div className={"flex h-full flex-col justify-evenly " + (side === "left" ? "items-end" : "items-start")}>
       {parts.map((part) => (
         <p
           key={part.id}
+          ref={(node) => setLabel(part.id, node)}
           data-hplc-label={annotationName(part)}
-          className={
-            "absolute max-w-full text-[11px] leading-tight font-medium text-[#144237] sm:text-xs " +
-            (side === "left" ? "right-0 text-right" : "left-0 text-left")
-          }
-          style={{
-            top: `${part.box.top + part.box.height / 2}%`,
-            transform: "translateY(-50%)",
-          }}
+          className="whitespace-nowrap text-xs leading-none font-medium text-[#144237]"
         >
           {annotationName(part)}
         </p>
       ))}
     </div>
+  );
+}
+
+function HplcDiagram({
+  setup,
+  openId,
+  onEnter,
+  onLeave,
+  onPick,
+}: {
+  setup: Setup;
+  openId: string | null;
+  onEnter: (id: string) => void;
+  onLeave: (id: string) => void;
+  onPick: (id: string) => void;
+}) {
+  const frameRef = useRef<HTMLDivElement>(null);
+  const imageRef = useRef<HTMLDivElement>(null);
+  const labels = useRef(new Map<string, HTMLParagraphElement>());
+  const [frame, setFrame] = useState({ w: 0, h: 0 });
+  const [callouts, setCallouts] = useState<{ id: string; points: string }[]>([]);
+  const left = setup.parts.filter((part) => partSide(part) === "left");
+  const right = setup.parts.filter((part) => partSide(part) === "right");
+
+  useLayoutEffect(() => {
+    const frameEl = frameRef.current;
+    const imageEl = imageRef.current;
+    if (!frameEl || !imageEl) return;
+
+    const measure = () => {
+      const root = frameEl.getBoundingClientRect();
+      const img = imageEl.getBoundingClientRect();
+      if (root.width < 2 || img.width < 2) return;
+      const next: { id: string; points: string }[] = [];
+      for (const part of setup.parts) {
+        const node = labels.current.get(part.id);
+        if (!node) continue;
+        const label = node.getBoundingClientRect();
+        const side = partSide(part);
+        const yPart = img.top - root.top + ((part.box.top + part.box.height / 2) / 100) * img.height;
+        const xPart =
+          side === "left"
+            ? img.left - root.left + (part.box.left / 100) * img.width
+            : img.left - root.left + ((part.box.left + part.box.width) / 100) * img.width;
+        const yStart = label.top - root.top + label.height / 2;
+        const xStart = side === "left" ? label.right - root.left + 4 : label.left - root.left - 4;
+        const xBend = side === "left" ? img.left - root.left - 1 : img.right - root.left + 1;
+        const round = (value: number) => Math.round(value * 10) / 10;
+        next.push({
+          id: part.id,
+          points: `${round(xStart)},${round(yStart)} ${round(xBend)},${round(yPart)} ${round(xPart)},${round(yPart)}`,
+        });
+      }
+      setFrame({ w: root.width, h: root.height });
+      setCallouts(next);
+    };
+
+    measure();
+    const img = imageEl.querySelector("img");
+    img?.addEventListener("load", measure);
+    const observer = new ResizeObserver(measure);
+    observer.observe(frameEl);
+    observer.observe(imageEl);
+    return () => {
+      observer.disconnect();
+      img?.removeEventListener("load", measure);
+    };
+  }, [setup]);
+
+  return (
+    <figure id="hplc-diagram" className="overflow-x-auto rounded-xl bg-card p-2 ring-1 ring-foreground/10 sm:p-3">
+      <div
+        ref={frameRef}
+        className="relative grid min-w-[20rem] grid-cols-[max-content_minmax(8rem,1fr)_max-content] items-stretch gap-x-3 sm:gap-x-5"
+      >
+          <NameColumn
+            parts={left}
+            side="left"
+            setLabel={(id, node) => {
+              if (node) labels.current.set(id, node);
+              else labels.current.delete(id);
+            }}
+          />
+          <div ref={imageRef} className="relative min-w-0">
+            <img src={setup.src} alt="" width={setup.width} height={setup.height} className="block h-auto w-full" />
+            {setup.parts.map((part) => {
+              const active = openId === part.id;
+              return (
+                <button
+                  key={part.id}
+                  type="button"
+                  aria-label={part.label}
+                  aria-expanded={active}
+                  className="absolute rounded-sm transition-none"
+                  style={{
+                    left: `${part.box.left}%`,
+                    top: `${part.box.top}%`,
+                    width: `${part.box.width}%`,
+                    height: `${part.box.height}%`,
+                    backgroundColor: active ? "rgba(207, 232, 223, 0.55)" : "transparent",
+                    outline: active ? "2px solid #0f6b56" : "2px solid transparent",
+                  }}
+                  onMouseEnter={() => onEnter(part.id)}
+                  onMouseLeave={() => onLeave(part.id)}
+                  onClick={() => onPick(part.id)}
+                />
+              );
+            })}
+          </div>
+          <NameColumn
+            parts={right}
+            side="right"
+            setLabel={(id, node) => {
+              if (node) labels.current.set(id, node);
+              else labels.current.delete(id);
+            }}
+          />
+        {frame.w > 0 ? (
+          <svg
+            className="pointer-events-none absolute inset-0 h-full w-full"
+            viewBox={`0 0 ${frame.w} ${frame.h}`}
+            aria-hidden="true"
+          >
+            <defs>
+              <marker
+                id="hplc-arrow"
+                markerWidth="6"
+                markerHeight="6"
+                refX="5.5"
+                refY="3"
+                orient="auto"
+                markerUnits="userSpaceOnUse"
+              >
+                <path d="M0,0 L6,3 L0,6 Z" fill="#0f6b56" />
+              </marker>
+            </defs>
+            {callouts.map((callout) => (
+              <polyline
+                key={callout.id}
+                points={callout.points}
+                fill="none"
+                stroke="#0f6b56"
+                strokeWidth="1.5"
+                strokeLinejoin="round"
+                markerEnd="url(#hplc-arrow)"
+              />
+            ))}
+          </svg>
+        ) : null}
+      </div>
+    </figure>
   );
 }
 
@@ -358,92 +511,19 @@ export function EquipmentPanel({ onOpenNav }: { onOpenNav: () => void }) {
           );
         })}
       </div>
-      <figure id="hplc-diagram" className="rounded-xl bg-card p-2 ring-1 ring-foreground/10 sm:p-3">
-        <div className="grid grid-cols-[minmax(4.6rem,7.25rem)_minmax(0,1fr)_minmax(5.4rem,8.25rem)] items-stretch gap-1 sm:gap-2">
-          <PartNames parts={setup.parts.filter((part) => partSide(part) === "left")} side="left" />
-          <div className="relative min-w-0">
-            <img
-              src={setup.src}
-              alt=""
-              width={setup.width}
-              height={setup.height}
-              className="block h-auto w-full"
-            />
-            {setup.parts.map((part) => {
-              const active = open?.id === part.id;
-              return (
-                <button
-                  key={part.id}
-                  type="button"
-                  aria-label={part.label}
-                  aria-expanded={active}
-                  className="absolute rounded-sm transition-none"
-                  style={{
-                    left: `${part.box.left}%`,
-                    top: `${part.box.top}%`,
-                    width: `${part.box.width}%`,
-                    height: `${part.box.height}%`,
-                    backgroundColor: active ? "rgba(207, 232, 223, 0.55)" : "transparent",
-                    outline: active ? "2px solid #0f6b56" : "2px solid transparent",
-                  }}
-                  onMouseEnter={() => setOpenId(part.id)}
-                  onMouseLeave={() =>
-                    setOpenId((current) => (current === part.id && pinnedId !== part.id ? null : current))
-                  }
-                  onClick={() => {
-                    setPinnedId((current) => {
-                      const next = current === part.id ? null : part.id;
-                      setOpenId(next);
-                      return next;
-                    });
-                  }}
-                />
-              );
-            })}
-            <svg
-              className="pointer-events-none absolute inset-0 h-full w-full"
-              viewBox={`0 0 ${setup.width} ${setup.height}`}
-              aria-hidden="true"
-            >
-              <defs>
-                <marker
-                  id="hplc-arrow"
-                  markerWidth="7"
-                  markerHeight="7"
-                  refX="6"
-                  refY="3.5"
-                  orient="auto"
-                  markerUnits="strokeWidth"
-                >
-                  <path d="M0,0 L7,3.5 L0,7 Z" fill="#0f6b56" />
-                </marker>
-              </defs>
-              {setup.parts.map((part) => {
-                const side = partSide(part);
-                const y = ((part.box.top + part.box.height / 2) / 100) * setup.height;
-                const xTip =
-                  side === "left"
-                    ? (part.box.left / 100) * setup.width
-                    : ((part.box.left + part.box.width) / 100) * setup.width;
-                const xStart = side === "left" ? 1 : setup.width - 1;
-                return (
-                  <line
-                    key={part.id}
-                    x1={xStart}
-                    y1={y}
-                    x2={xTip}
-                    y2={y}
-                    stroke="#0f6b56"
-                    strokeWidth="1.6"
-                    markerEnd="url(#hplc-arrow)"
-                  />
-                );
-              })}
-            </svg>
-          </div>
-          <PartNames parts={setup.parts.filter((part) => partSide(part) === "right")} side="right" />
-        </div>
-      </figure>
+      <HplcDiagram
+        setup={setup}
+        openId={open?.id ?? null}
+        onEnter={(id) => setOpenId(id)}
+        onLeave={(id) => setOpenId((current) => (current === id && pinnedId !== id ? null : current))}
+        onPick={(id) => {
+          setPinnedId((current) => {
+            const next = current === id ? null : id;
+            setOpenId(next);
+            return next;
+          });
+        }}
+      />
       </div>
       <aside
         id="equipment-note"
