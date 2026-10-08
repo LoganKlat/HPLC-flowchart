@@ -108,7 +108,9 @@ function runTabLabel(
     continued: Record<number, boolean>;
   },
 ): string {
-  if (index <= 0) return percentWords(details.percentB || runs[0]?.percentB || "");
+  if (index <= 0) {
+    return `Run 1: ${percentWords(details.percentB || runs[0]?.percentB || "")}`;
+  }
   const flags = selectivityFlags(index - 1, options.heat, options.continued);
   const explanation = explainRun(runs, index - 1, details, checks, {
     choice: options.choice,
@@ -117,8 +119,7 @@ function runTabLabel(
     continueToLook: flags.continueToLook,
   });
   const named = explanation ? decisionTabLabel(explanation, runs[index]) : null;
-  if (named) return named;
-  return openedRunFallback(index, runs, details);
+  return `Run ${index + 1}: ${named ?? openedRunFallback(index, runs, details)}`;
 }
 
 function decisionTabLabel(explanation: Explanation, run: RunState | undefined): string | null {
@@ -439,9 +440,9 @@ export function HplcApp() {
           const index = Number(value);
           if (index >= 0 && index < syncedRuns.length) setActive(index);
         }}
-        className="flex! min-h-dvh w-full min-w-0 flex-1 flex-col lg:flex-row!"
+        className="flex! min-h-dvh w-full min-w-0 flex-1 flex-col"
       >
-      <div className="order-2 mx-auto flex w-full min-w-0 max-w-6xl flex-1 flex-col px-4 py-6 sm:px-6 sm:py-8 lg:order-1 lg:max-w-none">
+      <div className="mx-auto flex w-full min-w-0 max-w-6xl flex-1 flex-col px-4 py-6 sm:px-6 sm:py-8 lg:max-w-none">
       <Watermark />
       <div id="decision-layout" className="flex flex-col gap-6 lg:flex-row lg:items-start">
       <div className="order-2 flex min-w-0 flex-1 flex-col">
@@ -580,6 +581,35 @@ export function HplcApp() {
               onToggleFillFromFileName={onToggleFillFromFileName}
               onLinePercent={index === readyCount - 1 ? reportLinePercent : undefined}
               onPickPercent={index === readyCount - 1 ? setPickedPercent : undefined}
+              runTabs={
+                index === shown ? (
+                  <div
+                    id="run-tabs"
+                    className="order-1 shrink-0 border-b border-border bg-card lg:order-2 lg:w-max lg:self-stretch lg:border-b-0 lg:border-l"
+                  >
+                    <div className="overflow-x-auto lg:h-full lg:overflow-visible">
+                      <TabsList className="flex! h-auto! w-max min-w-full flex-row! items-stretch justify-start gap-2 rounded-none bg-transparent p-2 group-data-horizontal/tabs:h-auto! lg:h-full! lg:w-full! lg:flex-col! lg:p-3">
+                        {syncedRuns.map((_, tabIndex) => (
+                          <TabsTrigger
+                            key={tabIndex}
+                            value={String(tabIndex)}
+                            className="h-10! w-auto! flex-none! rounded-md border border-solid px-3 text-sm shadow-none! transition-none! after:hidden! lg:w-full! lg:px-2"
+                            style={runTabStyle(tabIndex === shown, hoveredRun === tabIndex)}
+                            onMouseEnter={() => setHoveredRun(tabIndex)}
+                            onMouseLeave={() => setHoveredRun((current) => (current === tabIndex ? null : current))}
+                          >
+                            {runTabLabel(tabIndex, syncedRuns, details, checks, {
+                              choice,
+                              heat: heatChoice,
+                              continued: continuedSelectivity,
+                            })}
+                          </TabsTrigger>
+                        ))}
+                      </TabsList>
+                    </div>
+                  </div>
+                ) : null
+              }
             />
           </TabsContent>
         ))}
@@ -589,36 +619,11 @@ export function HplcApp() {
       </div>
       <aside
         id="setup-column"
-        className="order-1 w-full shrink-0 lg:sticky lg:top-4 lg:max-h-[calc(100dvh-2rem)] lg:w-80 lg:overflow-y-auto"
+        className="order-1 w-full shrink-0 lg:sticky lg:top-4 lg:max-h-[calc(100dvh-2rem)] lg:w-[28rem] lg:overflow-y-auto"
       >
         <RunForm details={details} rules={rules} onDetails={onDetails} onRules={setRules} />
       </aside>
       </div>
-      </div>
-      <div
-        id="run-tabs"
-        className="order-1 sticky top-0 z-30 border-b border-border bg-background/95 backdrop-blur lg:order-2 lg:sticky lg:top-0 lg:z-20 lg:h-dvh lg:w-28 lg:shrink-0 lg:self-start lg:overflow-y-auto lg:border-b-0 lg:border-l lg:bg-card lg:backdrop-blur-none"
-      >
-        <div className="overflow-x-auto lg:overflow-visible">
-          <TabsList className="flex! h-auto! w-max min-w-full flex-row! items-stretch justify-start gap-2 rounded-none bg-transparent p-2 group-data-horizontal/tabs:h-auto! lg:w-full! lg:flex-col! lg:p-3">
-            {syncedRuns.map((_, index) => (
-              <TabsTrigger
-                key={index}
-                value={String(index)}
-                className="h-10! w-auto! flex-none! rounded-md border border-solid px-3 text-sm shadow-none! transition-none! after:hidden! lg:w-full! lg:px-2"
-                style={runTabStyle(index === shown, hoveredRun === index)}
-                onMouseEnter={() => setHoveredRun(index)}
-                onMouseLeave={() => setHoveredRun((current) => (current === index ? null : current))}
-              >
-                {runTabLabel(index, syncedRuns, details, checks, {
-                  choice,
-                  heat: heatChoice,
-                  continued: continuedSelectivity,
-                })}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </div>
       </div>
       </Tabs>
       ) : null}
@@ -766,6 +771,7 @@ function RunPane({
   onToggleFillFromFileName,
   onLinePercent,
   onPickPercent,
+  runTabs,
 }: {
   index: number;
   run: RunState;
@@ -805,10 +811,18 @@ function RunPane({
   onToggleFillFromFileName: (checked: boolean) => void;
   onLinePercent?: (percent: number | null) => void;
   onPickPercent?: (percent: number) => void;
+  runTabs?: ReactNode;
 }) {
   if (run.afterRetention) {
     const prior = index > 0 ? explainRun(runs, index - 1, details, checks, { choice, heat }) : null;
-    return <LaterChangeNote decision={prior?.kind === "retention" ? prior.decision : null} />;
+    return (
+      <section className="flex flex-col overflow-hidden rounded-xl border-2 border-solid border-border bg-card lg:flex-row lg:items-stretch">
+        <div className="order-2 min-w-0 flex-1 p-4 sm:p-5 lg:order-1">
+          <LaterChangeNote decision={prior?.kind === "retention" ? prior.decision : null} />
+        </div>
+        {runTabs}
+      </section>
+    );
   }
 
   const flags = selectivityFlags(index, heat, efficiencyContinued ? { [index]: true } : {});
@@ -846,10 +860,11 @@ function RunPane({
 
       <section
         className={
-          "flex min-h-[28rem] flex-col gap-4 rounded-xl border-2 bg-card p-4 sm:p-5 " +
+          "flex min-h-[28rem] flex-col overflow-hidden rounded-xl border-2 bg-card lg:flex-row lg:items-stretch " +
           (run.status === "ready" ? "border-solid border-border" : "border-dashed border-border")
         }
       >
+        <div className="order-2 flex min-w-0 flex-1 flex-col gap-4 p-4 sm:p-5 lg:order-1">
         {index === 0 ? (
           <div id="filename-fill" className="flex flex-col gap-2">
             <div className="flex items-start gap-2">
@@ -986,6 +1001,8 @@ function RunPane({
             ) : null}
           </div>
         )}
+        </div>
+        {runTabs}
       </section>
     </>
   );

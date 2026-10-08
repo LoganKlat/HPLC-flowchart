@@ -93,12 +93,12 @@ export function RunForm({ details, rules, onDetails, onRules }: RunFormProps) {
         </CardContent>
       </Card>
 
-      <Card size="sm" className="@container" style={{ ["--card-spacing" as string]: "0.5rem" }}>
+      <Card size="sm" style={{ ["--card-spacing" as string]: "0.5rem" }}>
         <CardHeader>
           <CardTitle>Initial run details</CardTitle>
           <CardDescription>Saved with this session, even if a check does not use them yet.</CardDescription>
         </CardHeader>
-        <CardContent className="grid grid-cols-1 gap-x-2 gap-y-1.5 @min-[28rem]:grid-cols-2">
+        <CardContent className="grid grid-cols-1 gap-y-1.5">
           <ChoiceField
             label="Solvent"
             value={details.solvent}
@@ -111,6 +111,7 @@ export function RunForm({ details, rules, onDetails, onRules }: RunFormProps) {
             value={details.ph}
             onChange={(value) => setDetail("ph", value)}
             inputMode="decimal"
+            row
           />
           <ChoiceField
             label="Method"
@@ -129,17 +130,20 @@ export function RunForm({ details, rules, onDetails, onRules }: RunFormProps) {
             onChange={(value) => setDetail("percentB", value)}
             inputMode="decimal"
             hint="Saved on Run 1. Each later run keeps its own %B."
+            row
           />
           <TextField
             label="Flow rate (mL/min)"
             value={details.flowRate}
             onChange={(value) => setDetail("flowRate", value)}
             inputMode="decimal"
+            row
           />
           <TextField
             label="Injection volume"
             value={details.injectionVolume}
             onChange={(value) => setDetail("injectionVolume", value)}
+            row
           />
           <ChoiceField
             label="Sample type"
@@ -156,6 +160,7 @@ export function RunForm({ details, rules, onDetails, onRules }: RunFormProps) {
             label="Sample concentration (mg/mL)"
             value={details.sampleConcentration}
             onChange={(value) => setDetail("sampleConcentration", value)}
+            row
           />
           <ChoiceField
             label="Ligand"
@@ -182,42 +187,49 @@ export function RunForm({ details, rules, onDetails, onRules }: RunFormProps) {
             value={details.poreSize}
             onChange={(value) => setDetail("poreSize", value)}
             inputMode="decimal"
+            row
           />
           <TextField
             label="Carbon load (%)"
             value={details.carbonLoad}
             onChange={(value) => setDetail("carbonLoad", value)}
             inputMode="decimal"
+            row
           />
           <TextField
             label="Length (mm)"
             value={details.lengthMm}
             onChange={(value) => setDetail("lengthMm", value)}
             inputMode="decimal"
+            row
           />
           <TextField
             label="Diameter (mm)"
             value={details.diameterMm}
             onChange={(value) => setDetail("diameterMm", value)}
             inputMode="decimal"
+            row
           />
           <TextField
             label="Particle size (µm)"
             value={details.particleSize}
             onChange={(value) => setDetail("particleSize", value)}
             inputMode="decimal"
+            row
           />
           <TextField
             label="Temperature (°C)"
             value={details.temperature}
             onChange={(value) => setDetail("temperature", value)}
             inputMode="decimal"
+            row
           />
           <TextField
             label="Wavelength (nm)"
             value={details.wavelength}
             onChange={(value) => setDetail("wavelength", value)}
             inputMode="decimal"
+            row
           />
         </CardContent>
       </Card>
@@ -242,7 +254,7 @@ function ChoiceField({
 }) {
   const id = label.toLowerCase().replace(/[^a-z0-9]+/g, "-");
   return (
-    <div className="flex min-w-0 flex-col gap-1">
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(9.5rem,12.5rem)] items-center gap-x-2">
       <Label htmlFor={id} className="h-auto whitespace-normal text-sm leading-snug">
         {label}
       </Label>
@@ -267,6 +279,7 @@ function TextField({
   note,
   inputMode,
   invalid,
+  row,
 }: {
   label: string;
   value: string;
@@ -275,8 +288,32 @@ function TextField({
   note?: string;
   inputMode?: "decimal" | "numeric" | "text";
   invalid?: boolean;
+  row?: boolean;
 }) {
   const id = label.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+  const control = (
+    <Input
+      id={id}
+      value={value}
+      inputMode={inputMode}
+      aria-invalid={invalid || undefined}
+      className="h-8 text-sm"
+      onChange={(event) => onChange(event.target.value)}
+    />
+  );
+  if (row) {
+    return (
+      <div className="flex min-w-0 flex-col gap-1">
+        <div className="grid grid-cols-[minmax(0,1fr)_minmax(9.5rem,12.5rem)] items-center gap-x-2">
+          <Label htmlFor={id} className="h-auto whitespace-normal text-sm leading-snug">
+            {label}
+          </Label>
+          {control}
+        </div>
+        {hint ? <p className="text-xs leading-snug text-muted-foreground">{hint}</p> : null}
+      </div>
+    );
+  }
   return (
     <div className="flex min-w-0 flex-col gap-1">
       <div className="flex items-start gap-1.5">
@@ -285,14 +322,7 @@ function TextField({
         </Label>
         {note ? <NotePop text={note} label={label} /> : null}
       </div>
-      <Input
-        id={id}
-        value={value}
-        inputMode={inputMode}
-        aria-invalid={invalid || undefined}
-        className="h-8 text-sm"
-        onChange={(event) => onChange(event.target.value)}
-      />
+      {control}
       {hint ? <p className="text-xs leading-snug text-muted-foreground">{hint}</p> : null}
     </div>
   );
