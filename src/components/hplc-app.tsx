@@ -12,11 +12,10 @@ import { RunForm } from "@/components/run-form";
 import { SelectivityDecisionView } from "@/components/selectivity-decision";
 import { type ColumnRunTrace } from "@/components/column-diagram";
 import { EquipmentPanel } from "@/components/equipment-panel";
-import { NotePop } from "@/components/note-pop";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { evaluateRun, parseUserCount, parseUserNumber, type RuleNumbers } from "@/lib/evaluate";
-import { FILE_NAME_CHECKBOX_LABEL, FILE_NAME_STRUCTURE_NOTE, parseRunFileName } from "@/lib/filename-details";
+import { parseRunFileName } from "@/lib/filename-details";
 import { readLabFile, type LabFileRead } from "@/lib/lab-file";
 import {
   decideRetention,
@@ -685,9 +684,6 @@ export function HplcApp() {
               }}
               choice={choice}
               heat={heatChoice}
-              fillFromFileName={fillFromFileName}
-              fileNameNote={fileNameNote}
-              onToggleFillFromFileName={onToggleFillFromFileName}
               onLinePercent={index === readyCount - 1 ? reportLinePercent : undefined}
               onPickPercent={index === readyCount - 1 ? setPickedPercent : undefined}
               pickedPercent={pickedPercent}
@@ -741,6 +737,15 @@ export function HplcApp() {
           rules={rules}
           onDetails={onShownDetails}
           onRules={setRules}
+          fileNameFill={
+            shown === 0
+              ? {
+                  checked: fillFromFileName,
+                  note: fileNameNote,
+                  onToggle: onToggleFillFromFileName,
+                }
+              : null
+          }
         />
       </aside>
       </div>
@@ -888,9 +893,6 @@ function RunPane({
   onPickRun,
   choice,
   heat,
-  fillFromFileName,
-  fileNameNote,
-  onToggleFillFromFileName,
   onLinePercent,
   onPickPercent,
   pickedPercent,
@@ -925,9 +927,6 @@ function RunPane({
   onPickRun: (index: number) => void;
   choice: RetentionChoice;
   heat: HeatStart | null;
-  fillFromFileName: boolean;
-  fileNameNote: string | null;
-  onToggleFillFromFileName: (checked: boolean) => void;
   onLinePercent?: (percent: number | null) => void;
   onPickPercent?: (percent: number) => void;
   pickedPercent?: number | null;
@@ -984,31 +983,6 @@ function RunPane({
           className="order-2 flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-4 sm:p-5 lg:order-1"
           data-chromatogram-scroll=""
         >
-        {index === 0 ? (
-          <div id="filename-fill" className="flex flex-col gap-2">
-            <div className="flex items-start gap-2">
-              <label
-                htmlFor="fill-from-filename"
-                className="flex items-start gap-3 text-sm leading-relaxed text-foreground"
-              >
-                <input
-                  id="fill-from-filename"
-                  type="checkbox"
-                  className="mt-1 size-4 shrink-0 accent-[#0f6b56]"
-                  checked={fillFromFileName}
-                  onChange={(event) => onToggleFillFromFileName(event.target.checked)}
-                />
-                <span>{FILE_NAME_CHECKBOX_LABEL}</span>
-              </label>
-              <NotePop text={FILE_NAME_STRUCTURE_NOTE} label="Autofill from file name" />
-            </div>
-            {fileNameNote ? (
-              <p className="text-sm text-orange-950" role="status">
-                {fileNameNote}
-              </p>
-            ) : null}
-          </div>
-        ) : null}
         {run.status === "ready" && run.read && rows && run.fileName ? (
           <>
             <ResultsPanel

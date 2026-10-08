@@ -8,8 +8,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { parseUserCount, parseUserNumber } from "@/lib/evaluate";
+import { FILE_NAME_CHECKBOX_LABEL, FILE_NAME_STRUCTURE_NOTE } from "@/lib/filename-details";
 import type { RuleInputs, RunDetails } from "@/lib/run-details";
 import { LIGANDS, SOLVENTS } from "@/lib/selectivity";
+
+type FileNameFill = {
+  checked: boolean;
+  note: string | null;
+  onToggle: (checked: boolean) => void;
+};
 
 type RunFormProps = {
   title: string;
@@ -17,6 +24,8 @@ type RunFormProps = {
   rules: RuleInputs;
   onDetails: (details: RunDetails) => void;
   onRules: (rules: RuleInputs) => void;
+  /** Run 1 only. Later runs omit it. */
+  fileNameFill?: FileNameFill | null;
 };
 
 type Explained = { title: string; note: FunctionNote };
@@ -213,7 +222,7 @@ function DetailNote({ explained }: { explained: Explained }) {
 
 const cardTitleClass = "font-heading text-xl! leading-tight font-bold!";
 
-export function RunForm({ title, details, rules, onDetails, onRules }: RunFormProps) {
+export function RunForm({ title, details, rules, onDetails, onRules, fileNameFill }: RunFormProps) {
   function setDetail<K extends keyof RunDetails>(key: K, value: RunDetails[K]) {
     onDetails({ ...details, [key]: value });
   }
@@ -298,6 +307,31 @@ export function RunForm({ title, details, rules, onDetails, onRules }: RunFormPr
           </CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-1 gap-y-1.5">
+          {fileNameFill ? (
+            <div id="filename-fill" className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-2 gap-y-1 pb-1">
+              <input
+                id="fill-from-filename"
+                type="checkbox"
+                className="col-start-1 row-start-1 mt-0.5 size-4 accent-[#0f6b56]"
+                checked={fileNameFill.checked}
+                onChange={(event) => fileNameFill.onToggle(event.target.checked)}
+              />
+              <label
+                htmlFor="fill-from-filename"
+                className="col-start-2 row-start-1 min-w-0 text-sm leading-snug text-foreground"
+              >
+                {FILE_NAME_CHECKBOX_LABEL}
+              </label>
+              <div className="col-start-3 row-start-1">
+                <NotePop text={FILE_NAME_STRUCTURE_NOTE} label="Autofill from file name" />
+              </div>
+              {fileNameFill.note ? (
+                <p className="col-span-3 text-sm text-orange-950" role="status">
+                  {fileNameFill.note}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
           <ChoiceField
             label="Solvent"
             note={<DetailNote explained={runNotes.solvent} />}
