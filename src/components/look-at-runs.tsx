@@ -1,3 +1,4 @@
+import { NO_CHANGE_YET } from "@/lib/change-label";
 import { formatPercentB, type LookRun, type LookStep } from "@/lib/retention";
 
 const choiceClass =
@@ -34,10 +35,15 @@ export function LookAtRuns({
   return (
     <div className="flex flex-col gap-4" id="look-at-runs">
       <section id="next-change" className="scroll-mt-16 rounded-xl bg-[#e7f3ee] px-4 py-4 text-[#144237]">
-        <h2 className="font-heading text-base">Look at the runs.</h2>
-        <p className="mt-1 text-sm leading-relaxed">
-          Each row is one uploaded run. Met means that measurement is inside the specification. Not met means it is not.
-          Compare the peak count, the worst resolution, the last peak, and the back-pressure before choosing the next change.
+        <h2 className="font-heading text-base">Next change</h2>
+        <p className="mt-1 text-base font-semibold">{NO_CHANGE_YET}</p>
+      </section>
+      <section className="rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10">
+        <h2 className="font-heading text-base">Why</h2>
+        <p className="mt-1 text-sm leading-relaxed text-foreground">
+          Look at the runs. Each row is one uploaded run. Met means that measurement is inside the specification. Not
+          met means it is not. Compare the peak count, the worst resolution, the last peak, and the back-pressure
+          before choosing the next change.
         </p>
       </section>
       <div className="overflow-x-auto rounded-xl bg-card ring-1 ring-foreground/10">

@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { selectivityChangeLabel } from "@/lib/change-label";
 import { LIGANDS, SOLVENTS, chartX, findSolvent, type SelectivityPlan, type TempPath } from "@/lib/selectivity";
 import { SELECTIVITY_ORDER } from "@/lib/setting-kind";
 
@@ -39,15 +40,15 @@ export function SelectivityDecisionView({
           : plan.nextChange;
   const showSolvent = plan.showSolventChoices || (choice != null && tempPath === "solvent");
   const showLigand = plan.showLigandChoices || (choice != null && tempPath === "ligand");
+  const solventName = findSolvent(solventId)?.label ?? "";
+  const label = selectivityChangeLabel(plan, { tempPath, solvent: solventName, ligand });
+  const following = plan.following ?? SELECTIVITY_ORDER;
 
   return (
     <div className="flex flex-col gap-4" id="selectivity-decision">
       <section id="next-change" className="scroll-mt-16 rounded-xl bg-[#e7f3ee] px-4 py-4 text-[#144237]">
         <h2 className="font-heading text-base">Next change</h2>
-        <p className="mt-1 text-sm leading-relaxed">{nextChange}</p>
-        <p id="following-step" className="mt-3 text-sm leading-relaxed">
-          {plan.following ?? SELECTIVITY_ORDER}
-        </p>
+        <p className="mt-1 text-base font-semibold">{label}</p>
         {choice ? (
           <div id="temp-choice" className="mt-3 flex flex-col gap-2">
             <Button
@@ -65,7 +66,7 @@ export function SelectivityDecisionView({
               onClick={() => onTempPath(recommendedPath)}
             >
               <span className="text-xs tracking-[0.14em] uppercase">Recommended</span>
-              <span>{choice.recommendedSentence}</span>
+              <span>{recommendedPath === "ligand" ? "Ligand" : "Solvent"}</span>
             </Button>
             <Button
               type="button"
@@ -82,14 +83,24 @@ export function SelectivityDecisionView({
               }}
               onClick={() => onTempPath("heat")}
             >
-              {choice.heatLabel}
+              Temperature 60°C
             </Button>
           </div>
         ) : null}
       </section>
       <section className="rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10">
         <h2 className="font-heading text-base">Why</h2>
-        <p className="mt-1 text-sm leading-relaxed text-foreground">{plan.why}</p>
+        <div className="mt-1 flex flex-col gap-2 text-sm leading-relaxed text-foreground">
+          <p>{nextChange}</p>
+          {choice ? (
+            <>
+              <p>{choice.recommendedSentence}</p>
+              <p>{choice.heatLabel}</p>
+            </>
+          ) : null}
+          <p id="following-step">{following}</p>
+          <p>{plan.why}</p>
+        </div>
         {plan.nomograph && (plan.step !== "temp-choice" || tempPath === "solvent") ? (
           <div id="solvent-nomograph" className="mt-4 flex flex-col gap-3">
             {plan.oldSolvent && plan.anchorPercentB != null ? (

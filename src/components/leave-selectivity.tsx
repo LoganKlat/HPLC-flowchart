@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { NO_CHANGE_YET } from "@/lib/change-label";
 import { EFFICIENCY_CONTINUE, EFFICIENCY_MOVE_ON } from "@/lib/retention";
 
 const choiceClass =
@@ -9,7 +10,7 @@ export function EfficiencyChoiceView({ why, onEfficiency, onContinue }: { why: s
     <div className="flex flex-col gap-4" id="efficiency-choice">
       <section id="next-change" className="scroll-mt-16 rounded-xl bg-[#e7f3ee] px-4 py-4 text-[#144237]">
         <h2 className="font-heading text-base">Next change</h2>
-        <p className="mt-1 text-sm leading-relaxed">{EFFICIENCY_MOVE_ON}</p>
+        <p className="mt-1 text-base font-semibold">{NO_CHANGE_YET}</p>
         <div id="efficiency-or-selectivity" className="mt-3 flex flex-col gap-2">
           <Button
             type="button"
@@ -42,6 +43,7 @@ export function EfficiencyChoiceView({ why, onEfficiency, onContinue }: { why: s
       <section className="rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10">
         <h2 className="font-heading text-base">Why</h2>
         <div className="mt-1 flex flex-col gap-2 text-sm leading-relaxed text-foreground">
+          <p>{EFFICIENCY_MOVE_ON}</p>
           {why.split("\n\n").map((paragraph, index) => (
             <p key={index}>{paragraph}</p>
           ))}
@@ -64,14 +66,7 @@ export function LeaveSelectivityAsk({
     <div className="flex flex-col gap-4" id="leave-selectivity-ask">
       <section id="next-change" className="scroll-mt-16 rounded-xl bg-[#e7f3ee] px-4 py-4 text-[#144237]">
         <h2 className="font-heading text-base">Next change</h2>
-        <p className="mt-1 text-sm leading-relaxed">{ask.question}</p>
-        {ask.steps && ask.steps.length > 0 ? (
-          <ol id="selectivity-steps" className="mt-3 list-decimal space-y-2 pl-5 text-sm leading-relaxed">
-            {ask.steps.map((step) => (
-              <li key={step}>{step}</li>
-            ))}
-          </ol>
-        ) : null}
+        <p className="mt-1 text-base font-semibold">{NO_CHANGE_YET}</p>
         <div className="mt-3 grid grid-cols-2 gap-2">
           <button type="button" className={`${choiceClass} border-primary bg-accent text-foreground`} onClick={onYes}>
             Yes
@@ -88,6 +83,14 @@ export function LeaveSelectivityAsk({
       <section className="rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10">
         <h2 className="font-heading text-base">Why</h2>
         <div className="mt-1 flex flex-col gap-2 text-sm leading-relaxed text-foreground">
+          <p>{ask.question}</p>
+          {ask.steps && ask.steps.length > 0 ? (
+            <ol id="selectivity-steps" className="list-decimal space-y-2 pl-5">
+              {ask.steps.map((step) => (
+                <li key={step}>{step}</li>
+              ))}
+            </ol>
+          ) : null}
           {ask.why.split("\n\n").map((paragraph, index) => (
             <p key={index}>{paragraph}</p>
           ))}
@@ -105,15 +108,18 @@ export function LeaveSelectivityDone({ duringRetention }: { duringRetention: boo
     <div className="flex flex-col gap-4" id="leave-selectivity-done">
       <section id="next-change" className="scroll-mt-16 rounded-xl bg-[#e7f3ee] px-4 py-4 text-[#144237]">
         <h2 className="font-heading text-base">Next change</h2>
-        <p className="mt-1 text-sm leading-relaxed">{nextChange}</p>
+        <p className="mt-1 text-base font-semibold">{NO_CHANGE_YET}</p>
       </section>
       <section className="rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10">
         <h2 className="font-heading text-base">Why</h2>
-        <p className="mt-1 text-sm leading-relaxed text-foreground">
-          Moving on to efficiency was chosen. No further solvent, temperature, or column change is recommended.
-          Efficiency can make the peaks narrower without a new solvent or a new coating. Gradient changes %B
-          while the run is going. Those stages are not built yet.
-        </p>
+        <div className="mt-1 flex flex-col gap-2 text-sm leading-relaxed text-foreground">
+          <p>{nextChange}</p>
+          <p>
+            Moving on to efficiency was chosen. No further solvent, temperature, or column change is recommended.
+            Efficiency can make the peaks narrower without a new solvent or a new coating. Gradient changes %B
+            while the run is going. Those stages are not built yet.
+          </p>
+        </div>
       </section>
     </div>
   );

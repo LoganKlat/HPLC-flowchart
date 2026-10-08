@@ -12,7 +12,6 @@ import { ResultsPanel } from "@/components/results-panel";
 import { RunForm } from "@/components/run-form";
 import { SelectivityDecisionView } from "@/components/selectivity-decision";
 import { EquipmentPanel } from "@/components/equipment-panel";
-import { MeasurementGroups } from "@/components/measurement-groups";
 import { NotePop } from "@/components/note-pop";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -691,6 +690,7 @@ export function HplcApp() {
               onToggleFillFromFileName={onToggleFillFromFileName}
               onLinePercent={index === readyCount - 1 ? reportLinePercent : undefined}
               onPickPercent={index === readyCount - 1 ? setPickedPercent : undefined}
+              pickedPercent={pickedPercent}
               runTabs={
                 index === shown ? (
                   <div
@@ -897,6 +897,7 @@ function RunPane({
   onToggleFillFromFileName,
   onLinePercent,
   onPickPercent,
+  pickedPercent,
   runTabs,
 }: {
   index: number;
@@ -937,6 +938,7 @@ function RunPane({
   onToggleFillFromFileName: (checked: boolean) => void;
   onLinePercent?: (percent: number | null) => void;
   onPickPercent?: (percent: number) => void;
+  pickedPercent?: number | null;
   runTabs?: ReactNode;
 }) {
   if (run.afterRetention) {
@@ -1035,55 +1037,61 @@ function RunPane({
                 Remove file
               </Button>
             </div>
-            <ResultsPanel fileName={run.fileName} read={run.read} rows={rows} />
-            <MeasurementGroups read={run.read} minimumPercentB={retention?.fit?.nextPercentB ?? null} />
-            {leftSelectivity ? (
-              <LeaveSelectivityDone duringRetention={explanation?.kind === "retention"} />
-            ) : ask ? (
-              <LeaveSelectivityAsk
-                ask={ask}
-                onYes={onLeave}
-                onNo={() => onDeclineEfficiency()}
-              />
-            ) : retention?.status === "efficiency" && retention.efficiencyChoice && !efficiencyContinued ? (
-              <EfficiencyChoiceView
-                why={retention.why}
-                onEfficiency={onLeave}
-                onContinue={onContinueSelectivity}
-              />
-            ) : retention?.status === "look" && retention.look && !heat ? (
-              <LookAtRuns
-                look={retention.look}
-                betweenAnswer={betweenAnswer}
-                betweenText={betweenText}
-                betweenError={betweenError}
-                onAnswer={onBetweenAnswer}
-                onBetweenText={onBetweenText}
-                onUseBetween={onUseBetween}
-                onPickRun={onPickRun}
-              />
-            ) : (
-              <>
-                {retention ? (
-                  <RetentionDecisionView
-                    decision={retention}
-                    onLinePercent={onLinePercent}
-                    onPickPercent={onPickPercent}
+            <ResultsPanel
+              fileName={run.fileName}
+              read={run.read}
+              rows={rows}
+              aside={
+                leftSelectivity ? (
+                  <LeaveSelectivityDone duringRetention={explanation?.kind === "retention"} />
+                ) : ask ? (
+                  <LeaveSelectivityAsk
+                    ask={ask}
+                    onYes={onLeave}
+                    onNo={() => onDeclineEfficiency()}
                   />
-                ) : null}
-                {selectivity ? (
-                  <SelectivityDecisionView
-                    plan={selectivity}
-                    solventId={findSolvent(next?.solvent ?? "")?.id ?? selectivity.recommendedSolventId ?? ""}
-                    ligand={next?.ligand || selectivity.recommendedLigand || ""}
-                    onSolvent={onChooseSolvent}
-                    onLigand={onChooseLigand}
-                    tempPath={tempPath}
-                    onTempPath={onTempPath}
+                ) : retention?.status === "efficiency" && retention.efficiencyChoice && !efficiencyContinued ? (
+                  <EfficiencyChoiceView
+                    why={retention.why}
+                    onEfficiency={onLeave}
+                    onContinue={onContinueSelectivity}
                   />
-                ) : null}
-              </>
-            )}
+                ) : retention?.status === "look" && retention.look && !heat ? (
+                  <LookAtRuns
+                    look={retention.look}
+                    betweenAnswer={betweenAnswer}
+                    betweenText={betweenText}
+                    betweenError={betweenError}
+                    onAnswer={onBetweenAnswer}
+                    onBetweenText={onBetweenText}
+                    onUseBetween={onUseBetween}
+                    onPickRun={onPickRun}
+                  />
+                ) : (
+                  <>
+                    {retention ? (
+                      <RetentionDecisionView
+                        decision={retention}
+                        onLinePercent={onLinePercent}
+                        onPickPercent={onPickPercent}
+                        pickedPercent={pickedPercent}
+                      />
+                    ) : null}
+                    {selectivity ? (
+                      <SelectivityDecisionView
+                        plan={selectivity}
+                        solventId={findSolvent(next?.solvent ?? "")?.id ?? selectivity.recommendedSolventId ?? ""}
+                        ligand={next?.ligand || selectivity.recommendedLigand || ""}
+                        onSolvent={onChooseSolvent}
+                        onLigand={onChooseLigand}
+                        tempPath={tempPath}
+                        onTempPath={onTempPath}
+                      />
+                    ) : null}
+                  </>
+                )
+              }
+            />
             {next && !ask && !leftSelectivity ? (
               <div className="mt-auto flex flex-col gap-2">
                 <Button

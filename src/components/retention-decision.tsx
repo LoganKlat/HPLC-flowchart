@@ -1,11 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { axisTicks, formatAxisTick } from "@/components/chromatogram-chart";
+import { NO_CHANGE_YET, retentionChangeLabel } from "@/lib/change-label";
 import {
   formatPercentB,
-  formatRSquared,
-  lineEquation,
   minimumPercentNote,
   refitMinimumPercent,
   type FitCatalogRun,
@@ -18,10 +16,12 @@ export function RetentionDecisionView({
   decision,
   onLinePercent,
   onPickPercent,
+  pickedPercent = null,
 }: {
   decision: RetentionDecision;
   onLinePercent?: (percent: number | null) => void;
   onPickPercent?: (percent: number) => void;
+  pickedPercent?: number | null;
 }) {
   const fit = decision.fit;
   const initial = fit?.catalog.filter((run) => run.included).map((run) => run.runNumber) ?? [];
@@ -41,6 +41,11 @@ export function RetentionDecisionView({
     onLinePercent?.(reported);
   }, [onLinePercent, reported]);
   const nextChange = fit && overridden ? nextChangeForSelection(fit, solved) : decision.nextChange;
+  const shownPercent = overridden && solved ? solved.nextPercentB : (pickedPercent ?? decision.nextPercentB);
+  const label = retentionChangeLabel(
+    shownPercent === decision.nextPercentB ? decision : { ...decision, nextPercentB: shownPercent },
+    shownPercent,
+  );
 
   return (
     <div className="flex flex-col gap-4" id="retention-decision">
@@ -49,33 +54,33 @@ export function RetentionDecisionView({
         className="scroll-mt-16 rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10"
       >
         <h2 className="font-heading text-base">Next change</h2>
-        <p className="mt-1 text-sm leading-relaxed text-foreground">{nextChange}</p>
+        <p className="mt-1 text-base font-semibold text-foreground">{label}</p>
         {decision.bChoices && decision.bChoices.length > 1 ? (
           <div id="percent-choices" className="mt-3 flex flex-col gap-2">
             {decision.bChoices.map((choice) => (
               <button
                 key={choice.id}
                 type="button"
-                className="rounded-lg border border-[#0f6b56] bg-white px-3 py-2 text-left text-sm leading-relaxed text-[#144237]"
+                className="rounded-lg border border-[#0f6b56] bg-white px-3 py-2 text-left text-sm font-semibold text-[#144237]"
                 onClick={() => onPickPercent?.(choice.percentB)}
               >
-                {choice.sentence}
+                {`%B ${formatPercentB(choice.percentB)}`}
               </button>
             ))}
           </div>
-        ) : null}
-        {decision.following ? (
-          <p id="following-step" className="mt-3 text-sm leading-relaxed text-foreground">
-            {decision.following}
-          </p>
         ) : null}
       </section>
       <section id="min-b-note" className="rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10">
         <h2 className="font-heading text-base">Why</h2>
         <div className="mt-1 flex flex-col gap-2 text-sm leading-relaxed text-foreground">
-          {decision.why.split("\n\n").map((paragraph, index) => (
-            <p key={index}>{paragraph}</p>
+          {whyParagraphs(nextChange, decision.why, decision.following).map((paragraph, index) => (
+            <p key={index} id={paragraph === decision.following ? "following-step" : undefined}>
+              {paragraph}
+            </p>
           ))}
+          {decision.bChoices && decision.bChoices.length > 1
+            ? decision.bChoices.map((choice) => <p key={choice.id}>{choice.sentence}</p>)
+            : null}
         </div>
         {fit ? (
           <MinimumPercentFit
@@ -122,6 +127,9 @@ export function StartHighBNote() {
 }
 
 export function LaterChangeNote({ decision }: { decision: RetentionDecision | null }) {
+  const explanation =
+    decision?.nextChange ?? "Retention is finished. The next kind of change is not built yet.";
+  const label = decision ? retentionChangeLabel(decision) : NO_CHANGE_YET;
   return (
     <div className="flex flex-col gap-4">
       <section
@@ -129,26 +137,29 @@ export function LaterChangeNote({ decision }: { decision: RetentionDecision | nu
         className="scroll-mt-16 rounded-xl bg-[#e7f3ee] px-4 py-4 text-[#144237]"
       >
         <h2 className="font-heading text-base">Next change</h2>
-        <p className="mt-1 text-sm leading-relaxed">
-          {decision?.nextChange ??
-            "Retention is finished. The next kind of change is not built yet."}
-        </p>
+        <p className="mt-1 text-base font-semibold">{label}</p>
       </section>
       <section className="rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10">
         <h2 className="font-heading text-base">Why</h2>
         <div className="mt-1 flex flex-col gap-2 text-sm leading-relaxed text-foreground">
-          {(
-            decision?.why ??
-            "Retention is finished. The next kind of change is not built yet."
-          )
-            .split("\n\n")
-            .map((paragraph, index) => (
-              <p key={index}>{paragraph}</p>
-            ))}
+          {whyParagraphs(explanation, decision?.why ?? "").map((paragraph, index) => (
+            <p key={index}>{paragraph}</p>
+          ))}
         </div>
       </section>
     </div>
   );
+}
+
+function whyParagraphs(nextChange: string, why: string, following?: string | null): string[] {
+  const reason = why.trim();
+  const parts: string[] = [];
+  const change = nextChange.trim();
+  if (change && !reason.includes(change)) parts.push(change);
+  const later = following?.trim() ?? "";
+  if (later && later !== change && !reason.includes(later) && !parts.includes(later)) parts.push(later);
+  if (reason) parts.push(...reason.split("\n\n"));
+  return parts.length > 0 ? parts : [NO_CHANGE_YET];
 }
 
 function MinimumPercentFit({
@@ -192,8 +203,6 @@ function MinimumPercentFit({
               <th className="px-2 py-2 font-medium">%B</th>
               <th className="px-2 py-2 font-medium">t0 (min)</th>
               <th className="px-2 py-2 font-medium">Last peak (min)</th>
-              <th className="px-2 py-2 font-medium">k</th>
-              <th className="px-2 py-2 font-medium">logK</th>
               <th className="px-2 py-2 font-medium">Line</th>
             </tr>
           </thead>
@@ -217,8 +226,6 @@ function MinimumPercentFit({
                   <td className="px-2 py-2">{run.percentB == null ? "—" : formatPercentB(run.percentB)}</td>
                   <td className="px-2 py-2">{showMinutes(run.t0)}</td>
                   <td className="px-2 py-2">{showMinutes(run.tR)}</td>
-                  <td className="px-2 py-2">{showCalc(run.k)}</td>
-                  <td className="px-2 py-2">{showCalc(run.logK)}</td>
                   <td className="px-2 py-2">{onLine ? "Included" : "Left out"}</td>
                 </tr>
               );
@@ -226,148 +233,7 @@ function MinimumPercentFit({
           </tbody>
         </table>
       </div>
-      {solved ? <LogKGraph fit={solved} /> : null}
     </div>
-  );
-}
-
-function LogKGraph({ fit }: { fit: MinimumFit }) {
-  const width = 720;
-  const plotLeft = 72;
-  const plotRight = 28;
-  const plotTop = 36;
-  const plotBottom = 72;
-  const innerWidth = width - plotLeft - plotRight;
-  const innerHeight = 280;
-  const height = plotTop + innerHeight + plotBottom;
-  const xs = [...fit.rows.map((row) => row.percentB), fit.rawPercentB];
-  const ys = [...fit.rows.map((row) => row.logK), fit.logKTarget];
-  const xDomain = padded(xs);
-  const yDomain = padded(ys);
-  const xOf = (value: number) => plotLeft + ((value - xDomain.min) / (xDomain.max - xDomain.min)) * innerWidth;
-  const yOf = (value: number) => plotTop + ((yDomain.max - value) / (yDomain.max - yDomain.min)) * innerHeight;
-  const axisY = plotTop + innerHeight;
-  const xTicks = axisTicks(xDomain.min, xDomain.max);
-  const yTicks = axisTicks(yDomain.min, yDomain.max);
-  const meetX = xOf(fit.rawPercentB);
-  const meetY = yOf(fit.logKTarget);
-  const percentLabel = `${formatCalcLabel(fit.rawPercentB)}% B`;
-  const crowded = xTicks.some((tick) => Math.abs(xOf(tick) - meetX) < 36);
-  const lineMin = Math.min(...fit.rows.map((row) => row.percentB), fit.rawPercentB);
-  const lineMax = Math.max(...fit.rows.map((row) => row.percentB), fit.rawPercentB);
-  const yAt = (percent: number) => fit.m * percent + fit.c;
-
-  return (
-    <figure id="min-b-graph" className="rounded-xl bg-[#f7fbf8] ring-1 ring-foreground/10">
-      <figcaption className="px-4 pt-3 font-heading text-base text-foreground">logK against %B</figcaption>
-      <div className="px-4 pt-1 pb-2 text-sm leading-snug text-foreground">
-        <p data-min-b-equation>{lineEquation(fit.m, fit.c)}</p>
-        <p data-min-b-r2>{formatRSquared(fit.rSquared)}</p>
-      </div>
-      <svg
-        width={width}
-        height={height}
-        viewBox={`0 0 ${width} ${height}`}
-        role="img"
-        aria-label={`logK against %B. The line meets logK ${formatCalcLabel(fit.logKTarget)} at ${percentLabel}.`}
-        className="block w-full"
-        style={{ height: "auto", aspectRatio: `${width} / ${height}` }}
-      >
-        {yTicks.map((tick) => (
-          <g key={`y-${tick}`}>
-            <line
-              x1={plotLeft}
-              x2={width - plotRight}
-              y1={yOf(tick)}
-              y2={yOf(tick)}
-              stroke="currentColor"
-              className="text-foreground/10"
-            />
-            <text
-              x={plotLeft - 8}
-              y={yOf(tick)}
-              textAnchor="end"
-              dominantBaseline="middle"
-              className="fill-muted-foreground text-[11px]"
-            >
-              {formatAxisTick(tick)}
-            </text>
-          </g>
-        ))}
-        {xTicks.map((tick) => (
-          <g key={`x-${tick}`}>
-            <line
-              x1={xOf(tick)}
-              x2={xOf(tick)}
-              y1={axisY}
-              y2={axisY + 5}
-              stroke="currentColor"
-              className="text-foreground/50"
-            />
-            <text x={xOf(tick)} y={axisY + 18} textAnchor="middle" className="fill-muted-foreground text-[11px]">
-              {formatAxisTick(tick)}
-            </text>
-          </g>
-        ))}
-        <text
-          x={plotLeft + innerWidth / 2}
-          y={height - 16}
-          textAnchor="middle"
-          className="fill-foreground text-[12px]"
-        >
-          %B
-        </text>
-        <text
-          x={18}
-          y={plotTop + innerHeight / 2}
-          transform={`rotate(-90 18 ${plotTop + innerHeight / 2})`}
-          textAnchor="middle"
-          className="fill-foreground text-[12px]"
-        >
-          logK
-        </text>
-        <line x1={plotLeft} x2={plotLeft} y1={plotTop} y2={axisY} stroke="currentColor" className="text-foreground/30" />
-        <line
-          x1={plotLeft}
-          x2={width - plotRight}
-          y1={axisY}
-          y2={axisY}
-          stroke="currentColor"
-          className="text-foreground/30"
-        />
-        <line
-          x1={xOf(lineMin)}
-          x2={xOf(lineMax)}
-          y1={yOf(yAt(lineMin))}
-          y2={yOf(yAt(lineMax))}
-          stroke="#0f6b56"
-          strokeWidth="2.2"
-        />
-        <line x1={plotLeft} x2={meetX} y1={meetY} y2={meetY} stroke="#9a7b3c" strokeDasharray="4 3" strokeWidth="1.4" />
-        <line x1={meetX} x2={meetX} y1={meetY} y2={axisY} stroke="#9a7b3c" strokeDasharray="4 3" strokeWidth="1.4" />
-        {fit.rows.map((row) => (
-          <g key={row.runNumber}>
-            <circle cx={xOf(row.percentB)} cy={yOf(row.logK)} r="4" fill="#144237" />
-            <text
-              x={xOf(row.percentB)}
-              y={yOf(row.logK) - 10}
-              textAnchor="middle"
-              className="fill-foreground text-[11px]"
-            >
-              Run {row.runNumber}
-            </text>
-          </g>
-        ))}
-        <text
-          x={meetX}
-          y={crowded ? axisY + 40 : axisY + 18}
-          textAnchor="middle"
-          className="fill-[#0f6b56] text-[12px] font-medium"
-        >
-          {percentLabel}
-        </text>
-      </svg>
-    </figure>
   );
 }
 
@@ -398,27 +264,7 @@ function sameRunSet(left: readonly number[], right: readonly number[]): boolean 
   return right.every((run) => chosen.has(run));
 }
 
-function padded(values: number[]): { min: number; max: number } {
-  let min = Math.min(...values);
-  let max = Math.max(...values);
-  if (!(max > min)) {
-    min -= 1;
-    max += 1;
-  }
-  const pad = (max - min) * 0.12;
-  return { min: min - pad, max: max + pad };
-}
-
 function showMinutes(value: number | null): string {
   return value == null || !Number.isFinite(value) ? "—" : value.toFixed(3);
 }
 
-function showCalc(value: number | null): string {
-  return value == null || !Number.isFinite(value) ? "—" : value.toFixed(3);
-}
-
-function formatCalcLabel(value: number): string {
-  const whole = Math.round(value);
-  if (Math.abs(value - whole) < 1e-6) return String(whole);
-  return value.toFixed(2);
-}

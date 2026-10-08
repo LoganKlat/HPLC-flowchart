@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { ChromatogramChart } from "@/components/chromatogram-chart";
 import type { ResultRow } from "@/lib/evaluate";
 import type { LabFileRead } from "@/lib/lab-file";
@@ -13,9 +14,10 @@ type ResultsPanelProps = {
   fileName: string;
   read: LabFileRead;
   rows: ResultRow[];
+  aside?: ReactNode;
 };
 
-export function ResultsPanel({ fileName, read, rows }: ResultsPanelProps) {
+export function ResultsPanel({ fileName, read, rows, aside }: ResultsPanelProps) {
   const rowNotes = new Set(rows.map((row) => row.note).filter((note): note is string => Boolean(note)));
   const extraNotes = read.notes.filter((note) => !rowNotes.has(note));
 
@@ -43,8 +45,10 @@ export function ResultsPanel({ fileName, read, rows }: ResultsPanelProps) {
           ))}
         </ul>
       ) : null}
-      <div className="overflow-x-auto rounded-xl bg-card ring-1 ring-foreground/10">
-        <table className="w-full min-w-[36rem] border-collapse text-left text-sm">
+      <div className="@container">
+      <div className="grid grid-cols-1 items-start gap-4 @min-[26rem]:grid-cols-[minmax(0,1.15fr)_minmax(11.5rem,0.9fr)]">
+      <div className="min-w-0 overflow-x-auto rounded-xl bg-card ring-1 ring-foreground/10">
+        <table className="w-full min-w-[20rem] border-collapse text-left text-sm">
           <caption className="px-4 py-3 text-left font-heading text-base text-foreground">
             Does this run meet the rules?
           </caption>
@@ -83,6 +87,9 @@ export function ResultsPanel({ fileName, read, rows }: ResultsPanelProps) {
             ))}
           </tbody>
         </table>
+      </div>
+      {aside ? <div className="flex min-w-0 flex-col gap-4">{aside}</div> : null}
+      </div>
       </div>
     </div>
   );
