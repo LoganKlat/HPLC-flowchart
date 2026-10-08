@@ -8,6 +8,7 @@ import {
   carryForwardIndex,
   decideRetention,
   findBackwardsRetention,
+  seriesWhileHeld,
   inBetweenPercentError,
   formatRSquared,
   lineEquation,
@@ -1065,6 +1066,32 @@ describe("backwards retention", () => {
     expect(why).toContain(lower.lastPeakTimeMin!.toFixed(3));
     expect(why.toLowerCase()).not.toContain("40°c");
     expect(why.toLowerCase()).not.toContain("coating");
+  });
+
+  it("loads the 90% then 80% workbooks without throwing", () => {
+    const uploads = "/home/ubuntu/.cursor/projects/workspace/uploads";
+    const higher = readLabFile(
+      readFileSync(`${uploads}/GR09-05-3-ACN-3-ISO-90-1.5-20-CP-0.1-C18aqP-150x4.6x5-amb-254_f9c3.xlsx`),
+    );
+    const lower = readLabFile(
+      readFileSync(`${uploads}/GR09-06-3-ACN-3-ISO-80-1.5-20-CP-0.1-C18aqP-150x4.6x5-amb-254_a3e0.xlsx`),
+    );
+    expect(higher.lastPeakTimeMin).not.toBeNull();
+    expect(lower.lastPeakTimeMin).not.toBeNull();
+    expect(higher.lastPeakTimeMin!).toBeGreaterThan(lower.lastPeakTimeMin!);
+    const runs = [
+      { percentB: 90, lastPeakTimeMin: higher.lastPeakTimeMin },
+      { percentB: 80, lastPeakTimeMin: lower.lastPeakTimeMin },
+    ];
+    const pair = findBackwardsRetention(runs);
+    expect(pair).not.toBeNull();
+    expect(() => backwardsWhy(pair!)).not.toThrow();
+    const held = seriesWhileHeld(runs, runs.length, () => true);
+    expect(held).toBe(runs);
+    const withEmpty = [...runs, { percentB: null, lastPeakTimeMin: null }];
+    const dropped = seriesWhileHeld(withEmpty, runs.length, () => true);
+    expect(dropped).toEqual(runs);
+    expect(seriesWhileHeld(dropped, runs.length, () => true)).toBe(dropped);
   });
 });
 

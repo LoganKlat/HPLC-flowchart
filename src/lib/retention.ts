@@ -1499,6 +1499,20 @@ export function backwardsWhy(pair: BackwardsPair): string {
 export const BACKWARDS_REDO =
   "Replace these runs so the last peak gets longer as %B goes down.";
 
+/**
+ * While the backwards warning is up, do not keep an unedited empty run after the ready ones.
+ * Return the same array when the series is already only those runs, so render can settle.
+ */
+export function seriesWhileHeld<T>(
+  runs: readonly T[],
+  readyCount: number,
+  pending: (run: T) => boolean,
+): readonly T[] {
+  const next = runs[readyCount];
+  if (next != null && pending(next) && runs.length === readyCount + 1) return runs.slice(0, readyCount);
+  return runs;
+}
+
 function backwardsKey(run: BackwardsRun): string {
   return `${backwardsTemperature(run.temperatureC)}|${(run.solvent ?? "").trim().toLowerCase()}|${(run.ligand ?? "").trim().toLowerCase()}`;
 }

@@ -21,6 +21,7 @@ import {
   decideRetention,
   findBackwardsRetention,
   formatPercentB,
+  seriesWhileHeld,
   inBetweenPercentError,
   type BackwardsPair,
   type RetentionChoice,
@@ -1295,11 +1296,7 @@ function syncNextRun(
   }
   if (count === 0) return runs;
   if (options.holdNext) {
-    const nextHeld = runs[count];
-    if (!nextHeld || (nextHeld.status === "empty" && !runWasEdited(nextHeld) && runs.length === count + 1)) {
-      return runs.slice(0, count);
-    }
-    return runs;
+    return seriesWhileHeld(runs, count, (run) => run.status === "empty" && !runWasEdited(run)) as RunState[];
   }
   const ready = runs.slice(0, count);
   const history = planHistory(
