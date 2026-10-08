@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { Gauge, GitBranch, Info, type LucideIcon } from "lucide-react";
+import { Gauge, GitBranch, Info, Settings, type LucideIcon } from "lucide-react";
 import { FileDrop } from "@/components/file-drop";
 import { AboutPanel } from "@/components/about-panel";
+import { SettingsPanel } from "@/components/settings-panel";
 import { BackwardsRetentionView, EfficiencyChoiceView, LeaveSelectivityAsk, LeaveSelectivityDone } from "@/components/leave-selectivity";
 import { LookAtRuns } from "@/components/look-at-runs";
 import { LaterChangeNote, RetentionDecisionView, StartHighBNote } from "@/components/retention-decision";
@@ -28,20 +29,19 @@ import {
   type RetentionDecision,
   type RetentionSample,
 } from "@/lib/retention";
+import { columnKey, SHEET_COLUMNS } from "@/lib/column-catalog";
 import { emptyRuleInputs, emptyRunDetails, type RuleInputs, type RunDetails } from "@/lib/run-details";
 import {
-  LIGANDS,
-  SOLVENTS,
   findSolvent,
   planHistory,
   type HeatStart,
-  solventById,
   solventChoicePercent,
   type SelectivityPlan,
   type SelectivityPrefill,
   type SelectivityRun,
   type TempPath,
 } from "@/lib/selectivity";
+import { MENU_SOLVENTS, solventKey } from "@/lib/solvent-menu";
 
 type RestKey = Exclude<keyof RunDetails, "percentB" | "temperature" | "solvent" | "ligand">;
 type RestDetails = Pick<RunDetails, RestKey>;
@@ -99,9 +99,10 @@ function emptyRun(): RunState {
   };
 }
 
-const sections: readonly { id: "decision-engine" | "equipment" | "about"; label: string; icon: LucideIcon }[] = [
+const sections: readonly { id: "decision-engine" | "equipment" | "settings" | "about"; label: string; icon: LucideIcon }[] = [
   { id: "decision-engine", label: "Decision engine", icon: GitBranch },
   { id: "equipment", label: "Equipment", icon: Gauge },
+  { id: "settings", label: "Settings", icon: Settings },
   { id: "about", label: "About", icon: Info },
 ];
 
@@ -175,6 +176,7 @@ function runTabLabel(
     choice: RetentionChoice;
     heat: HeatStart | null;
     continued: Record<number, boolean>;
+    ligands?: readonly string[];
   },
 ): string {
   if (index <= 0) {
@@ -186,6 +188,7 @@ function runTabLabel(
     heat: options.heat,
     continuePastEfficiency: flags.continuePast,
     continueToLook: flags.continueToLook,
+    ligands: options.ligands,
   });
   const named = explanation ? decisionTabLabel(explanation, runs[index]) : null;
   return `Run ${index + 1}: ${named ?? openedRunFallback(index, runs, details)}`;
@@ -270,6 +273,8 @@ export function HplcApp() {
   const reportLinePercent = useCallback((percent: number | null) => {
     setLinePercent((current) => (current === percent ? current : percent));
   }, []);
+  const [columns, setColumns] = useState<string[]>(() => [...SHEET_COLUMNS]);
+  const [solvents, setSolvents] = useState<string[]>(() => [...MENU_SOLVENTS]);
   const [fillFromFileName, setFillFromFileName] = useState(false);
   const [fileNameNote, setFileNameNote] = useState<string | null>(null);
   const detailsRef = useRef(details);
@@ -304,6 +309,7 @@ export function HplcApp() {
     linePercent,
     pickedPercent,
     holdNext: backwards != null && backwardsChoice !== "continue",
+    ligands: columns,
   });
   if (syncedRuns !== runs) {
     setRuns(syncedRuns);
@@ -323,6 +329,7 @@ export function HplcApp() {
             choice,
             heat: heatChoice,
             continued: continuedSelectivity,
+            ligands: columns,
           }),
           fileName: run.fileName ?? `Run ${index + 1}`,
           points: run.read.chromatogram,
@@ -398,6 +405,7 @@ export function HplcApp() {
         {
           heat: heatChoice,
           continuePastEfficiency: selectivityFlags(count - 1, heatChoice, continuedSelectivity).continuePast,
+          ligands: columns,
         },
       );
       const choice = history.phase === "selectivity" ? history.plan.tempChoice : null;
@@ -423,7 +431,7 @@ export function HplcApp() {
     });
   }
 
-  function chooseNextSolvent(index: number, solventId: string) {
+  function chooseNextSolvent(index: number, solventLabel: string) {
     setRuns((current) => {
       const count = readyPrefix(current);
       const history = planHistory(
@@ -432,24 +440,57 @@ export function HplcApp() {
         {
           heat: heatChoice,
           continuePastEfficiency: selectivityFlags(count - 1, heatChoice, continuedSelectivity).continuePast,
+          ligands: columns,
         },
       );
-      const solvent = solventId ? solventById(solventId) : null;
+      const chart = findSolvent(solventLabel);
       const matched =
-        solvent && history.phase === "selectivity" && history.plan.anchorPercentB != null && history.plan.oldSolvent
-          ? solventChoicePercent(history.plan.anchorPercentB, history.plan.oldSolvent, solventId)
+        chart && history.phase === "selectivity" && history.plan.anchorPercentB != null && history.plan.oldSolvent
+          ? solventChoicePercent(history.plan.anchorPercentB, history.plan.oldSolvent, chart.id)
           : null;
       const copy = current.slice();
       const run = copy[index] ?? emptyRun();
       copy[index] = {
         ...run,
-        solvent: solvent?.label ?? "",
+        solvent: chart?.label ?? solventLabel,
         solventEdited: true,
         percentB: matched ? matched.percentText : "",
         percentEdited: true,
       };
       return copy;
     });
+  }
+
+  function addColumn(name: string) {
+    const trimmed = name.trim().replace(/\s+/g, " ");
+    if (!trimmed || columns.some((item) => columnKey(item) === columnKey(trimmed))) return false;
+    setColumns((current) => [trimmed, ...current]);
+    return true;
+  }
+
+  function removeColumn(name: string) {
+    const key = columnKey(name);
+    setColumns((current) => current.filter((item) => columnKey(item) !== key));
+    setDetails((current) => (columnKey(current.ligand) === key ? { ...current, ligand: "" } : current));
+    setRuns((current) =>
+      current.map((run) => (columnKey(run.ligand) === key ? { ...run, ligand: "" } : run)),
+    );
+  }
+
+  function addSolvent(name: string) {
+    const trimmed = name.trim().replace(/\s+/g, " ");
+    if (!trimmed || solvents.some((item) => solventKey(item) === solventKey(trimmed))) return false;
+    setSolvents((current) => [trimmed, ...current]);
+    return true;
+  }
+
+  function removeSolvent(name: string) {
+    const key = solventKey(name);
+    setSolvents((current) => current.filter((item) => solventKey(item) !== key));
+    setDetails((current) => (solventKey(current.solvent) === key ? { ...current, solvent: "" } : current));
+    setRuns((current) =>
+      current.map((run) => (solventKey(run.solvent) === key ? { ...run, solvent: "" } : run)),
+    );
   }
 
   function patchRun(index: number, patch: Partial<RunState>) {
@@ -564,12 +605,23 @@ export function HplcApp() {
           setNavOpen(false);
         }}
       />
-      {section === "about" || section === "equipment" ? (
+      {section === "about" || section === "equipment" || section === "settings" ? (
       <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 py-6 sm:px-6 sm:py-8">
       <Watermark />
       {section === "about" ? <AboutPanel onOpenNav={() => setNavOpen(true)} /> : null}
       {section === "equipment" ? (
-        <EquipmentPanel onOpenNav={() => setNavOpen(true)} columnRuns={columnRuns} />
+        <EquipmentPanel onOpenNav={() => setNavOpen(true)} columnRuns={columnRuns} ligands={columns} />
+      ) : null}
+      {section === "settings" ? (
+        <SettingsPanel
+          onOpenNav={() => setNavOpen(true)}
+          columns={columns}
+          solvents={solvents}
+          onAddColumn={addColumn}
+          onRemoveColumn={removeColumn}
+          onAddSolvent={addSolvent}
+          onRemoveSolvent={removeSolvent}
+        />
       ) : null}
       </div>
       ) : null}
@@ -629,6 +681,7 @@ export function HplcApp() {
                   heat: heatChoice,
                   continuePastEfficiency: flags.continuePast,
                   continueToLook: flags.continueToLook,
+                  ligands: columns,
                 });
                 const showsLook =
                   explanation?.kind === "retention" && explanation.decision.continueShowsLook === true;
@@ -655,6 +708,7 @@ export function HplcApp() {
                     heat: heatChoice,
                     continuePastEfficiency: flags.continuePast,
                     continueToLook: flags.continueToLook,
+                    ligands: columns,
                   });
                   const look = explanation?.kind === "retention" ? explanation.decision.look : null;
                   if (look?.mode === "between") setEfficiencyChosen(true);
@@ -671,6 +725,7 @@ export function HplcApp() {
                   heat: heatChoice,
                   continuePastEfficiency: flags.continuePast,
                   continueToLook: true,
+                  ligands: columns,
                 });
                 const decision = explanation?.kind === "retention" ? explanation.decision : null;
                 const used = syncedRuns
@@ -722,6 +777,7 @@ export function HplcApp() {
               backwardsChoice={backwardsChoice}
               onBackwardsContinue={() => setBackwardsChoice("continue")}
               onBackwardsRedo={() => setBackwardsChoice("redo")}
+              ligands={columns}
               runTabs={
                 index === shown ? (
                   <div
@@ -743,6 +799,7 @@ export function HplcApp() {
                               choice,
                               heat: heatChoice,
                               continued: continuedSelectivity,
+                              ligands: columns,
                             })}
                           </TabsTrigger>
                         ))}
@@ -767,9 +824,12 @@ export function HplcApp() {
             choice,
             heat: heatChoice,
             continued: continuedSelectivity,
+            ligands: columns,
           })}
           details={detailsForRun(shown, syncedRuns, details)}
           rules={rules}
+          columns={columns}
+          solvents={solvents}
           onDetails={onShownDetails}
           onRules={setRules}
           fileNameFill={
@@ -935,6 +995,7 @@ function RunPane({
   backwardsChoice,
   onBackwardsContinue,
   onBackwardsRedo,
+  ligands,
   runTabs,
 }: {
   index: number;
@@ -973,10 +1034,11 @@ function RunPane({
   backwardsChoice: "continue" | "redo" | null;
   onBackwardsContinue: () => void;
   onBackwardsRedo: () => void;
+  ligands: readonly string[];
   runTabs?: ReactNode;
 }) {
   if (run.afterRetention) {
-    const prior = index > 0 ? explainRun(runs, index - 1, details, checks, { choice, heat }) : null;
+    const prior = index > 0 ? explainRun(runs, index - 1, details, checks, { choice, heat, ligands }) : null;
     return (
       <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border-2 border-solid border-border bg-card lg:flex-row lg:items-stretch">
         <div className="order-2 min-h-0 min-w-0 flex-1 overflow-y-auto p-4 sm:p-5 lg:order-1" data-chromatogram-scroll="">
@@ -993,6 +1055,7 @@ function RunPane({
     heat,
     continuePastEfficiency: flags.continuePast,
     continueToLook: flags.continueToLook,
+    ligands,
   });
   const rows = run.read ? evaluateRun(run.read, checks) : null;
   const next = runs[index + 1];
@@ -1079,8 +1142,10 @@ function RunPane({
                     {selectivity ? (
                       <SelectivityDecisionView
                         plan={selectivity}
-                        solventId={findSolvent(next?.solvent ?? "")?.id ?? selectivity.recommendedSolventId ?? ""}
+                        solventId={next?.solvent || ""}
                         ligand={next?.ligand || selectivity.recommendedLigand || ""}
+                        solvents={solvents}
+                        ligands={columns}
                         onSolvent={onChooseSolvent}
                         onLigand={onChooseLigand}
                         tempPath={tempPath}
@@ -1246,6 +1311,7 @@ function explainRun(
     heat: HeatStart | null;
     continuePastEfficiency?: boolean;
     continueToLook?: boolean;
+    ligands?: readonly string[];
   },
 ): Explanation | null {
   const run = runs[index];
@@ -1257,7 +1323,7 @@ function explainRun(
   const history = planHistory(
     prefix.map((item, itemIndex) => toSelectivityRun(item, itemIndex, details)),
     setupFrom(details, checks),
-    { heat: options.heat, continuePastEfficiency: options.continuePastEfficiency },
+    { heat: options.heat, continuePastEfficiency: options.continuePastEfficiency, ligands: options.ligands },
   );
   if (history.phase === "selectivity") return { kind: "selectivity", plan: history.plan };
   const segment = prefix.slice(history.segmentStart);
@@ -1284,6 +1350,7 @@ function syncNextRun(
     linePercent: number | null;
     pickedPercent: number | null;
     holdNext?: boolean;
+    ligands?: readonly string[];
   },
 ): RunState[] {
   const count = readyPrefix(runs);
@@ -1302,7 +1369,7 @@ function syncNextRun(
   const history = planHistory(
     ready.map((run, index) => toSelectivityRun(run, index, details)),
     setupFrom(details, checks),
-    { heat: options.heat, continuePastEfficiency: options.continuePastEfficiency },
+    { heat: options.heat, continuePastEfficiency: options.continuePastEfficiency, ligands: options.ligands },
   );
   const next = runs[count];
   const prefill = prefillFor(

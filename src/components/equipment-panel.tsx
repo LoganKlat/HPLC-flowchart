@@ -445,9 +445,11 @@ function HplcDiagram({
 export function EquipmentPanel({
   onOpenNav,
   columnRuns,
+  ligands,
 }: {
   onOpenNav: () => void;
   columnRuns: ColumnRunTrace[];
+  ligands: readonly string[];
 }) {
   const [view, setView] = useState<(typeof equipmentTabs)[number]["id"]>("hplc");
   const [hoveredView, setHoveredView] = useState<string | null>(null);
@@ -494,7 +496,7 @@ export function EquipmentPanel({
           <ColumnRetentionAnimation />
         </>
       ) : null}
-      {view === "beads" ? <BeadDiagram /> : null}
+      {view === "beads" ? <BeadDiagram ligands={ligands} /> : null}
       {view === "hplc" ? (
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
       <div className="flex min-w-0 flex-col gap-5">

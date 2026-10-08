@@ -10,7 +10,6 @@ import { Label } from "@/components/ui/label";
 import { parseUserCount, parseUserNumber } from "@/lib/evaluate";
 import { FILE_NAME_CHECKBOX_LABEL, FILE_NAME_STRUCTURE_NOTE } from "@/lib/filename-details";
 import type { RuleInputs, RunDetails } from "@/lib/run-details";
-import { LIGANDS, SOLVENTS } from "@/lib/selectivity";
 
 type FileNameFill = {
   checked: boolean;
@@ -22,6 +21,8 @@ type RunFormProps = {
   title: string;
   details: RunDetails;
   rules: RuleInputs;
+  columns: readonly string[];
+  solvents: readonly string[];
   onDetails: (details: RunDetails) => void;
   onRules: (rules: RuleInputs) => void;
   /** Run 1 only. Later runs omit it. */
@@ -35,9 +36,9 @@ const runNotes = {
   solvent: {
     title: "Solvent",
     note: {
-      does: "The organic solvent in the mix that carries the sample. The choices are ACN, MeOH, and THF.",
-      sets: "The solvent bottles, blended by the pump. This menu records which organic solvent Run 1 uses.",
-      range: "ACN, MeOH, or THF. A name, not a number. The menu only offers those three.",
+      does: "The organic solvent in the mix that carries the sample.",
+      sets: "The solvent bottles, blended by the pump. This menu records which organic solvent Run 1 uses. Settings chooses the list.",
+      range: "The Settings list. A name, not a number. The chart only covers ACN, MeOH, and THF.",
       changes:
         "A solvent change is a selectivity change: peaks can pull apart or change order. The chart %B keeps the retention time similar when the solvent changes. It does not change efficiency by itself.",
     },
@@ -118,8 +119,8 @@ const runNotes = {
     title: "Ligand",
     note: {
       does: "The ligand is the coating bonded on the silica. It is the group the compounds stick to.",
-      sets: "The column coating. This menu records it for Run 1. The Beads tab uses the same list.",
-      range: "C18, C18aq, PFPP, C8, biphenyl, or IBD. A name, not a number. No units.",
+      sets: "The column coating. This menu records it for Run 1. Settings and the Beads tab use the same list.",
+      range: "The Settings list. A name, not a number. No units.",
       changes:
         "The ligand is the coating and is the last selectivity change. Peaks can pull apart or change order. Retention also changes, because a different coating holds compounds more or less strongly. It does not by itself change efficiency.",
     },
@@ -222,7 +223,7 @@ function DetailNote({ explained }: { explained: Explained }) {
 
 const cardTitleClass = "font-heading text-xl! leading-tight font-bold!";
 
-export function RunForm({ title, details, rules, onDetails, onRules, fileNameFill }: RunFormProps) {
+export function RunForm({ title, details, rules, columns, solvents, onDetails, onRules, fileNameFill }: RunFormProps) {
   function setDetail<K extends keyof RunDetails>(key: K, value: RunDetails[K]) {
     onDetails({ ...details, [key]: value });
   }
@@ -337,7 +338,7 @@ export function RunForm({ title, details, rules, onDetails, onRules, fileNameFil
             note={<DetailNote explained={runNotes.solvent} />}
             value={details.solvent}
             placeholder="Choose a solvent"
-            options={SOLVENTS.map((solvent) => ({ value: solvent.label, label: solvent.label }))}
+            options={solvents.map((solvent) => ({ value: solvent, label: solvent }))}
             onChange={(value) => setDetail("solvent", value)}
           />
           <TextField
@@ -406,7 +407,7 @@ export function RunForm({ title, details, rules, onDetails, onRules, fileNameFil
             note={<DetailNote explained={runNotes.ligand} />}
             value={details.ligand}
             placeholder="select a ligand"
-            options={LIGANDS.map((name) => ({ value: name, label: name }))}
+            options={columns.map((name) => ({ value: name, label: name }))}
             onChange={(value) => setDetail("ligand", value)}
           />
           <ChoiceField

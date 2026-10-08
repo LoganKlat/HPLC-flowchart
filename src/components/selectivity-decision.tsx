@@ -1,7 +1,8 @@
 import { decisionBesideClass, decisionUnderClass, nextChangeValueClass } from "@/components/decision-layout";
 import { Button } from "@/components/ui/button";
 import { selectivityChangeLabel } from "@/lib/change-label";
-import { LIGANDS, SOLVENTS, chartX, findSolvent, type SelectivityPlan, type TempPath } from "@/lib/selectivity";
+import { chartX, findSolvent, type SelectivityPlan, type TempPath } from "@/lib/selectivity";
+import { CHART_SOLVENT_NOTE } from "@/lib/solvent-menu";
 import { PERCENT_B_SENTENCE, SELECTIVITY_ORDER } from "@/lib/setting-kind";
 
 const fieldClass =
@@ -11,6 +12,8 @@ export function SelectivityDecisionView({
   plan,
   solventId,
   ligand,
+  solvents,
+  ligands,
   onSolvent,
   onLigand,
   tempPath,
@@ -19,21 +22,21 @@ export function SelectivityDecisionView({
   plan: SelectivityPlan;
   solventId: string;
   ligand: string;
+  solvents: readonly string[];
+  ligands: readonly string[];
   onSolvent: (id: string) => void;
   onLigand: (name: string) => void;
   tempPath: TempPath | null;
   onTempPath: (path: TempPath) => void;
 }) {
-  const ligandChoices = (LIGANDS as readonly string[]).includes(ligand)
-    ? [...LIGANDS]
-    : ligand.trim()
-      ? [ligand, ...LIGANDS]
-      : [...LIGANDS];
+  const ligandChoices = [...ligands];
+  const solventChoices = [...solvents];
   const choice = plan.tempChoice;
   const recommendedPath = choice?.other ?? "solvent";
   const showSolvent = plan.showSolventChoices || (choice != null && tempPath === "solvent");
   const showLigand = plan.showLigandChoices || (choice != null && tempPath === "ligand");
-  const solventName = findSolvent(solventId)?.label ?? "";
+  const solventName = findSolvent(solventId)?.label ?? solventId;
+  const chartSolvent = findSolvent(solventId);
   const label = selectivityChangeLabel(plan, { tempPath, solvent: solventName, ligand });
 
   return (
@@ -111,16 +114,21 @@ export function SelectivityDecisionView({
             <select
               id="solvent-choice"
               className={fieldClass}
-              value={solventId}
+              value={solventChoices.includes(solventId) ? solventId : ""}
               onChange={(event) => onSolvent(event.target.value)}
             >
               <option value="">Choose a solvent</option>
-              {SOLVENTS.map((solvent) => (
-                <option key={solvent.id} value={solvent.id}>
-                  {solvent.label}
+              {solventChoices.map((solvent) => (
+                <option key={solvent} value={solvent}>
+                  {solvent}
                 </option>
               ))}
             </select>
+            {solventId.trim() && !chartSolvent ? (
+              <p id="solvent-chart-note" className="text-sm leading-snug text-[#144237]">
+                {CHART_SOLVENT_NOTE}
+              </p>
+            ) : null}
           </label>
         ) : null}
         {showLigand ? (

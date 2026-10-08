@@ -306,7 +306,7 @@ export function ChromatogramChart({
             fill="none"
             stroke="#7d746c"
             strokeOpacity="0.55"
-            strokeWidth="1.35"
+            strokeWidth="0.68"
           />
         ) : null}
         <path d={path} fill="none" stroke="#0f6b56" strokeWidth="1.7" />

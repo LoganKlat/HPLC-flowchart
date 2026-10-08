@@ -92,7 +92,7 @@ function ligandNote(name: (typeof LIGANDS)[number] | undefined): FunctionNote {
   return {
     does: `The ligand is the coating bonded on the silica.${picked} The mark on each ligand spot changes with the ligand. A C18 tail is longer than a C8 tail. Biphenyl uses a ring-like mark.`,
     sets: "The column coating. The ligand menu on this tab sets the mark. The Ligand field on Run 1 records the same choice.",
-    range: "The choices are C18, C18aq, PFPP, C8, biphenyl, and IBD. A name, not a number. No units.",
+    range: "The column list on Settings. A name, not a number. No units.",
     changes:
       "The ligand is the coating and is the last selectivity change. Peaks can pull apart or change order. Retention also changes, because a different coating holds compounds more or less strongly. It does not by itself change efficiency (how narrow the peaks are).",
   };
@@ -313,7 +313,7 @@ function BeadDrawing({
   );
 }
 
-export function BeadDiagram() {
+export function BeadDiagram({ ligands = LIGANDS }: { ligands?: readonly string[] }) {
   const [kind, setKind] = useState<BeadKind>("porous");
   const [ligand, setLigand] = useState("");
   const [carbonLoad, setCarbonLoad] = useState(10);
@@ -511,9 +511,9 @@ export function BeadDiagram() {
           </label>
           <ChoiceSelect
             id="bead-ligand"
-            value={ligand}
+            value={ligands.includes(ligand) ? ligand : ""}
             placeholder="select a ligand"
-            options={LIGANDS.map((name) => ({ value: name, label: name }))}
+            options={ligands.map((name) => ({ value: name, label: name }))}
             onChange={setLigand}
           />
           {sentence ? <p className="text-sm text-muted-foreground">{ligandSentences[sentence]}</p> : null}

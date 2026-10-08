@@ -286,10 +286,10 @@ function LogKGraph({ fit }: { fit: MinimumFit }) {
   minY -= spanY * 0.22;
   maxY += spanY * 0.28;
   const width = 640;
-  const height = 280;
+  const height = 300;
   const left = 52;
   const right = 16;
-  const top = 28;
+  const top = 48;
   const bottom = 36;
   const plotW = width - left - right;
   const plotH = height - top - bottom;
@@ -349,10 +349,10 @@ function LogKGraph({ fit }: { fit: MinimumFit }) {
         <text x={sx(mark.x)} y={sy(mark.y) - 10} textAnchor="middle" fill="#c2410c" fontSize="12">
           {formatPercentB(mark.x)}% B
         </text>
-        <text x={left + 8} y={top + 16} fill="#144237" fontSize="13">
+        <text id="min-b-equation" x={left + plotW} y={16} textAnchor="end" fill="#144237" fontSize="13">
           {equation}
         </text>
-        <text x={left + 8} y={top + 34} fill="#144237" fontSize="13">
+        <text id="min-b-r2" x={left + plotW} y={34} textAnchor="end" fill="#144237" fontSize="13">
           {r2}
         </text>
       </svg>

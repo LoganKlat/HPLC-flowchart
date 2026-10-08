@@ -1,4 +1,5 @@
 import { resolutionForDecision } from "@/lib/evaluate";
+import { CHART_SOLVENT_NOTE } from "@/lib/solvent-menu";
 import { COATING_SENTENCE, PERCENT_B_SENTENCE, SELECTIVITY_ORDER } from "@/lib/setting-kind";
 import { carryForwardIndex, decideRetention, formatPercentB, roundTargetPercent, type RetentionRules, type RetentionSample } from "@/lib/retention";
 
@@ -253,9 +254,9 @@ export function solventChoicePercent(
   return { percentText: row.percentText, capped: row.capped };
 }
 
-export function recommendLigand(tried: string[]): string | null {
+export function recommendLigand(tried: string[], ligands: readonly string[] = LIGANDS): string | null {
   const used = new Set(tried.map(ligandKey).filter((key) => key.length > 0));
-  return LIGANDS.find((name) => !used.has(ligandKey(name))) ?? null;
+  return ligands.find((name) => !used.has(ligandKey(name))) ?? null;
 }
 
 export function assessHappy(
@@ -527,8 +528,9 @@ export type HeatStart = {
 export function planHistory(
   runs: SelectivityRun[],
   setup: SelectivitySetup,
-  options?: { heat?: HeatStart | null; continuePastEfficiency?: boolean },
+  options?: { heat?: HeatStart | null; continuePastEfficiency?: boolean; ligands?: readonly string[] },
 ): HistoryPlan {
+  const ligands = options?.ligands ?? LIGANDS;
   const tried: string[] = [];
   if (setup.originalLigand.trim()) tried.push(setup.originalLigand);
   const latest = runs[runs.length - 1];
@@ -578,7 +580,7 @@ export function planHistory(
       }
     }
     if (finishedOffset < 0) {
-      if (continuePast) return heatLatest(runs, setup, tried);
+      if (continuePast) return heatLatest(runs, setup, tried, ligands);
       return { phase: "retention", segmentStart: start };
     }
     if (peaksMatchSpec(runs[runs.length - 1], setup) && !continuePast) {
@@ -594,6 +596,7 @@ export function planHistory(
       usedPercentB: percentsOf(window),
       setup,
       triedLigands: tried,
+      ligands,
       carryRunNumber: carryIndex == null ? null : start + carryIndex + 1,
       firstLaterRunNumber: start + finishedOffset + 2,
     });
@@ -619,13 +622,18 @@ export function planHistory(
       start = nextStart;
       continue;
     }
-    if (continuePast) return heatLatest(runs, setup, tried);
+    if (continuePast) return heatLatest(runs, setup, tried, ligands);
     return { phase: "retention", segmentStart: nextStart };
   }
   return { phase: "retention", segmentStart: start };
 }
 
-function heatLatest(runs: SelectivityRun[], setup: SelectivitySetup, tried: string[]): HistoryPlan {
+function heatLatest(
+  runs: SelectivityRun[],
+  setup: SelectivitySetup,
+  tried: string[],
+  ligands: readonly string[],
+): HistoryPlan {
   const index = runs.length - 1;
   const carry = runs[index];
   if (!carry || carry.percentB == null) return { phase: "retention", segmentStart: Math.max(0, index) };
@@ -636,6 +644,7 @@ function heatLatest(runs: SelectivityRun[], setup: SelectivitySetup, tried: stri
     usedPercentB: percentsOf(runs),
     setup,
     triedLigands: tried,
+    ligands,
     carryRunNumber: index + 1,
     firstLaterRunNumber: index + 2,
   });
@@ -693,6 +702,7 @@ function walkSelectivity(args: {
   usedPercentB: number[];
   setup: SelectivitySetup;
   triedLigands: string[];
+  ligands: readonly string[];
   carryRunNumber: number | null;
   firstLaterRunNumber: number;
 }): WalkResult {
@@ -763,6 +773,7 @@ function walkSelectivity(args: {
           setup: args.setup,
           ambient,
           triedLigands: args.triedLigands,
+          ligands: args.ligands,
         }),
       };
     }
@@ -771,7 +782,7 @@ function walkSelectivity(args: {
 
   return {
     kind: "plan",
-    plan: ligandPlan({ setup: args.setup, ambient, triedLigands: args.triedLigands }),
+    plan: ligandPlan({ setup: args.setup, ambient, triedLigands: args.triedLigands, ligands: args.ligands }),
   };
 }
 
@@ -962,7 +973,7 @@ function solventPlan(args: {
   const oldSentence = typed ? `The old solvent is ${oldName} at ${formatPercentB(anchorPercent)}% B.` : "";
   const readings = nomograph
     ? `The chart reads ${nomograph[0].label} ${nomograph[0].percentText}% B, ${nomograph[1].label} ${nomograph[1].percentText}% B, and ${nomograph[2].label} ${nomograph[2].percentText}% B.`
-    : "The chart covers only MeOH, ACN, and THF.";
+    : CHART_SOLVENT_NOTE;
   const cap = nomograph?.some((entry) => entry.capped)
     ? " A reading past a scale’s 100% end is held at 100. That is the strongest the pump can mix."
     : "";
@@ -998,8 +1009,9 @@ function ligandPlan(args: {
   setup: SelectivitySetup;
   ambient: Ambient;
   triedLigands: string[];
+  ligands: readonly string[];
 }): SelectivityPlan {
-  const unused = recommendLigand(args.triedLigands);
+  const unused = recommendLigand(args.triedLigands, args.ligands);
   const triedText = uniqueLabels(args.triedLigands);
   if (!unused) {
     return blockedPlan(
