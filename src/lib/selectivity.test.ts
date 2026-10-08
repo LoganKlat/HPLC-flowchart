@@ -3,6 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { evaluateRun, resolutionForDecision } from "@/lib/evaluate";
 import { readLabFile } from "@/lib/lab-file";
+import { selectivityChangeLabel } from "@/lib/change-label";
 import { carryForwardIndex, decideRetention } from "@/lib/retention";
 import {
   adjustedPercentB,
@@ -177,12 +178,15 @@ describe("selectivity checks", () => {
     })).toBeNull();
   });
 
-  it("asks once about efficiency before the minimum %B when the peak count matches", () => {
+  it("recommends Run at 40°C when the peak count matches and resolution is under the specification", () => {
     const ambient = readLabFile(readFileSync(path.join(process.cwd(), "fixtures/selectivity/GR41-09-40-ambient.csv")));
     expect(ambient.peakCount).toBe(7);
     expect(ambient.minResolutionExcludingFirst).toBeCloseTo(0.324, 3);
     const sample = {
       percentB: 40,
+      temperatureC: 25,
+      solvent: "ACN",
+      ligand: "C18",
       peakCount: ambient.peakCount,
       lastPeakTimeMin: ambient.lastPeakTimeMin,
       firstPeakTimeMin: ambient.firstPeakTimeMin,
@@ -194,27 +198,25 @@ describe("selectivity checks", () => {
       lastPeakTimeMin: 15,
       minResolution: 1,
       maxBackPressurePsi: 4000,
+      ambientTemperatureC: 25,
+      originalSolvent: "ACN",
+      originalLigand: "C18",
     };
     const decision = decideRetention([sample], rules);
-    expect(decision.status).toBe("ask");
-    expect(decision.efficiencyNow?.why).toBe(
-      [
-        "Peaks: 7. The specification is 7. Met.",
-        "Minimum resolution: 0.324. Under the specification of 1.000.",
-        "Last peak: 11.593 min. The specification is 15 min. Met.",
-        "Back-pressure: 1516.2 psi. Under the specification of 4000 psi. Met.",
-        "The peaks are there, but the worst pair is still too close. Not every specification is met. The next change is meant to pull them apart. Efficiency and gradient may still bring the resolution up to the specification.",
-      ].join("\n\n"),
-    );
-    expect(decision.efficiencyNow?.question).toBe(
-      "The peaks are there, but the worst pair is still too close. Consider whether efficiency and gradient can still bring the resolution up to the specification. Minimum resolution: 0.324. Under the specification of 1.000. The next change is meant to pull them apart. Move on to efficiency and be done with selectivity?",
-    );
-    expect(decision.efficiencyNow?.why).not.toContain("you set");
-    expect(decision.efficiencyNow?.why).not.toContain("benchmark");
-    const shown = decideRetention([sample], rules, { declinedEfficiencyNow: true });
-    expect(shown.reason).toBe("cannot-calculate");
-    expect(shown.nextPercentB).toBeNull();
-    expect(shown.nextChange).toContain("cannot be calculated");
+    expect(decision.status).not.toBe("ask");
+    expect(decision.efficiencyNow ?? null).toBeNull();
+    const history = planHistory([sample], rules);
+    expect(history.phase).toBe("selectivity");
+    if (history.phase !== "selectivity") return;
+    expect(history.plan.step).toBe("temp-40");
+    expect(selectivityChangeLabel(history.plan)).toBe("Run at 40°C");
+    expect(history.plan.why).toContain("The peaks are there and the worst pair is still under the specification.");
+    expect(history.plan.why).toContain("Peaks: 7. The specification is 7.");
+    expect(history.plan.why.split("Peaks:").length - 1).toBe(1);
+    expect(history.plan.why.split("Minimum resolution:").length - 1).toBe(1);
+    expect(history.plan.why).not.toMatch(/then 60/i);
+    expect(history.plan.why.toLowerCase()).not.toContain("coating");
+    expect(history.plan.why.toLowerCase()).not.toContain("other solvent");
   });
 
   it("does not ask just because a short run has 7 peaks", () => {
@@ -378,7 +380,7 @@ describe("selectivity plan", () => {
     expect(history.plan.prefill?.percentB).not.toBe("75");
   });
 
-  it("does not offer 60°C once the latest run already has the peak count", () => {
+  it("stays on 60°C when the peak count matches and the resolution is still under", () => {
     const history = planHistory(
       [
         run({ peakCount: 8, minResolutionExcludingFirst: 0.4 }),
@@ -388,7 +390,12 @@ describe("selectivity plan", () => {
       setup,
       { heat: { carryIndex: 0, seriesLength: 1 } },
     );
-    expect(history.phase).toBe("retention");
+    expect(history.phase).toBe("selectivity");
+    if (history.phase !== "selectivity") return;
+    expect(history.plan.step).toBe("temp-60");
+    expect(history.plan.prefill).toMatchObject({ percentB: "80", temperature: "60" });
+    expect(history.plan.why.toLowerCase()).not.toContain("coating");
+    expect(history.plan.why.toLowerCase()).not.toContain("other solvent");
   });
 
   it("changes the coating, returns to 100% B, and does not repeat a coating", () => {

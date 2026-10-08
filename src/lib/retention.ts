@@ -1,5 +1,5 @@
 import { formatDecimal, resolutionForDecision } from "@/lib/evaluate";
-import { PERCENT_B_SENTENCE, SELECTIVITY_ORDER, TEMPERATURE_SENTENCE, selectivitySteps } from "@/lib/setting-kind";
+import { PERCENT_B_SENTENCE, SELECTIVITY_ORDER, TEMPERATURE_SENTENCE } from "@/lib/setting-kind";
 import type { PeakMeasurement } from "@/lib/lab-file";
 
 /**
@@ -115,6 +115,8 @@ export type RetentionFit = {
   catalog: FitCatalogRun[];
   /** Last-peak time in the specification, in minutes. The target logK aims at this. */
   specifiedTimeMin: number;
+  /** Q-test result for the t0 peaks. Shown once in the calculation. */
+  qtestSentence: string;
   /** %B values already uploaded. The rounding rule reads this list. */
   usedPercentB: number[];
   m: number;
@@ -177,6 +179,8 @@ export type RetentionDecision = {
   nextChange: string;
   /** The step after the next one, including why the order is that way. */
   following?: string | null;
+  /** Peaks, pressure, and last-peak time for a calculated %B. */
+  brief?: string[] | null;
   why: string;
   fit: RetentionFit | null;
   /** Two allowed %B values when a 10-point drop and the logK line are both allowed. */
@@ -543,7 +547,7 @@ function holdLate(sample: RetentionSample, rules: CompleteRules, judged: EqualJu
 function minimumPercentOnce(
   samples: RetentionSample[],
   rules: CompleteRules,
-  choice: RetentionChoice | undefined,
+  _choice: RetentionChoice | undefined,
 ): RetentionDecision {
   const current = samples[samples.length - 1];
   const calculated = calculatePercentB(samples, rules, "equal");
@@ -568,34 +572,7 @@ function minimumPercentOnce(
   } else {
     decision = calculated;
   }
-  if (choice?.declinedEfficiencyNow) return decision;
-  const judged = judgeEqualPeaks(current, rules);
-  return {
-    ...decision,
-    status: "ask",
-    efficiencyNow: {
-      question: efficiencyNowQuestion(judged.resolution, rules.minResolution!),
-      why: [...ruleLines(current, rules, judged), resolutionGapSentence(judged)].join("\n\n"),
-      steps: selectivitySteps(judged.resolution, rules.minResolution),
-    },
-  };
-}
-
-function resolutionGapSentence(judged: EqualJudgment): string {
-  const close =
-    judged.resolution == null || !Number.isFinite(judged.resolution)
-      ? "The peaks are there, but there is no resolution number for the worst pair, so it is not known to meet the specification."
-      : "The peaks are there, but the worst pair is still too close.";
-  return `${close} Not every specification is met. The next change is meant to pull them apart. Efficiency and gradient may still bring the resolution up to the specification.`;
-}
-
-function efficiencyNowQuestion(measured: number | null, spec: number): string {
-  const shown = measured == null || !Number.isFinite(measured) ? "not in this file" : formatResolution(measured);
-  const close =
-    measured == null || !Number.isFinite(measured)
-      ? "The peaks are there, but there is no resolution number for the worst pair."
-      : "The peaks are there, but the worst pair is still too close.";
-  return `${close} Consider whether efficiency and gradient can still bring the resolution up to the specification. Minimum resolution: ${shown}. Under the specification of ${formatResolution(spec)}. The next change is meant to pull them apart. Move on to efficiency and be done with selectivity?`;
+  return decision;
 }
 
 function ruleLines(sample: RetentionSample, rules: CompleteRules, judged: EqualJudgment): string[] {
@@ -962,6 +939,7 @@ function calculatePercentB(
     excluded: picked.excluded,
     catalog: catalogRuns(samples, rows),
     specifiedTimeMin: rules.lastPeakTimeMin,
+    qtestSentence: qtestSentence(samples, picked.checks),
     usedPercentB,
     m: lineFit.m,
     c: lineFit.c,
@@ -992,8 +970,34 @@ function calculatePercentB(
     nextChange,
     following: SELECTIVITY_ORDER,
     why,
+    brief: briefLines(current, rules),
     fit,
   };
+}
+
+function briefLines(sample: RetentionSample, rules: CompleteRules): string[] {
+  const peaks =
+    sample.peakCount == null
+      ? "Peaks: not in this file."
+      : `Peaks: ${formatCount(sample.peakCount)}. The specification is ${formatCount(rules.requiredPeaks)}.`;
+  const pressure =
+    sample.maxBackPressurePsi == null
+      ? "Back-pressure: not in this file."
+      : `Back-pressure: ${formatDecimal(sample.maxBackPressurePsi, 1)} psi. The specification is ${formatTypedPressure(rules.maxBackPressurePsi)} psi.`;
+  const last =
+    sample.lastPeakTimeMin == null
+      ? "Last peak: not in this file."
+      : `Last peak: ${formatMinutes(sample.lastPeakTimeMin)} min. The set time is ${formatTypedMinutes(rules.lastPeakTimeMin)} min.`;
+  return [peaks, pressure, last];
+}
+
+export const MINIMUM_PERCENT_SENTENCE =
+  "Reducing %B increases retention. Instead of dropping another 10%, the page calculates the %B that brings the last peak closer to the set time.";
+
+function qtestSentence(samples: RetentionSample[], checks: T0Check[]): string {
+  const leftOut = checks.filter((check) => check.far);
+  if (leftOut.length === 0) return "The t0 peaks passed the Q-test.";
+  return qTestLeftOutSentence(samples, leftOut);
 }
 
 function situationSentences(samples: RetentionSample[], rules: CompleteRules): string[] {
@@ -1401,32 +1405,115 @@ export function refitMinimumPercent(
   };
 }
 
-/** Plain sentences and the arithmetic for the runs on the line now. */
-export function minimumPercentNote(fit: MinimumFit, specifiedTimeMin: number): string[] {
-  const points = fit.rows.map((row) => {
-    const t0 = formatMinutes(row.t0);
-    const last = formatMinutes(row.tR);
-    return `Run ${row.runNumber} at ${formatPercentB(row.percentB)}% B gives one point. Its t0 is ${t0} min and its last peak is ${last} min, so k = (${last} − ${t0}) / ${t0} = ${formatCalc(row.k, 3)} and logK = ${formatCalc(row.logK, 3)}.`;
-  });
-  const targetT0 = formatMinutes(fit.t0Average);
+export function minimumPercentHeading(percent: number): string {
+  return `Why ${formatPercentB(percent)}% B is recommended`;
+}
+
+/** Short calculation for the runs on the line now. The Q-test sentence stays the one from the starting line. */
+export function minimumPercentNote(
+  fit: MinimumFit,
+  specifiedTimeMin: number,
+  qtest = "The t0 peaks passed the Q-test.",
+): string[] {
   const spec = formatTypedMinutes(specifiedTimeMin);
   const logKText = formatCalc(fit.logKTarget, 6);
   const mText = formatSigned(fit.m, 6);
   const cText = formatSigned(fit.c, 6);
   const rawText = formatCalc(fit.rawPercentB, 3);
-  let rounded = `The page recommends ${formatPercentB(fit.nextPercentB)}% B.`;
-  if (fit.clamped === "high") {
-    rounded += " The calculated value was above 100, so it is held at 100.";
-  } else if (fit.clamped === "low") {
-    rounded += " The calculated value was below 0, so it is held at 0.";
-  }
+  const targetT0 = formatMinutes(fit.t0Average);
   return [
-    "t0 is the first peak’s retention time, in minutes. For the last peak, k = (last peak time − t0) / t0. k is how many t0-lengths the last peak sits past the unretained peak. logK is the base-10 log of k.",
-    points.join(" "),
-    `Those points fall close to a straight line, logK = m × %B + c. m = ${mText} and c = ${cText}.`,
-    `The logK we substitute is not from a run. It is the logK that would put the last peak at the specified time of ${spec} min. The t0 for that target is the average t0 of the runs in the line, ${targetT0} min. k = (${spec} − ${targetT0}) / ${targetT0} = ${formatCalc(fit.kTarget, 3)}, then logK = log10(k) = ${logKText}.`,
-    `%B = (that logK − c) / m = (${logKText} − ${cText}) / ${mText} = ${rawText}. ${rounded}`,
+    `${qtest} ${calculationUses(fit.rows)}`,
+    "k = (tR − t0) / t0, then logK = log10(k).",
+    `${lineEquation(fit.m, fit.c)}.`,
+    `The target logK is ${logKText} for a last peak at ${spec} min. The average t0 of the runs on the line is ${targetT0} min.`,
+    `%B = (${logKText} − ${cText}) / ${mText} = ${rawText}.`,
   ];
+}
+
+function calculationUses(rows: readonly { runNumber: number; percentB: number }[]): string {
+  const labels = rows.map((row) => `Run ${row.runNumber} at ${formatPercentB(row.percentB)}% B`);
+  if (labels.length === 0) return "The calculation uses no runs.";
+  if (labels.length === 1) return `The calculation uses ${labels[0]}.`;
+  const last = labels[labels.length - 1];
+  return `The calculation uses ${labels.slice(0, -1).join(", ")} and ${last}.`;
+}
+
+export type BackwardsRun = {
+  percentB: number | null;
+  lastPeakTimeMin: number | null;
+  temperatureC?: number | string | null;
+  solvent?: string | null;
+  ligand?: string | null;
+};
+
+export type BackwardsPair = {
+  higherPercentB: number;
+  higherLastMin: number;
+  lowerPercentB: number;
+  lowerLastMin: number;
+};
+
+/** A lower %B whose last peak is shorter than a higher %B already on the page, under the same conditions. */
+export function findBackwardsRetention(runs: readonly BackwardsRun[]): BackwardsPair | null {
+  const groups = new Map<string, { percentB: number; lastPeakTimeMin: number }[]>();
+  for (const run of runs) {
+    if (run.percentB == null || run.lastPeakTimeMin == null) continue;
+    if (!Number.isFinite(run.percentB) || !Number.isFinite(run.lastPeakTimeMin)) continue;
+    const key = backwardsKey(run);
+    const list = groups.get(key) ?? [];
+    list.push({ percentB: run.percentB, lastPeakTimeMin: run.lastPeakTimeMin });
+    groups.set(key, list);
+  }
+  let best: BackwardsPair | null = null;
+  let bestGap = 0;
+  for (const list of groups.values()) {
+    for (let i = 0; i < list.length; i++) {
+      for (let j = 0; j < list.length; j++) {
+        if (i === j) continue;
+        const higher = list[i];
+        const lower = list[j];
+        if (!(higher.percentB > lower.percentB + 1e-9)) continue;
+        if (!(higher.lastPeakTimeMin > lower.lastPeakTimeMin + 1e-6)) continue;
+        const gap = higher.lastPeakTimeMin - lower.lastPeakTimeMin;
+        if (gap > bestGap) {
+          bestGap = gap;
+          best = {
+            higherPercentB: higher.percentB,
+            higherLastMin: higher.lastPeakTimeMin,
+            lowerPercentB: lower.percentB,
+            lowerLastMin: lower.lastPeakTimeMin,
+          };
+        }
+      }
+    }
+  }
+  return best;
+}
+
+export function backwardsWhy(pair: BackwardsPair): string {
+  const higher = formatPercentB(pair.higherPercentB);
+  const lower = formatPercentB(pair.lowerPercentB);
+  return `This is unexpected. An error likely occurred. The ${higher}% B run’s last peak is at ${formatMinutes(pair.higherLastMin)} min, and the ${lower}% B run’s last peak is at ${formatMinutes(pair.lowerLastMin)} min. A lower %B should hold the compounds longer.`;
+}
+
+export const BACKWARDS_REDO =
+  "Replace these runs so the last peak gets longer as %B goes down.";
+
+function backwardsKey(run: BackwardsRun): string {
+  return `${backwardsTemperature(run.temperatureC)}|${(run.solvent ?? "").trim().toLowerCase()}|${(run.ligand ?? "").trim().toLowerCase()}`;
+}
+
+function backwardsTemperature(value: number | string | null | undefined): string {
+  if (value == null) return "ambient";
+  if (typeof value === "number") {
+    if (!Number.isFinite(value) || Math.abs(value - 25) < 0.51) return "ambient";
+    return String(Math.round(value));
+  }
+  const text = value.trim().toLowerCase().replace(/°\s*c$/i, "");
+  if (!text || text === "ambient" || text === "amb" || text === "25") return "ambient";
+  const parsed = Number(text);
+  if (Number.isFinite(parsed) && Math.abs(parsed - 25) < 0.51) return "ambient";
+  return text;
 }
 
 function formatCalc(value: number, digits: number): string {

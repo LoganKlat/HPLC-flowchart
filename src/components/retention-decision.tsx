@@ -5,9 +5,12 @@ import { NO_CHANGE_YET, retentionChangeLabel } from "@/lib/change-label";
 import { decisionBesideClass, decisionUnderClass, nextChangeValueClass } from "@/components/decision-layout";
 import {
   formatPercentB,
+  formatRSquared,
+  lineEquation,
+  MINIMUM_PERCENT_SENTENCE,
+  minimumPercentHeading,
   minimumPercentNote,
   refitMinimumPercent,
-  type FitCatalogRun,
   type MinimumFit,
   type RetentionDecision,
   type RetentionFit,
@@ -72,20 +75,11 @@ export function RetentionDecisionView({
         ) : null}
       </section>
       <section id="min-b-note" className={`rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10 ${decisionUnderClass}`}>
-        <h2 className="font-heading text-base">Why</h2>
-        <div className="mt-1 flex flex-col gap-2 text-sm leading-relaxed text-foreground">
-          {whyParagraphs(decision.why).map((paragraph, index) => (
-            <p key={index}>{paragraph}</p>
-          ))}
-          {decision.bChoices && decision.bChoices.length > 1
-            ? decision.bChoices.map((choice) => <p key={choice.id}>{choice.sentence}</p>)
-            : null}
-        </div>
         {fit ? (
           <MinimumPercentFit
             fit={fit}
+            brief={decision.brief ?? []}
             selected={selected}
-            overridden={overridden}
             solved={solved}
             onToggle={(runNumber) =>
               setSelected((current) =>
@@ -93,7 +87,19 @@ export function RetentionDecisionView({
               )
             }
           />
-        ) : null}
+        ) : (
+          <>
+            <h2 className="font-heading text-base">Why</h2>
+            <div className="mt-1 flex flex-col gap-2 text-sm leading-relaxed text-foreground">
+              {whyParagraphs(decision.why).map((paragraph, index) => (
+                <p key={index}>{paragraph}</p>
+              ))}
+              {decision.bChoices && decision.bChoices.length > 1
+                ? decision.bChoices.map((choice) => <p key={choice.id}>{choice.sentence}</p>)
+                : null}
+            </div>
+          </>
+        )}
       </section>
     </div>
   );
@@ -176,32 +182,47 @@ function isOtherStage(paragraph: string): boolean {
 
 function MinimumPercentFit({
   fit,
+  brief,
   selected,
-  overridden,
   solved,
   onToggle,
 }: {
   fit: RetentionFit;
+  brief: string[];
   selected: number[];
-  overridden: boolean;
   solved: MinimumFit | null;
   onToggle: (runNumber: number) => void;
 }) {
   const chosen = new Set(selected);
+  const percent = solved?.nextPercentB ?? fit.nextPercentB;
   return (
-    <div id="min-b-fit" className="mt-4 flex flex-col gap-4">
-      <div className="flex flex-col gap-2 text-sm leading-relaxed text-foreground">
-        {overridden ? <p>{selectedLine(fit.catalog, selected)}</p> : null}
-        {solved ? (
-          minimumPercentNote(solved, fit.specifiedTimeMin).map((paragraph, index) => <p key={index}>{paragraph}</p>)
-        ) : (
-          <p>
-            {selected.length < 2
-              ? "Fewer than two runs are selected, so the line cannot be drawn yet."
-              : "The line cannot be drawn yet. At least two selected runs need a %B and a last peak after the t0 peak."}
-          </p>
-        )}
+    <div id="min-b-fit" className="flex flex-col gap-4">
+      <div>
+        <h2 className="font-heading text-base">{minimumPercentHeading(percent)}</h2>
+        <div className="mt-1 flex flex-col gap-2 text-sm leading-relaxed text-foreground">
+          {brief.map((line) => (
+            <p key={line}>{line}</p>
+          ))}
+          <p>{MINIMUM_PERCENT_SENTENCE}</p>
+        </div>
       </div>
+      <div>
+        <h3 className="font-heading text-sm">Calculation</h3>
+        <div className="mt-1 flex flex-col gap-2 text-sm leading-relaxed text-foreground">
+          {solved ? (
+            minimumPercentNote(solved, fit.specifiedTimeMin, fit.qtestSentence).map((paragraph) => (
+              <p key={paragraph}>{paragraph}</p>
+            ))
+          ) : (
+            <p>
+              {selected.length < 2
+                ? "Fewer than two runs are selected, so the line cannot be drawn yet."
+                : "The line cannot be drawn yet. At least two selected runs need a %B and a last peak after the t0 peak."}
+            </p>
+          )}
+        </div>
+      </div>
+      {solved ? <LogKGraph fit={solved} /> : null}
       <div className="overflow-x-auto">
         <table id="min-b-runs" className="w-full min-w-[44rem] border-collapse text-left text-sm">
           <caption className="pb-2 text-left font-medium text-foreground">
@@ -249,17 +270,94 @@ function MinimumPercentFit({
   );
 }
 
-function selectedLine(catalog: readonly FitCatalogRun[], selected: readonly number[]): string {
-  const chosen = new Set(selected);
-  const labels = catalog
-    .filter((run) => chosen.has(run.runNumber))
-    .map((run) =>
-      run.percentB == null ? `Run ${run.runNumber}` : `Run ${run.runNumber} at ${formatPercentB(run.percentB)}% B`,
-    );
-  if (labels.length === 0) return "The line is using the runs you selected. None are selected.";
-  if (labels.length === 1) return `The line is using the runs you selected: ${labels[0]}.`;
-  const last = labels[labels.length - 1];
-  return `The line is using the runs you selected: ${labels.slice(0, -1).join(", ")} and ${last}.`;
+function LogKGraph({ fit }: { fit: MinimumFit }) {
+  const points = fit.rows.map((row) => ({ x: row.percentB, y: row.logK, run: row.runNumber }));
+  const mark = { x: fit.rawPercentB, y: fit.logKTarget };
+  const xs = [...points.map((point) => point.x), mark.x];
+  const ys = [...points.map((point) => point.y), mark.y];
+  let minX = Math.min(...xs);
+  let maxX = Math.max(...xs);
+  let minY = Math.min(...ys);
+  let maxY = Math.max(...ys);
+  const spanX = Math.max(1, maxX - minX);
+  const spanY = Math.max(0.05, maxY - minY);
+  minX -= spanX * 0.18;
+  maxX += spanX * 0.12;
+  minY -= spanY * 0.22;
+  maxY += spanY * 0.28;
+  const width = 640;
+  const height = 280;
+  const left = 52;
+  const right = 16;
+  const top = 28;
+  const bottom = 36;
+  const plotW = width - left - right;
+  const plotH = height - top - bottom;
+  const sx = (value: number) => left + ((value - minX) / (maxX - minX)) * plotW;
+  const sy = (value: number) => top + ((maxY - value) / (maxY - minY)) * plotH;
+  const yOnLine = (percent: number) => fit.m * percent + fit.c;
+  const lineStart = sx(minX);
+  const lineEnd = sx(maxX);
+  const equation = lineEquation(fit.m, fit.c);
+  const r2 = formatRSquared(fit.rSquared);
+  return (
+    <figure id="min-b-graph">
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        className="h-auto w-full"
+        role="img"
+        aria-label={`${equation}. ${r2}. The unrounded %B is marked where the target logK meets the line.`}
+      >
+        <line x1={left} y1={top} x2={left} y2={top + plotH} stroke="#144237" strokeWidth="1" />
+        <line x1={left} y1={top + plotH} x2={left + plotW} y2={top + plotH} stroke="#144237" strokeWidth="1" />
+        <text x={left + plotW / 2} y={height - 8} textAnchor="middle" fill="#144237" fontSize="12">
+          %B
+        </text>
+        <text x="14" y={top + plotH / 2} textAnchor="middle" fill="#144237" fontSize="12" transform={`rotate(-90 14 ${top + plotH / 2})`}>
+          logK
+        </text>
+        <line
+          x1={lineStart}
+          y1={sy(yOnLine(minX))}
+          x2={lineEnd}
+          y2={sy(yOnLine(maxX))}
+          stroke="#0f6b56"
+          strokeWidth="2"
+        />
+        <line
+          x1={left}
+          y1={sy(mark.y)}
+          x2={sx(mark.x)}
+          y2={sy(mark.y)}
+          stroke="#c2410c"
+          strokeWidth="1.5"
+          strokeDasharray="4 3"
+        />
+        <line
+          x1={sx(mark.x)}
+          y1={sy(mark.y)}
+          x2={sx(mark.x)}
+          y2={top + plotH}
+          stroke="#c2410c"
+          strokeWidth="1.5"
+          strokeDasharray="4 3"
+        />
+        {points.map((point) => (
+          <circle key={point.run} cx={sx(point.x)} cy={sy(point.y)} r="4.5" fill="#144237" />
+        ))}
+        <circle id="min-b-mark" cx={sx(mark.x)} cy={sy(mark.y)} r="5.5" fill="#c2410c" />
+        <text x={sx(mark.x)} y={sy(mark.y) - 10} textAnchor="middle" fill="#c2410c" fontSize="12">
+          {formatPercentB(mark.x)}% B
+        </text>
+        <text x={left + 8} y={top + 16} fill="#144237" fontSize="13">
+          {equation}
+        </text>
+        <text x={left + 8} y={top + 34} fill="#144237" fontSize="13">
+          {r2}
+        </text>
+      </svg>
+    </figure>
+  );
 }
 
 function sameRunSet(left: readonly number[], right: readonly number[]): boolean {

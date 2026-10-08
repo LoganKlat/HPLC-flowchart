@@ -4,11 +4,14 @@ import { describe, expect, it } from "vitest";
 import { evaluateRun } from "@/lib/evaluate";
 import { readLabFile, type LabFileRead } from "@/lib/lab-file";
 import {
+  backwardsWhy,
   carryForwardIndex,
   decideRetention,
+  findBackwardsRetention,
   inBetweenPercentError,
   formatRSquared,
   lineEquation,
+  minimumPercentHeading,
   minimumPercentNote,
   refitMinimumPercent,
   roundMinimumPercent,
@@ -16,6 +19,7 @@ import {
   type RetentionRules,
   type RetentionSample,
 } from "@/lib/retention";
+import { planHistory, type SelectivityRun } from "@/lib/selectivity";
 
 const fixtureDir = path.join(process.cwd(), "fixtures/retention");
 const files = [
@@ -132,20 +136,21 @@ describe("retention %B along the four lab files", () => {
     expect(formatRSquared(again!.rSquared)).toBe("R² = 0.997");
     expect(again!.rawPercentB).toBeCloseTo(fit.rawPercentB, 8);
     expect(again!.t0Average).toBeCloseTo(1.089, 3);
-    const note = minimumPercentNote(again!, fit.specifiedTimeMin).join("\n");
-    expect(note).toContain("t0 is the first peak’s retention time");
-    expect(note).toContain("k = (last peak time − t0) / t0");
-    expect(note).toContain("logK is the base-10 log of k");
-    expect(note).toContain("logK = m × %B + c");
-    expect(note).toContain("m =");
-    expect(note).toContain("The t0 for that target is the average t0 of the runs in the line, 1.089 min");
-    expect(note).toContain("logK = log10(k)");
-    expect(note).toContain("%B = (that logK − c) / m");
+    const note = minimumPercentNote(again!, fit.specifiedTimeMin, decision.fit!.qtestSentence).join("\n");
+    expect(minimumPercentHeading(again!.nextPercentB)).toBe("Why 42% B is recommended");
+    expect(note).toContain("k = (tR − t0) / t0, then logK = log10(k).");
+    expect(note).toContain("logK = −0.039509 × %B + 2.549388");
+    expect(note).toContain("The average t0 of the runs on the line is 1.089 min");
     expect(note).toContain("41.421");
-    expect(note).toContain("The page recommends 42% B.");
     expect(note).not.toContain("middle t0");
     expect(note).not.toContain("half");
     expect(note).not.toContain("you set");
+    expect(note.toLowerCase()).not.toContain("resolution");
+    expect(decision.brief).toEqual([
+      "Peaks: 7. The specification is 8.",
+      `Back-pressure: ${reads[3].maxBackPressurePsi!.toFixed(1)} psi. The specification is 2000 psi.`,
+      "Last peak: 11.593 min. The set time is 10 min.",
+    ]);
     expect(refitMinimumPercent(fit.catalog, [2], fit.specifiedTimeMin, fit.usedPercentB)).toBeNull();
     const withLeftOut = refitMinimumPercent(fit.catalog, [1, 2, 3, 4], fit.specifiedTimeMin, fit.usedPercentB);
     expect(withLeftOut).not.toBeNull();
@@ -291,16 +296,30 @@ describe("retention stops and keeps going", () => {
       [sampleFromRead(60, reads[1]), sampleFromRead(50, reads[2])],
       { requiredPeaks: 6, lastPeakTimeMin: 10, minResolution: 2, maxBackPressurePsi: 2000 },
     );
-    expect(decision.status).toBe("ask");
+    expect(decision.status).not.toBe("ask");
+    expect(decision.efficiencyNow ?? null).toBeNull();
     expect(decision.move).not.toBe("drop-10");
-    expect(decision.efficiencyNow?.question).toContain("bring the resolution up to the specification");
-    const shown = decideRetention(
-      [sampleFromRead(60, reads[1]), sampleFromRead(50, reads[2])],
-      { requiredPeaks: 6, lastPeakTimeMin: 10, minResolution: 2, maxBackPressurePsi: 2000 },
-      { declinedEfficiencyNow: true },
+    const history = planHistory(
+      [
+        selectivityRun(60, reads[1]),
+        selectivityRun(50, reads[2]),
+      ],
+      {
+        requiredPeaks: 6,
+        lastPeakTimeMin: 10,
+        minResolution: 2,
+        maxBackPressurePsi: 2000,
+        ambientTemperatureC: 25,
+        originalSolvent: "ACN",
+        originalLigand: "C18",
+      },
     );
-    expect(shown.move).toBe("calculated");
-    expect(shown.nextPercentB).not.toBeNull();
+    expect(history.phase).toBe("selectivity");
+    if (history.phase !== "selectivity") return;
+    expect(history.plan.step).toBe("temp-40");
+    expect(history.plan.why).not.toMatch(/then 60/i);
+    expect(history.plan.why.toLowerCase()).not.toContain("coating");
+    expect(history.plan.why.toLowerCase()).not.toContain("other solvent");
   });
 
   it("does not keep going just because resolution rose after the peak count matches", () => {
@@ -1012,6 +1031,43 @@ describe("which run to carry forward after the calculated %B", () => {
   });
 });
 
+describe("backwards retention", () => {
+  it("warns when the 90% last peak is later than the 80% last peak", () => {
+    const uploads = "/home/ubuntu/.cursor/projects/workspace/uploads";
+    const higher = readLabFile(
+      readFileSync(
+        `${uploads}/GR09-05-3-ACN-3-ISO-90-1.5-20-CP-0.1-C18aqP-150x4.6x5-amb-254_432b.xlsx`,
+      ),
+    );
+    const lower = readLabFile(
+      readFileSync(
+        `${uploads}/GR09-06-3-ACN-3-ISO-80-1.5-20-CP-0.1-C18aqP-150x4.6x5-amb-254_9b84.xlsx`,
+      ),
+    );
+    expect(higher.lastPeakTimeMin).not.toBeNull();
+    expect(lower.lastPeakTimeMin).not.toBeNull();
+    expect(higher.lastPeakTimeMin!).toBeGreaterThan(lower.lastPeakTimeMin!);
+    const pair = findBackwardsRetention([
+      { percentB: 90, lastPeakTimeMin: higher.lastPeakTimeMin, temperatureC: "ambient", solvent: "ACN", ligand: "C18" },
+      { percentB: 80, lastPeakTimeMin: lower.lastPeakTimeMin, temperatureC: "ambient", solvent: "ACN", ligand: "C18" },
+    ]);
+    expect(pair).not.toBeNull();
+    expect(pair!.higherPercentB).toBe(90);
+    expect(pair!.lowerPercentB).toBe(80);
+    expect(pair!.higherLastMin).toBeCloseTo(higher.lastPeakTimeMin!, 5);
+    expect(pair!.lowerLastMin).toBeCloseTo(lower.lastPeakTimeMin!, 5);
+    const why = backwardsWhy(pair!);
+    expect(why).toContain("unexpected");
+    expect(why).toContain("error likely occurred");
+    expect(why).toContain("90% B");
+    expect(why).toContain("80% B");
+    expect(why).toContain(higher.lastPeakTimeMin!.toFixed(3));
+    expect(why).toContain(lower.lastPeakTimeMin!.toFixed(3));
+    expect(why.toLowerCase()).not.toContain("40°c");
+    expect(why.toLowerCase()).not.toContain("coating");
+  });
+});
+
 function sampleFromRead(percentB: number, read: LabFileRead): RetentionSample {
   return {
     percentB,
@@ -1021,6 +1077,20 @@ function sampleFromRead(percentB: number, read: LabFileRead): RetentionSample {
     minResolutionExcludingFirst: read.minResolutionExcludingFirst,
     maxBackPressurePsi: read.maxBackPressurePsi,
     peaks: read.peaks,
+  };
+}
+
+function selectivityRun(percentB: number, read: LabFileRead): SelectivityRun {
+  return {
+    percentB,
+    temperatureC: 25,
+    solvent: "ACN",
+    ligand: "C18",
+    peakCount: read.peakCount,
+    lastPeakTimeMin: read.lastPeakTimeMin,
+    firstPeakTimeMin: read.firstPeakTimeMin,
+    minResolutionExcludingFirst: read.minResolutionExcludingFirst,
+    maxBackPressurePsi: read.maxBackPressurePsi,
   };
 }
 

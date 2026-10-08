@@ -1,5 +1,5 @@
 import { resolutionForDecision } from "@/lib/evaluate";
-import { COATING_SENTENCE, PERCENT_B_SENTENCE, SELECTIVITY_ORDER, TEMPERATURE_SENTENCE } from "@/lib/setting-kind";
+import { COATING_SENTENCE, PERCENT_B_SENTENCE, SELECTIVITY_ORDER } from "@/lib/setting-kind";
 import { carryForwardIndex, decideRetention, formatPercentB, roundTargetPercent, type RetentionRules, type RetentionSample } from "@/lib/retention";
 
 /**
@@ -531,7 +531,9 @@ export function planHistory(
 ): HistoryPlan {
   const tried: string[] = [];
   if (setup.originalLigand.trim()) tried.push(setup.originalLigand);
-  const continuePast = options?.continuePastEfficiency === true;
+  const latest = runs[runs.length - 1];
+  const autoShort = latest != null && resolutionStillShort(latest, setup);
+  const continuePast = options?.continuePastEfficiency === true || autoShort;
 
   let start = 0;
   let forced: { finishedOffset: number; carryIndex: number } | null = null;
@@ -545,6 +547,10 @@ export function planHistory(
     (continuePast || !peaksMatchSpec(runs[runs.length - 1], setup))
   ) {
     forced = { finishedOffset: heat.seriesLength - 1, carryIndex: heat.carryIndex };
+  }
+  if (!forced && autoShort) {
+    const anchor = selectivityAnchor(runs, setup);
+    if (anchor >= 0) forced = { finishedOffset: anchor, carryIndex: anchor };
   }
   while (start < runs.length) {
     const segment = runs.slice(start);
@@ -644,6 +650,38 @@ function peaksMatchSpec(run: SelectivityRun | undefined, setup: SelectivitySetup
     run.peakCount != null &&
     run.peakCount === setup.requiredPeaks
   );
+}
+
+/** Where selectivity starts. Extra %B runs at the same temperature stay in front of the 40°C step. */
+function selectivityAnchor(runs: SelectivityRun[], setup: SelectivitySetup): number {
+  const first = runs.findIndex((run) => resolutionStillShort(run, setup));
+  if (first < 0) return -1;
+  const changed = runs.slice(first + 1).some((run, offset) => selectivityConditionsChanged(runs[first + offset], run));
+  return changed ? first : runs.length - 1;
+}
+
+function selectivityConditionsChanged(previous: SelectivityRun, next: SelectivityRun): boolean {
+  if (
+    previous.temperatureC != null &&
+    next.temperatureC != null &&
+    Math.abs(next.temperatureC - previous.temperatureC) > 0.5
+  ) {
+    return true;
+  }
+  if ((previous.solvent || "").trim().toLowerCase() !== (next.solvent || "").trim().toLowerCase()) return true;
+  if ((previous.ligand || "").trim().toLowerCase() !== (next.ligand || "").trim().toLowerCase()) return true;
+  return false;
+}
+
+/** Peaks match and the worst pair is still under the specification, with the last peak still inside the set time. */
+function resolutionStillShort(run: SelectivityRun, setup: SelectivitySetup): boolean {
+  if (!peaksMatchSpec(run, setup)) return false;
+  if (setup.minResolution == null || !(setup.minResolution > 0)) return false;
+  if (setup.lastPeakTimeMin != null && run.lastPeakTimeMin != null && isLater(run.lastPeakTimeMin, setup.lastPeakTimeMin)) {
+    return false;
+  }
+  const resolution = resolutionForDecision(run.peakCount, run.minResolutionExcludingFirst, setup.requiredPeaks);
+  return resolution == null || !Number.isFinite(resolution) || resolution + 1e-9 < setup.minResolution;
 }
 
 type WalkResult = { kind: "plan"; plan: SelectivityPlan } | { kind: "restart"; ligandRunOffset: number };
@@ -799,20 +837,17 @@ function plan60Despite(
   heated: SelectivityRun[],
 ): SelectivityPlan {
   const percent = formatPercentB(percentB);
-  const later = args.offerChoice
-    ? "A new solvent comes after 60°C, at the chart %B. It is not the next step."
-    : "A new coating comes after 60°C on this solvent. It is not the next step.";
   return {
     status: "recommend",
     step: "temp-60",
-    nextChange: `Run the next chromatogram at 60°C, still at ${percent}% B. 40°C did not improve the separation. Stay on the same solvent and the same %B. ${TEMPERATURE_SENTENCE} A higher temperature shortens retention. The %B stays the same.`,
+    nextChange: `Run the next chromatogram at 60°C, still at ${percent}% B. 40°C did not improve the separation. Stay on the same solvent and the same %B. A higher temperature shortens retention. The %B stays the same.`,
     following: args.offerChoice
       ? `After 60°C, the next step is the second solvent at the chart %B, tried at 40°C and 60°C, then the coating last. ${SELECTIVITY_ORDER}`
       : `After 60°C on this solvent, the next step is a new coating. ${SELECTIVITY_ORDER}`,
     why: [
       `40°C did not improve the separation compared with Run ${args.baselineNumber}.`,
       compareSentence(args.baseline, args.baselineNumber, heated, args.setup.requiredPeaks),
-      `The next chromatogram is still 60°C, at ${percent}% B, on the same solvent. ${later} The %B stays the same.`,
+      `The next chromatogram is still 60°C, at ${percent}% B, on the same solvent. The %B stays the same.`,
     ].join(" "),
     prefill: { percentB: percent, temperature: "60", solvent, ligand },
     nomograph: null,
@@ -841,14 +876,16 @@ function plan40(
   return {
     status: "recommend",
     step: "temp-40",
-    nextChange: `Run the next chromatogram at 40°C, still at ${percent}% B. The goal is to change the conditions so the selectivity changes and the overlapping peaks separate. A higher temperature shortens retention. The %B stays the same. ${TEMPERATURE_SENTENCE}`,
+    nextChange: `Run the next chromatogram at 40°C, still at ${percent}% B. The %B stays the same.`,
     following: `After 40°C, the next step is 60°C at the same %B. ${SELECTIVITY_ORDER}`,
     why: [
-      `Selectivity starts from Run ${args.baselineNumber} at ${percent}% B.`,
-      checksSentence(args.baseline, args.baselineNumber, args.setup),
-      `The peaks are not separated well enough to stop. The next chromatogram is 40°C, still at ${percent}% B. The goal is to change the conditions so the selectivity changes and the overlapping peaks separate. A higher temperature shortens retention. The %B stays the same.`,
-      args.ambient.sentence,
-    ].join(" "),
+      `The next chromatogram is 40°C, still at ${percent}% B.`,
+      onceChecks(args.baseline, args.setup),
+      onceReason(args.baseline, args.setup),
+      args.ambient.assumed ? args.ambient.sentence : "",
+    ]
+      .filter((line) => line.trim().length > 0)
+      .join("\n\n"),
     prefill: {
       percentB: percent,
       temperature: "40",
@@ -887,7 +924,7 @@ function plan60(
   return {
     status: "recommend",
     step: "temp-60",
-    nextChange: `Run the next chromatogram at 60°C, at ${percent}% B. Stay at this %B because heat already helped. ${TEMPERATURE_SENTENCE} A higher temperature shortens retention. The %B stays the same.`,
+    nextChange: `Run the next chromatogram at 60°C, at ${percent}% B. Stay at this %B because heat already helped. A higher temperature shortens retention. The %B stays the same.`,
     following: `After 60°C, the next step is the second solvent at the chart %B, tried at 40°C and 60°C, then the coating last. ${SELECTIVITY_ORDER}`,
     why: [
       `${what} at 40°C compared with Run ${args.baselineNumber}, the run from before the temperature change.`,
@@ -1015,6 +1052,56 @@ function blockedPlan(nextChange: string, why: string): SelectivityPlan {
     oldSolvent: null,
     tempChoice: null,
   };
+}
+
+function onceChecks(run: SelectivityRun, setup: SelectivitySetup): string {
+  const peaks =
+    setup.requiredPeaks == null
+      ? "The peak-count rule is empty."
+      : run.peakCount == null
+        ? "Peaks: not in this file."
+        : `Peaks: ${formatCount(run.peakCount)}. The specification is ${formatCount(setup.requiredPeaks)}.`;
+  const last =
+    setup.lastPeakTimeMin == null
+      ? "Last peak: the set time is blank."
+      : run.lastPeakTimeMin == null
+        ? "Last peak: not in this file."
+        : `Last peak: ${formatMinutes(run.lastPeakTimeMin)} min. The set time is ${formatTypedMinutes(setup.lastPeakTimeMin)} min.`;
+  const pressure =
+    setup.maxBackPressurePsi == null
+      ? "Back-pressure: the specification is blank."
+      : run.maxBackPressurePsi == null
+        ? "Back-pressure: not in this file."
+        : `Back-pressure: ${run.maxBackPressurePsi.toFixed(1)} psi. The specification is ${formatTypedNumber(setup.maxBackPressurePsi)} psi.`;
+  return [peaks, resolutionOnce(run, setup), last, pressure].join("\n\n");
+}
+
+function resolutionOnce(run: SelectivityRun, setup: SelectivitySetup): string {
+  if (setup.requiredPeaks != null && run.peakCount != null && run.peakCount < setup.requiredPeaks) {
+    return "Minimum resolution: 0. The file has fewer peaks than the specification.";
+  }
+  if (setup.minResolution == null || !(setup.minResolution > 0)) {
+    return "You did not type a minimum resolution, so how close the worst pair is cannot be judged against the specification.";
+  }
+  const decision = resolutionForDecision(run.peakCount, run.minResolutionExcludingFirst, setup.requiredPeaks);
+  if (decision == null || !Number.isFinite(decision)) return "Minimum resolution: not in this file.";
+  const place = decision + 1e-9 >= setup.minResolution ? "Above" : "Under";
+  return `Minimum resolution: ${formatResolution(decision)}. ${place} the specification of ${formatResolution(setup.minResolution)}.`;
+}
+
+function onceReason(run: SelectivityRun, setup: SelectivitySetup): string {
+  const resolution = resolutionForDecision(run.peakCount, run.minResolutionExcludingFirst, setup.requiredPeaks);
+  const under =
+    setup.minResolution != null &&
+    setup.minResolution > 0 &&
+    (resolution == null || !Number.isFinite(resolution) || resolution + 1e-9 < setup.minResolution);
+  if (peaksMatchSpec(run, setup) && under) {
+    return "The peaks are there and the worst pair is still under the specification.";
+  }
+  if (setup.requiredPeaks != null && run.peakCount != null && run.peakCount < setup.requiredPeaks) {
+    return "The peak count is still under the specification.";
+  }
+  return "";
 }
 
 function checksSentence(run: SelectivityRun, runNumber: number, setup: SelectivitySetup): string {

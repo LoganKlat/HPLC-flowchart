@@ -4,7 +4,7 @@ import { useCallback, useMemo, useRef, useState, type CSSProperties, type ReactN
 import { Gauge, GitBranch, Info, type LucideIcon } from "lucide-react";
 import { FileDrop } from "@/components/file-drop";
 import { AboutPanel } from "@/components/about-panel";
-import { EfficiencyChoiceView, LeaveSelectivityAsk, LeaveSelectivityDone } from "@/components/leave-selectivity";
+import { BackwardsRetentionView, EfficiencyChoiceView, LeaveSelectivityAsk, LeaveSelectivityDone } from "@/components/leave-selectivity";
 import { LookAtRuns } from "@/components/look-at-runs";
 import { LaterChangeNote, RetentionDecisionView, StartHighBNote } from "@/components/retention-decision";
 import { ResultsPanel } from "@/components/results-panel";
@@ -19,8 +19,10 @@ import { detailsFromFileName, parseRunFileName } from "@/lib/filename-details";
 import { readLabFile, type LabFileRead } from "@/lib/lab-file";
 import {
   decideRetention,
+  findBackwardsRetention,
   formatPercentB,
   inBetweenPercentError,
+  type BackwardsPair,
   type RetentionChoice,
   type RetentionDecision,
   type RetentionSample,
@@ -255,6 +257,7 @@ export function HplcApp() {
   const [continuedSelectivity, setContinuedSelectivity] = useState<Record<number, boolean>>({});
   const [inBetween, setInBetween] = useState<{ percent: number; sourceIndex: number } | null>(null);
   const [heatChoice, setHeatChoice] = useState<HeatStart | null>(null);
+  const [backwardsChoice, setBackwardsChoice] = useState<"continue" | "redo" | null>(null);
   const [betweenAnswer, setBetweenAnswer] = useState<"yes" | "no" | null>(null);
   const [betweenText, setBetweenText] = useState("");
   const [betweenError, setBetweenError] = useState<string | null>(null);
@@ -274,6 +277,15 @@ export function HplcApp() {
   fillFromFileNameRef.current = fillFromFileName;
 
   const checks = useMemo(() => toRuleNumbers(rules), [rules]);
+  const backwards = useMemo(() => backwardsOnPage(runs, details), [runs, details]);
+  const backwardsKey = backwards
+    ? `${backwards.higherPercentB}|${backwards.higherLastMin}|${backwards.lowerPercentB}|${backwards.lowerLastMin}`
+    : "";
+  const [seenBackwards, setSeenBackwards] = useState(backwardsKey);
+  if (seenBackwards !== backwardsKey) {
+    setSeenBackwards(backwardsKey);
+    setBackwardsChoice(null);
+  }
   const choice = useMemo<RetentionChoice>(
     () => ({
       declinedEfficiencyNow,
@@ -290,6 +302,7 @@ export function HplcApp() {
     continuePastEfficiency: latestFlags.continuePast,
     linePercent,
     pickedPercent,
+    holdNext: backwards != null && backwardsChoice !== "continue",
   });
   if (syncedRuns !== runs) {
     setRuns(syncedRuns);
@@ -704,6 +717,10 @@ export function HplcApp() {
               onLinePercent={index === readyCount - 1 ? reportLinePercent : undefined}
               onPickPercent={index === readyCount - 1 ? setPickedPercent : undefined}
               pickedPercent={pickedPercent}
+              backwards={index === readyCount - 1 ? backwards : null}
+              backwardsChoice={backwardsChoice}
+              onBackwardsContinue={() => setBackwardsChoice("continue")}
+              onBackwardsRedo={() => setBackwardsChoice("redo")}
               runTabs={
                 index === shown ? (
                   <div
@@ -913,6 +930,10 @@ function RunPane({
   onLinePercent,
   onPickPercent,
   pickedPercent,
+  backwards,
+  backwardsChoice,
+  onBackwardsContinue,
+  onBackwardsRedo,
   runTabs,
 }: {
   index: number;
@@ -947,6 +968,10 @@ function RunPane({
   onLinePercent?: (percent: number | null) => void;
   onPickPercent?: (percent: number) => void;
   pickedPercent?: number | null;
+  backwards: BackwardsPair | null;
+  backwardsChoice: "continue" | "redo" | null;
+  onBackwardsContinue: () => void;
+  onBackwardsRedo: () => void;
   runTabs?: ReactNode;
 }) {
   if (run.afterRetention) {
@@ -1008,7 +1033,14 @@ function RunPane({
               read={run.read}
               rows={rows}
               aside={
-                leftSelectivity ? (
+                backwards && backwardsChoice !== "continue" ? (
+                  <BackwardsRetentionView
+                    pair={backwards}
+                    choice={backwardsChoice === "redo" ? "redo" : null}
+                    onContinue={onBackwardsContinue}
+                    onRedo={onBackwardsRedo}
+                  />
+                ) : leftSelectivity ? (
                   <LeaveSelectivityDone duringRetention={explanation?.kind === "retention"} />
                 ) : ask ? (
                   <LeaveSelectivityAsk
@@ -1182,6 +1214,23 @@ function plainMark(value: string): string {
   return value || "—";
 }
 
+function backwardsOnPage(runs: RunState[], details: RunDetails): BackwardsPair | null {
+  const ready = runs.flatMap((run, index) => {
+    if (run.status !== "ready" || !run.read) return [];
+    const info = index === 0 ? details : run;
+    return [
+      {
+        percentB: parseUserNumber(info.percentB || (index === 0 ? details.percentB : "")),
+        lastPeakTimeMin: run.read.lastPeakTimeMin,
+        temperatureC: (index === 0 ? details.temperature : run.temperature) || details.temperature,
+        solvent: (index === 0 ? details.solvent : run.solvent) || details.solvent,
+        ligand: (index === 0 ? details.ligand : run.ligand) || details.ligand,
+      },
+    ];
+  });
+  return findBackwardsRetention(ready);
+}
+
 type Explanation =
   | { kind: "retention"; decision: RetentionDecision }
   | { kind: "selectivity"; plan: SelectivityPlan };
@@ -1233,6 +1282,7 @@ function syncNextRun(
     continuePastEfficiency: boolean;
     linePercent: number | null;
     pickedPercent: number | null;
+    holdNext?: boolean;
   },
 ): RunState[] {
   const count = readyPrefix(runs);
@@ -1244,6 +1294,13 @@ function syncNextRun(
     return runs;
   }
   if (count === 0) return runs;
+  if (options.holdNext) {
+    const nextHeld = runs[count];
+    if (!nextHeld || (nextHeld.status === "empty" && !runWasEdited(nextHeld) && runs.length === count + 1)) {
+      return runs.slice(0, count);
+    }
+    return runs;
+  }
   const ready = runs.slice(0, count);
   const history = planHistory(
     ready.map((run, index) => toSelectivityRun(run, index, details)),
