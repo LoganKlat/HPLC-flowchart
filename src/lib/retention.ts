@@ -632,9 +632,6 @@ function intermediateAfterMinimum(
   rules: CompleteRules,
 ): RetentionDecision | null {
   const current = samples[samples.length - 1];
-  if (current.lastPeakTimeMin == null || !isPast(current.lastPeakTimeMin, retentionLine(rules.lastPeakTimeMin))) {
-    return null;
-  }
   if (timedPeaks(current).length < 2) return null;
   const found = optimalIntermediatePercent(samples, rules);
   if (!found) return null;
@@ -646,9 +643,8 @@ function intermediateAfterMinimum(
     ? `${percent}% B is at the edge of the %B values already tested. One more run should confirm it.`
     : "";
   const why = [
-    "The minimum %B run has been tested. The next change is an intermediate %B, not another 10% step.",
-    `logK was calculated for every retained peak, leaving out the t0 peak. k = (tR − t0) / t0, then logK = log10(k). ${identity} A line is kept only when that peak shows up in at least three runs.`,
-    `At each whole %B between the lowest and highest already tested, the smallest gap between those lines was measured. ${percent}% B is where that gap is largest. The predicted last peak there is ${formatMinutes(found.predictedLastMin)} min, inside the set time of ${formatTypedMinutes(rules.lastPeakTimeMin)} min. That gap is not the chromatographic resolution. Resolution also depends on how wide the peaks are.`,
+    `logK was fit for each compound, leaving out the t0 peak. ${identity} A line is kept only when that peak shows up in at least three runs.`,
+    `At each whole %B inside the tested range, the smallest gap between those lines was measured. ${percent}% B is where that gap is largest. The predicted last peak there is ${formatMinutes(found.predictedLastMin)} min, inside the set time of ${formatTypedMinutes(rules.lastPeakTimeMin)} min. That gap is not the chromatographic resolution.`,
     edge,
   ]
     .filter((paragraph) => paragraph.length > 0)

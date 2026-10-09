@@ -59,10 +59,27 @@ export type SizePick = {
   poreA: string;
 };
 
-/** Values of one size that still exist on a column matching the other chosen sizes. */
+/** Product or display name contains “ultra”, in any capitalization. */
+export function isUltraColumn(column: Pick<ColumnSpec, "product" | "label">): boolean {
+  return /ultra/i.test(column.product) || /ultra/i.test(column.label);
+}
+
+/**
+ * The chosen sizes match at least one column, and every match is an Ultra column.
+ * A size that also exists on a column that can be chosen is not Ultra-only.
+ */
+export function ultraOnlyPick(columns: readonly ColumnSpec[], pick: SizePick): boolean {
+  const specified = Object.values(pick).some((value) => value.trim() !== "");
+  if (!specified) return false;
+  const matches = columns.filter((column) => matchesPick(column, pick));
+  return matches.length > 0 && matches.every(isUltraColumn);
+}
+
+/** Values of one size that still exist on a column matching the other chosen sizes. Ultra columns are not choices. */
 export function sizeChoices(columns: readonly ColumnSpec[], pick: SizePick, field: SizeField): string[] {
   const values = new Set<string>();
   for (const column of columns) {
+    if (isUltraColumn(column)) continue;
     if (!matchesOther(column, pick, field)) continue;
     const value = fieldValue(column, field);
     if (value) values.add(value);
@@ -158,6 +175,15 @@ export function columnLabel(
   const who = product ? `${product} ${coating}` : coating;
   const size = `${formatSize(lengthMm)} × ${formatSize(diameterMm)} mm, ${formatSize(particleUm)} µm`;
   return poreA == null ? `${who}, ${size}` : `${who}, ${size}, ${formatSize(poreA)} Å`;
+}
+
+function matchesPick(column: ColumnSpec, pick: SizePick): boolean {
+  if (pick.coating && column.coating !== pick.coating) return false;
+  if (pick.lengthMm && !sameNumber(column.lengthMm, pick.lengthMm)) return false;
+  if (pick.diameterMm && !sameNumber(column.diameterMm, pick.diameterMm)) return false;
+  if (pick.particleUm && !sameNumber(column.particleUm, pick.particleUm)) return false;
+  if (pick.poreA && !sameNumber(column.poreA ?? Number.NaN, pick.poreA)) return false;
+  return true;
 }
 
 function matchesOther(column: ColumnSpec, pick: SizePick, field: SizeField): boolean {

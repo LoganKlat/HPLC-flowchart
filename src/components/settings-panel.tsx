@@ -14,7 +14,7 @@ export function SettingsPanel({
   onRemoveSolvent,
 }: {
   onOpenNav: () => void;
-  columns: readonly string[];
+  columns: readonly { label: string; locked: boolean }[];
   solvents: readonly string[];
   onAddColumn: (name: string) => boolean | "invalid";
   onRemoveColumn: (name: string) => void;
@@ -40,8 +40,8 @@ export function SettingsPanel({
         <NameList
           id="settings-columns"
           title="Columns"
-          description="The coating and the sizes from the column workbook. A PFPP 100 × 4.6 is not a PFPP 150 × 4.6."
-          items={columns}
+          description="The coating and the sizes from the column workbook. A PFPP 100 × 4.6 is not a PFPP 150 × 4.6. An Ultra column stays on this list, shown in grey, and cannot be chosen."
+          items={columns.map((column) => ({ name: column.label, locked: column.locked }))}
           empty="No columns yet. Add one to use it in Run details."
           addLabel="Add a column"
           inputId="add-column"
@@ -54,7 +54,7 @@ export function SettingsPanel({
           id="settings-solvents"
           title="Solvents"
           description="The solvent menu uses this list. The chart still only covers ACN, MeOH, and THF."
-          items={solvents}
+          items={solvents.map((name) => ({ name }))}
           empty="No solvents yet. Add one to use it in Run details."
           addLabel="Add a solvent"
           inputId="add-solvent"
@@ -84,7 +84,7 @@ function NameList({
   id: string;
   title: string;
   description: string;
-  items: readonly string[];
+  items: readonly { name: string; locked?: boolean }[];
   empty: string;
   addLabel: string;
   inputId: string;
@@ -141,15 +141,24 @@ function NameList({
         <p className="text-sm text-muted-foreground">{empty}</p>
       ) : (
         <ul className="flex max-h-[28rem] flex-col gap-1 overflow-y-auto">
-          {items.map((name) => (
-            <li key={name} className="flex items-center justify-between gap-3 rounded-lg px-2 py-1.5 hover:bg-[#e7f3ee]">
-              <span className="min-w-0 text-sm text-foreground">{name}</span>
+          {items.map((item) => (
+            <li
+              key={item.name}
+              data-ultra={item.locked ? "true" : undefined}
+              className={`flex items-center justify-between gap-3 rounded-lg px-2 py-1.5 ${item.locked ? "" : "hover:bg-[#e7f3ee]"}`}
+            >
+              <span
+                className={`min-w-0 text-sm ${item.locked ? "text-neutral-400" : "text-foreground"}`}
+                aria-disabled={item.locked || undefined}
+              >
+                {item.name}
+              </span>
               <Button
                 type="button"
                 variant="outline"
                 className="h-7 shrink-0 px-2 text-xs"
-                aria-label={removeLabel(name)}
-                onClick={() => onRemove(name)}
+                aria-label={removeLabel(item.name)}
+                onClick={() => onRemove(item.name)}
               >
                 Remove
               </Button>

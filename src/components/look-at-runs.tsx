@@ -2,9 +2,6 @@ import { decisionBesideClass, decisionUnderClass, nextChangeValueClass } from "@
 import { NO_CHANGE_YET } from "@/lib/change-label";
 import { formatPercentB, type LookRun, type LookStep } from "@/lib/retention";
 
-const choiceClass =
-  "flex h-10 min-w-0 cursor-pointer items-center justify-center rounded-lg border px-3 text-sm font-medium";
-
 function markWord(mark: LookRun["peaks"]): string {
   if (mark === "met") return "Met";
   if (mark === "not-met") return "Not met";
@@ -13,25 +10,12 @@ function markWord(mark: LookRun["peaks"]): string {
 
 export function LookAtRuns({
   look,
-  betweenAnswer,
-  betweenText,
-  betweenError,
-  onAnswer,
-  onBetweenText,
-  onUseBetween,
   onPickRun,
 }: {
   look: LookStep;
-  betweenAnswer: "yes" | "no" | null;
-  betweenText: string;
-  betweenError: string | null;
-  onAnswer: (answer: "yes" | "no") => void;
-  onBetweenText: (value: string) => void;
-  onUseBetween: () => void;
   onPickRun: (index: number) => void;
 }) {
-  const showPicker = look.mode === "picker" || (look.mode === "between-then-heat" && betweenAnswer === "no");
-  const showBetween = look.mode !== "picker";
+  const showPicker = look.mode === "picker" || look.mode === "between-then-heat";
 
   return (
     <div className="contents" id="look-at-runs">
@@ -83,60 +67,6 @@ export function LookAtRuns({
           </tbody>
         </table>
       </div>
-      {showBetween ? (
-        <section className={`rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10 ${decisionUnderClass}`}>
-          <h2 className="font-heading text-base">In-between %B</h2>
-          <p className="mt-1 text-sm leading-relaxed text-foreground">
-            Do you want an in-between %B? It uses the same temperature, solvent, and column coating, and it sits
-            between %B values already tried. That can land the last peak closer to the specified time without starting
-            heat yet.
-          </p>
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              aria-pressed={betweenAnswer === "yes"}
-              className={`${choiceClass} ${betweenAnswer === "yes" ? "border-primary bg-accent text-foreground" : "border-input bg-background text-foreground"}`}
-              onClick={() => onAnswer("yes")}
-            >
-              Yes
-            </button>
-            <button
-              type="button"
-              aria-pressed={betweenAnswer === "no"}
-              className={`${choiceClass} ${betweenAnswer === "no" ? "border-primary bg-accent text-foreground" : "border-input bg-background text-foreground"}`}
-              onClick={() => onAnswer("no")}
-            >
-              No
-            </button>
-          </div>
-          {betweenAnswer === "yes" ? (
-            <div className="mt-3 flex flex-col gap-2">
-              <label htmlFor="in-between-percent" className="text-sm text-foreground">
-                Type the %B. Use a number from 0 to 100.
-              </label>
-              <input
-                id="in-between-percent"
-                value={betweenText}
-                inputMode="decimal"
-                className="h-10 rounded-lg border border-input bg-background px-3 text-sm"
-                onChange={(event) => onBetweenText(event.target.value)}
-              />
-              {betweenError ? (
-                <p className="text-sm text-orange-950" role="status">
-                  {betweenError}
-                </p>
-              ) : null}
-              <button
-                type="button"
-                className={`${choiceClass} border-primary bg-primary text-primary-foreground`}
-                onClick={onUseBetween}
-              >
-                Use this %B
-              </button>
-            </div>
-          ) : null}
-        </section>
-      ) : null}
       {showPicker ? (
         <section id="pick-run" className={`rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10 ${decisionUnderClass}`}>
           <h2 className="font-heading text-base">Which run to heat</h2>

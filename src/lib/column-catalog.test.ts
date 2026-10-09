@@ -6,8 +6,10 @@ import {
   applySizeChoice,
   coatingsFromColumns,
   columnsFromWorkbook,
+  isUltraColumn,
   parseColumnSpec,
   sizeChoices,
+  ultraOnlyPick,
 } from "@/lib/column-catalog";
 import { SHEET_COLUMNS } from "@/lib/sheet-columns";
 import { recommendLigand } from "@/lib/selectivity";
@@ -36,10 +38,29 @@ describe("column workbook", () => {
     expect(sizeChoices(parsed, pick, "lengthMm")).toEqual(["100", "150"]);
     const longer = applySizeChoice(parsed, pick, "lengthMm", "150");
     expect(sizeChoices(parsed, longer, "diameterMm")).toEqual(["4.6"]);
-    expect(sizeChoices(parsed, longer, "particleUm")).toEqual(["3", "5"]);
+    expect(sizeChoices(parsed, longer, "particleUm")).toEqual(["5"]);
     const pfpp = { coating: "PFPP", lengthMm: "", diameterMm: "", particleUm: "", poreA: "" };
     expect(sizeChoices(parsed, pfpp, "lengthMm")).toEqual(["50", "100", "150"]);
     expect(coatingsFromColumns(parsed).slice(0, 6)).toEqual(["C18", "C18aq", "PFPP", "C8", "biphenyl", "IBD"]);
+  });
+
+  it("keeps Ultra columns off the run menus", () => {
+    const ultra = parsed.filter(isUltraColumn);
+    expect(ultra).toHaveLength(17);
+    expect(ultra.every((column) => /ultra/i.test(`${column.product} ${column.label}`))).toBe(true);
+    const c18aq = { coating: "C18aq", lengthMm: "150", diameterMm: "4.6", particleUm: "", poreA: "" };
+    expect(sizeChoices(parsed, c18aq, "particleUm")).toEqual(["5"]);
+    expect(sizeChoices(parsed, c18aq, "particleUm")).not.toContain("3");
+    const narrow = { coating: "C18", lengthMm: "100", diameterMm: "", particleUm: "", poreA: "" };
+    expect(sizeChoices(parsed, narrow, "diameterMm")).not.toContain("3");
+    const ultraOnly = { coating: "C18", lengthMm: "100", diameterMm: "3", particleUm: "3", poreA: "" };
+    expect(ultraOnlyPick(parsed, ultraOnly)).toBe(true);
+    const shared = { coating: "C18", lengthMm: "150", diameterMm: "4.6", particleUm: "5", poreA: "" };
+    expect(ultraOnlyPick(parsed, shared)).toBe(false);
+    const typed = parseColumnSpec("ULTRA PFPP, 33 × 2.1 mm, 1.9 µm");
+    expect(typed && isUltraColumn(typed)).toBe(true);
+    const withTyped = typed ? [...parsed, typed] : parsed;
+    expect(sizeChoices(withTyped, { coating: "PFPP", lengthMm: "", diameterMm: "", particleUm: "", poreA: "" }, "lengthMm")).not.toContain("33");
   });
 
   it("reads a typed column spec", () => {

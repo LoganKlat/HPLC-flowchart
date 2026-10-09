@@ -23,13 +23,12 @@ import {
   findBackwardsRetention,
   formatPercentB,
   seriesWhileHeld,
-  inBetweenPercentError,
   type BackwardsPair,
   type RetentionChoice,
   type RetentionDecision,
   type RetentionSample,
 } from "@/lib/retention";
-import { coatingsFromColumns, columnKey, parseColumnSpec, type ColumnSpec } from "@/lib/column-catalog";
+import { coatingsFromColumns, columnKey, isUltraColumn, parseColumnSpec, ultraOnlyPick, type ColumnSpec, type SizePick } from "@/lib/column-catalog";
 import { SHEET_COLUMNS } from "@/lib/sheet-columns";
 import { emptyRuleInputs, emptyRunDetails, type RuleInputs, type RunDetails } from "@/lib/run-details";
 import {
@@ -154,6 +153,21 @@ function clearColumn(details: RunDetails): RunDetails {
   return { ...details, ligand: "", lengthMm: "", diameterMm: "", particleSize: "", poreSize: "" };
 }
 
+function sizePickOf(details: RunDetails): SizePick {
+  return {
+    coating: details.ligand,
+    lengthMm: details.lengthMm,
+    diameterMm: details.diameterMm,
+    particleUm: details.particleSize,
+    poreA: details.poreSize,
+  };
+}
+
+/** A file name or a menu cannot leave the run on a column that is Ultra. */
+function withoutUltraColumn(details: RunDetails, list: readonly ColumnSpec[]): RunDetails {
+  return ultraOnlyPick(list, sizePickOf(details)) ? clearColumn(details) : details;
+}
+
 function detailsForRun(index: number, runs: RunState[], base: RunDetails): RunDetails {
   if (index <= 0) return base;
   const run = runs[index];
@@ -275,12 +289,8 @@ export function HplcApp() {
   const [declinedEfficiencyNow, setDeclinedEfficiencyNow] = useState(false);
   const [efficiencyChosen, setEfficiencyChosen] = useState(false);
   const [continuedSelectivity, setContinuedSelectivity] = useState<Record<number, boolean>>({});
-  const [inBetween, setInBetween] = useState<{ percent: number; sourceIndex: number } | null>(null);
   const [heatChoice, setHeatChoice] = useState<HeatStart | null>(null);
   const [backwardsChoice, setBackwardsChoice] = useState<"continue" | "redo" | null>(null);
-  const [betweenAnswer, setBetweenAnswer] = useState<"yes" | "no" | null>(null);
-  const [betweenText, setBetweenText] = useState("");
-  const [betweenError, setBetweenError] = useState<string | null>(null);
   const [leftSelectivity, setLeftSelectivity] = useState(false);
   const [tempPathByRun, setTempPathByRun] = useState<Record<number, TempPath>>({});
   const [hoveredRun, setHoveredRun] = useState<number | null>(null);
@@ -312,9 +322,8 @@ export function HplcApp() {
   const choice = useMemo<RetentionChoice>(
     () => ({
       declinedEfficiencyNow,
-      afterInBetween: inBetweenMatches(runs, inBetween),
     }),
-    [declinedEfficiencyNow, runs, inBetween],
+    [declinedEfficiencyNow],
   );
   const readyCount = readyPrefix(runs);
   const latestFlags = selectivityFlags(readyCount - 1, heatChoice, continuedSelectivity);
@@ -363,6 +372,7 @@ export function HplcApp() {
   const shown = Math.min(active, Math.max(0, syncedRuns.length - 1));
 
   function onDetails(next: RunDetails) {
+    next = withoutUltraColumn(next, columns);
     setDetails(next);
     setRuns((current) => {
       if (current[0].percentB === next.percentB) return current;
@@ -373,6 +383,7 @@ export function HplcApp() {
   }
 
   function onShownDetails(next: RunDetails) {
+    next = withoutUltraColumn(next, columns);
     if (shown <= 0) {
       onDetails(next);
       return;
@@ -533,7 +544,8 @@ export function HplcApp() {
 
   function applyAddedFile(index: number, fileName: string) {
     const base = index <= 0 ? detailsRef.current : detailsForRun(index, runsRef.current, detailsRef.current);
-    const next = detailsFromFileName(base, fileName);
+    const parsed = detailsFromFileName(base, fileName);
+    const next = parsed.ok ? { ...parsed, details: withoutUltraColumn(parsed.details, columns) } : parsed;
     if (!next.ok) {
       setFileNameNotes((current) => ({ ...current, [index]: next.note }));
       return;
@@ -682,7 +694,7 @@ export function HplcApp() {
       {section === "settings" ? (
         <SettingsPanel
           onOpenNav={() => setNavOpen(true)}
-          columns={columns.map((column) => column.label)}
+          columns={columns.map((column) => ({ label: column.label, locked: isUltraColumn(column) }))}
           solvents={solvents}
           onAddColumn={addColumn}
           onRemoveColumn={removeColumn}
@@ -759,81 +771,9 @@ export function HplcApp() {
               }}
               onLeave={() => setEfficiencyChosen(true)}
               onDeclineEfficiency={() => setDeclinedEfficiencyNow(true)}
-              betweenAnswer={betweenAnswer}
-              betweenText={betweenText}
-              betweenError={betweenError}
-              onBetweenAnswer={(answer) => {
-                setBetweenAnswer(answer);
-                setBetweenError(null);
-                if (answer === "no") {
-                  const flags = selectivityFlags(index, heatChoice, {
-                    ...continuedSelectivity,
-                    [index]: true,
-                  });
-                  const explanation = explainRun(syncedRuns, index, details, checks, {
-                    choice: { ...choice, continueToLook: flags.continueToLook },
-                    heat: heatChoice,
-                    continuePastEfficiency: flags.continuePast,
-                    continueToLook: flags.continueToLook,
-                    ligands: columnCoatings,
-                  });
-                  const look = explanation?.kind === "retention" ? explanation.decision.look : null;
-                  if (look?.mode === "between") setEfficiencyChosen(true);
-                }
-              }}
-              onBetweenText={(value) => {
-                setBetweenText(value);
-                setBetweenError(null);
-              }}
-              onUseBetween={() => {
-                const flags = selectivityFlags(index, heatChoice, continuedSelectivity);
-                const explanation = explainRun(syncedRuns, index, details, checks, {
-                  choice: { ...choice, continueToLook: true },
-                  heat: heatChoice,
-                  continuePastEfficiency: flags.continuePast,
-                  continueToLook: true,
-                  ligands: columnCoatings,
-                });
-                const decision = explanation?.kind === "retention" ? explanation.decision : null;
-                const used = syncedRuns
-                  .filter((run) => run.status === "ready")
-                  .map((run) => parseUserNumber(run.percentB))
-                  .filter((percent): percent is number => percent != null);
-                const error = inBetweenPercentError(betweenText, used);
-                if (error || !decision?.look) {
-                  setBetweenError(error ?? "Type a %B from 0 to 100.");
-                  return;
-                }
-                const percent = Number(betweenText.trim());
-                const sourceIndex = decision.look.sourceIndex;
-                setInBetween({ percent, sourceIndex });
-                setBetweenError(null);
-                setRuns((current) => {
-                  const copy = current.slice();
-                  const source = copy[sourceIndex];
-                  const slot = sourceIndex + 1;
-                  const existing = copy[slot] ?? emptyRun();
-                  if (existing.status !== "empty" && copy[slot]) return current;
-                  const inherited = inheritedConditions(source ?? emptyRun(), sourceIndex, details);
-                  copy[slot] = {
-                    ...(copy[slot] ?? emptyRun()),
-                    percentB: formatPercentB(percent),
-                    temperature: inherited.temperature,
-                    solvent: inherited.solvent,
-                    ligand: inherited.ligand,
-                    percentEdited: true,
-                    temperatureEdited: true,
-                    solventEdited: true,
-                    ligandEdited: true,
-                  };
-                  return copy;
-                });
-                setActive(sourceIndex + 1);
-              }}
               onPickRun={(pickIndex) => {
                 const count = readyPrefix(syncedRuns);
                 setHeatChoice({ carryIndex: pickIndex, seriesLength: count });
-                setBetweenAnswer("no");
               }}
               choice={choice}
               heat={heatChoice}
@@ -1047,12 +987,6 @@ function RunPane({
   onContinueSelectivity,
   onLeave,
   onDeclineEfficiency,
-  betweenAnswer,
-  betweenText,
-  betweenError,
-  onBetweenAnswer,
-  onBetweenText,
-  onUseBetween,
   onPickRun,
   choice,
   heat,
@@ -1087,12 +1021,6 @@ function RunPane({
   onContinueSelectivity: () => void;
   onLeave: () => void;
   onDeclineEfficiency: () => void;
-  betweenAnswer: "yes" | "no" | null;
-  betweenText: string;
-  betweenError: string | null;
-  onBetweenAnswer: (answer: "yes" | "no") => void;
-  onBetweenText: (value: string) => void;
-  onUseBetween: () => void;
   onPickRun: (index: number) => void;
   choice: RetentionChoice;
   heat: HeatStart | null;
@@ -1189,16 +1117,7 @@ function RunPane({
                     onContinue={onContinueSelectivity}
                   />
                 ) : retention?.status === "look" && retention.look && !heat ? (
-                  <LookAtRuns
-                    look={retention.look}
-                    betweenAnswer={betweenAnswer}
-                    betweenText={betweenText}
-                    betweenError={betweenError}
-                    onAnswer={onBetweenAnswer}
-                    onBetweenText={onBetweenText}
-                    onUseBetween={onUseBetween}
-                    onPickRun={onPickRun}
-                  />
+                  <LookAtRuns look={retention.look} onPickRun={onPickRun} />
                 ) : (
                   <>
                     {retention ? (
@@ -1627,18 +1546,6 @@ function toSample(run: RunState): RetentionSample {
     maxBackPressurePsi: run.read?.maxBackPressurePsi ?? null,
     peaks: run.read?.peaks ?? [],
   };
-}
-
-function inBetweenMatches(
-  runs: RunState[],
-  picked: { percent: number; sourceIndex: number } | null,
-): boolean {
-  if (!picked) return false;
-  const run = runs[picked.sourceIndex + 1];
-  if (!run || run.status !== "ready" || !run.read) return false;
-  const percent = parseUserNumber(run.percentB);
-  if (percent == null) return false;
-  return Math.abs(percent - picked.percent) <= 1e-9;
 }
 
 function toRuleNumbers(rules: RuleInputs): RuleNumbers {

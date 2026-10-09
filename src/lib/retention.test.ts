@@ -289,15 +289,16 @@ describe("retention %B along the four lab files", () => {
       [...samples, { ...sampleFromRead(42, reads[3]), lastPeakTimeMin: 5 }],
       pathRules,
     );
-    expect(stillEarly.reason).not.toBe("intermediate");
-    expect(stillEarly.status).toBe("look");
+    expect(stillEarly.reason).toBe("intermediate");
+    expect(stillEarly.nextPercentB).toBe(62);
+    expect(retentionChangeLabel(stillEarly)).toBe("Run at 62% B");
 
     const underHalf = decideRetention(
       [...samples, { ...sampleFromRead(42, reads[3]), lastPeakTimeMin: 4 }],
       pathRules,
     );
-    expect(underHalf.reason).not.toBe("intermediate");
-    expect(underHalf.status).toBe("look");
+    expect(underHalf.reason).toBe("intermediate");
+    expect(underHalf.nextPercentB).toBe(62);
   });
 
   it("goes to the intermediate %B when the minimum-%B file runs past the set time", () => {
@@ -318,7 +319,6 @@ describe("retention %B along the four lab files", () => {
     expect(followed.nextPercentB).toBe(62);
     expect(retentionChangeLabel(followed)).toBe("Run at 62% B");
     expect(followed.nextChange).toContain("62%");
-    expect(followed.why).toContain("intermediate %B");
     expect(followed.why).toContain("62% B is where that gap is largest");
     expect(followed.why).toContain("2.618 min");
     expect(followed.why).toContain("inside the set time of 10 min");
@@ -1051,17 +1051,22 @@ describe("which run to carry forward after the calculated %B", () => {
 
     const calculated = decideRetention(series, rules);
     expect(calculated.move).toBe("calculated");
+    expect(calculated.nextPercentB).toBe(36);
     expect(calculated.nextPercentB).not.toBeNull();
     const followed = decideRetention(
       [...series, sampleFromRead(calculated.nextPercentB!, read37)],
       rules,
     );
-    expect(followed.status).toBe("look");
-    expect(followed.look?.mode).toBe("between-then-heat");
-    expect(followed.look?.runs).toHaveLength(series.length + 1);
-    expect(followed.nextChange).toBe("Look at the runs.");
+    expect(followed.status).toBe("recommend");
+    expect(followed.reason).toBe("intermediate");
+    expect(followed.nextPercentB).toBe(37);
+    expect(retentionChangeLabel(followed)).toBe("Run at 37% B");
+    expect(followed.why).toContain("37% B is where that gap is largest");
+    expect(followed.why).toContain("inside the set time of 15 min");
+    expect(followed.why.toLowerCase()).not.toContain("do you want");
     expect(followed.nextChange).not.toContain("Carry forward");
     expect(followed.why).not.toContain("Carry forward");
+    expect(followed.look).toBeUndefined();
   });
 
   it("does not let a short run with a high found resolution beat a run that has enough peaks", () => {
