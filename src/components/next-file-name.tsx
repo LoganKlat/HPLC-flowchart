@@ -25,10 +25,21 @@ export function NextFileNameLine({ name }: { name: string }) {
 
   return (
     <div id="next-file-name" className="mt-3 flex flex-col gap-2 border-t border-foreground/15 pt-3">
-      <p className="text-sm leading-snug text-foreground">
+      <p className="min-w-0 text-sm leading-snug text-foreground">
         File name for the next run:{" "}
-        <span id="next-file-name-value" className="font-mono text-[0.8rem] break-all">
-          {name}
+        <span id="next-file-name-value" className="font-mono text-[0.8rem]">
+          {name.split("-").map((piece, index, pieces) => (
+            <span key={index}>
+              <span className="whitespace-nowrap" data-piece="">
+                {piece}
+              </span>
+              {index < pieces.length - 1 ? (
+                <>
+                  -<wbr />
+                </>
+              ) : null}
+            </span>
+          ))}
         </span>
       </p>
       <div className="flex items-center gap-2">
