@@ -6,17 +6,13 @@ export type BeadSurface = {
   ligandAt: boolean[];
 };
 
-/** Carbon load is how many of the 100 surface spots are ligands. The rest are SiOH. */
+/**
+ * Carbon load is how many of the 100 surface spots are ligands. The rest are SiOH.
+ * Spots are filled in a fixed order, so raising the load only adds ligands
+ * and lowering it removes the newest ones. The spots that stay do not move.
+ */
 export function beadSurface(carbonLoadPercent: number): BeadSurface {
   const ligands = Math.max(0, Math.min(SURFACE_SPOTS, Math.round(carbonLoadPercent)));
-  const ligandAt = Array.from({ length: SURFACE_SPOTS }, () => false);
-  let debt = 0;
-  for (let index = 0; index < SURFACE_SPOTS; index++) {
-    debt += ligands;
-    if (debt >= SURFACE_SPOTS) {
-      ligandAt[index] = true;
-      debt -= SURFACE_SPOTS;
-    }
-  }
+  const ligandAt = Array.from({ length: SURFACE_SPOTS }, (_, index) => index < ligands);
   return { ligands, silanols: SURFACE_SPOTS - ligands, ligandAt };
 }

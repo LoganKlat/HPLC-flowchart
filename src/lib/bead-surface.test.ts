@@ -26,4 +26,18 @@ describe("bead surface", () => {
     expect(at.silanols).toBe(60);
     expect(at.ligandAt.filter(Boolean)).toHaveLength(40);
   });
+
+  it("keeps the ligands already drawn when carbon load rises from 10% to 40%", () => {
+    const low = beadSurface(10);
+    const high = beadSurface(40);
+    const again = beadSurface(10);
+    expect(low.ligandAt.filter(Boolean)).toHaveLength(10);
+    expect(high.ligandAt.filter(Boolean)).toHaveLength(40);
+    low.ligandAt.forEach((occupied, index) => {
+      if (occupied) expect(high.ligandAt[index]).toBe(true);
+    });
+    const added = high.ligandAt.filter((occupied, index) => occupied && !low.ligandAt[index]);
+    expect(added).toHaveLength(30);
+    expect(again.ligandAt).toEqual(low.ligandAt);
+  });
 });
