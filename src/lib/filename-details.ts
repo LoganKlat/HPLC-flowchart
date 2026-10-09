@@ -1,5 +1,6 @@
-import { LIGANDS, SOLVENTS } from "@/lib/selectivity";
+import { formatPercentB } from "@/lib/retention";
 import type { RunDetails } from "@/lib/run-details";
+import { LIGANDS, SOLVENTS } from "@/lib/selectivity";
 
 export const FILE_NAME_EXAMPLE =
   "GR09-05-3-ACN-3-ISO-90-1.5-20-CP-0.1-C18aqP-150x4.6x5-amb-254";
@@ -294,7 +295,7 @@ export function nextRunFileName(latestFileName: string | null | undefined, next:
     lettersToken(next.solvent, "NA"),
     plainNumber(next.ph, "0"),
     lettersToken(next.method, "NA"),
-    plainNumber(next.percentB, "0"),
+    percentToken(next.percentB),
     plainNumber(next.flowRate, "0"),
     `${plainNumber(next.injectionVolume, "0")}u`,
     lettersToken(next.sampleType, "NA"),
@@ -305,4 +306,31 @@ export function nextRunFileName(latestFileName: string | null | undefined, next:
     plainNumber(next.wavelength, "0"),
   ];
   return pieces.join("-");
+}
+
+/** %B in the name uses the same rounding as the rest of the page. A blank %B is 0. */
+function percentToken(raw: string): string {
+  const parsed = plainNumber(raw, "0");
+  const value = Number(parsed);
+  if (!Number.isFinite(value)) return "0";
+  return formatPercentB(value);
+}
+
+/**
+ * Copy name is only for a finished next-run name.
+ * Before a solvent is picked, the solvent piece is NA and %B is 0.
+ */
+export function copyableNextRunFileName(latestFileName: string | null | undefined, next: RunDetails): string | null {
+  const name = nextRunFileName(latestFileName, next);
+  return nextFileNameIsCopyable(name) ? name : null;
+}
+
+export function nextFileNameIsCopyable(name: string): boolean {
+  const pieces = name.split("-");
+  if (pieces.length < 15) return false;
+  const solvent = pieces[3] ?? "";
+  const percent = Number(pieces[6]);
+  if (!solvent || solvent.toUpperCase() === "NA") return false;
+  if (!Number.isFinite(percent) || percent === 0) return false;
+  return true;
 }

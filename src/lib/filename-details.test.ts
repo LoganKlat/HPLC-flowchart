@@ -7,9 +7,11 @@ import {
   FILE_NAME_MISMATCH,
   FILE_NAME_STRUCTURE_NOTE,
   detailsFromFileName,
+  copyableNextRunFileName,
   nextRunFileName,
   parseRunFileName,
 } from "@/lib/filename-details";
+import { solventNomograph } from "@/lib/selectivity";
 import { readLabFile } from "@/lib/lab-file";
 import { decideRetention } from "@/lib/retention";
 import { emptyRunDetails } from "@/lib/run-details";
@@ -380,5 +382,55 @@ describe("run file names", () => {
 
     const unseen = nextRunFileName(null, next);
     expect(unseen.startsWith("GR-01-1-")).toBe(true);
+  });
+
+  it("waits to copy the next-run name until the chart solvent and %B are filled in", () => {
+    const latest = "GR41-03-5-ACN-3-ISO-60-1.5-20u-CP-0.1-C18-150x4.6x5-T60-254.csv";
+    const base = {
+      ...emptyRunDetails(),
+      ph: "3",
+      method: "ISO",
+      flowRate: "1.5",
+      injectionVolume: "20",
+      sampleType: "CP",
+      sampleConcentration: "0.1",
+      ligand: "C18",
+      lengthMm: "150",
+      diameterMm: "4.6",
+      particleSize: "5",
+      wavelength: "254",
+      temperature: "25",
+    };
+    const unset = nextRunFileName(latest, { ...base, solvent: "", percentB: "" });
+    expect(unset).toContain("-NA-");
+    expect(unset).toContain("-0-");
+    expect(copyableNextRunFileName(latest, { ...base, solvent: "", percentB: "" })).toBeNull();
+    expect(copyableNextRunFileName(latest, { ...base, solvent: "NA", percentB: "45.1" })).toBeNull();
+    expect(copyableNextRunFileName(latest, { ...base, solvent: "MeOH", percentB: "0" })).toBeNull();
+
+    const chart = solventNomograph(35, "ACN");
+    expect(chart).toBeTruthy();
+    const percentOf = (id: string) => chart!.find((row) => row.id === id)!.percentText;
+    expect(percentOf("acetonitrile")).toBe("35.0");
+    expect(percentOf("methanol")).toBe("45.1");
+    expect(percentOf("tetrahydrofuran")).toBe("26.6");
+
+    expect(
+      copyableNextRunFileName(latest, { ...base, solvent: "MeOH", percentB: percentOf("methanol"), temperature: "25" }),
+    ).toBe("GR41-04-5-MeOH-3-ISO-45.1-1.5-20u-CP-0.1-C18-150x4.6x5-T25-254");
+    expect(
+      copyableNextRunFileName(latest, { ...base, solvent: "ACN", percentB: percentOf("acetonitrile"), temperature: "25" }),
+    ).toBe("GR41-04-5-ACN-3-ISO-35-1.5-20u-CP-0.1-C18-150x4.6x5-T25-254");
+    expect(
+      copyableNextRunFileName(latest, { ...base, solvent: "THF", percentB: percentOf("tetrahydrofuran"), temperature: "25" }),
+    ).toBe("GR41-04-5-THF-3-ISO-26.6-1.5-20u-CP-0.1-C18-150x4.6x5-T25-254");
+    expect(
+      copyableNextRunFileName(latest, {
+        ...base,
+        solvent: "MeOH",
+        percentB: percentOf("methanol"),
+        temperature: "ambient",
+      }),
+    ).toBe("GR41-04-5-MeOH-3-ISO-45.1-1.5-20u-CP-0.1-C18-150x4.6x5-amb-254");
   });
 });

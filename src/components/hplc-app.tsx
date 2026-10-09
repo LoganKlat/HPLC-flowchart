@@ -16,7 +16,7 @@ import { EquipmentPanel } from "@/components/equipment-panel";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { evaluateRun, parseUserCount, parseUserNumber, type RuleNumbers } from "@/lib/evaluate";
-import { detailsFromFileName, nextRunFileName, parseRunFileName } from "@/lib/filename-details";
+import { copyableNextRunFileName, detailsFromFileName, parseRunFileName } from "@/lib/filename-details";
 import { readLabFile, type LabFileRead } from "@/lib/lab-file";
 import {
   decideRetention,
@@ -1074,7 +1074,7 @@ function RunPane({
   const next = runs[index + 1];
   const nextFileName =
     next && run.status === "ready"
-      ? nextRunFileName(latestIdentityFile(runs, index), detailsForRun(index + 1, runs, details))
+      ? copyableNextRunFileName(latestIdentityFile(runs, index), detailsForRun(index + 1, runs, details))
       : null;
   const selectivity = explanation?.kind === "selectivity" ? explanation.plan : null;
   const retention = explanation?.kind === "retention" ? explanation.decision : null;

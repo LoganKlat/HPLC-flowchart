@@ -2,9 +2,11 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { nextFileNameIsCopyable } from "@/lib/filename-details";
 
 export function NextFileNameLine({ name }: { name: string }) {
   const [copied, setCopied] = useState(false);
+  if (!nextFileNameIsCopyable(name)) return null;
 
   async function copyName() {
     try {
