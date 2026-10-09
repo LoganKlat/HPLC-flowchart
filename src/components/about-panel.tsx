@@ -106,8 +106,9 @@ export function AboutPanel({ onOpenNav }: { onOpenNav: () => void }) {
             try 60°C.
           </p>
           <p>
-            Choose ACN, MeOH, or THF. The page uses a solvent-conversion chart to suggest an equivalent %B that
-            maintains approximately similar retention. On the new solvent, repeat the 40°C test and, if useful, the
+            Choose ACN, MeOH, THF, Ethanol, IPA, Acetone, Propanol, or Butanol. The page uses a solvent-conversion
+            chart to suggest an equivalent %B that maintains approximately similar retention. On the new solvent,
+            repeat the 40°C test and, if useful, the
             60°C test. If the new-solvent 40°C test fails to improve separation, change the ligand (recommended) or try
             60°C anyway.
           </p>

@@ -412,18 +412,18 @@ describe("run file names", () => {
     expect(chart).toBeTruthy();
     const percentOf = (id: string) => chart!.find((row) => row.id === id)!.percentText;
     expect(percentOf("acetonitrile")).toBe("35.0");
-    expect(percentOf("methanol")).toBe("45.1");
-    expect(percentOf("tetrahydrofuran")).toBe("26.6");
+    expect(percentOf("methanol")).toBe("44.1");
+    expect(percentOf("tetrahydrofuran")).toBe("24.5");
 
     expect(
       copyableNextRunFileName(latest, { ...base, solvent: "MeOH", percentB: percentOf("methanol"), temperature: "25" }),
-    ).toBe("GR41-04-5-MeOH-3-ISO-45.1-1.5-20u-CP-0.1-C18-150x4.6x5-T25-254");
+    ).toBe("GR41-04-5-MeOH-3-ISO-44.1-1.5-20u-CP-0.1-C18-150x4.6x5-T25-254");
     expect(
       copyableNextRunFileName(latest, { ...base, solvent: "ACN", percentB: percentOf("acetonitrile"), temperature: "25" }),
     ).toBe("GR41-04-5-ACN-3-ISO-35-1.5-20u-CP-0.1-C18-150x4.6x5-T25-254");
     expect(
       copyableNextRunFileName(latest, { ...base, solvent: "THF", percentB: percentOf("tetrahydrofuran"), temperature: "25" }),
-    ).toBe("GR41-04-5-THF-3-ISO-26.6-1.5-20u-CP-0.1-C18-150x4.6x5-T25-254");
+    ).toBe("GR41-04-5-THF-3-ISO-24.5-1.5-20u-CP-0.1-C18-150x4.6x5-T25-254");
     expect(
       copyableNextRunFileName(latest, {
         ...base,
@@ -431,6 +431,6 @@ describe("run file names", () => {
         percentB: percentOf("methanol"),
         temperature: "ambient",
       }),
-    ).toBe("GR41-04-5-MeOH-3-ISO-45.1-1.5-20u-CP-0.1-C18-150x4.6x5-amb-254");
+    ).toBe("GR41-04-5-MeOH-3-ISO-44.1-1.5-20u-CP-0.1-C18-150x4.6x5-amb-254");
   });
 });

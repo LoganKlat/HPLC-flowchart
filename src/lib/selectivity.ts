@@ -14,52 +14,29 @@ export type Solvent = {
   /** Name used in sentences. */
   name: string;
   aliases: string[];
+  /** RP solvent strength parameter S. Null when the table gives no number. */
+  strength: number | null;
+  /** %B that matches 50% ACN. A range in the table is stored as its midpoint. */
+  match50Acn: number;
 };
 
+const MEOH_MATCH_50 = (61.5 + 64.4) / 2;
+const THF_MATCH_50 = (33 + 37) / 2;
+const BUTANOL_MATCH_50 = (20 + 25) / 2;
+
 export const SOLVENTS: readonly Solvent[] = [
-  { id: "acetonitrile", label: "ACN", name: "ACN", aliases: ["acn", "acetonitrile", "acetonitrile (acn)"] },
-  { id: "methanol", label: "MeOH", name: "MeOH", aliases: ["meoh", "methanol", "methanol (meoh)"] },
-  { id: "tetrahydrofuran", label: "THF", name: "THF", aliases: ["thf", "tetrahydrofuran", "tetrahydrofuran (thf)"] },
+  { id: "acetonitrile", label: "ACN", name: "ACN", aliases: ["acn", "acetonitrile", "acetonitrile (acn)"], strength: 3.2, match50Acn: 50 },
+  { id: "methanol", label: "MeOH", name: "MeOH", aliases: ["meoh", "methanol", "methanol (meoh)"], strength: 2.6, match50Acn: MEOH_MATCH_50 },
+  { id: "tetrahydrofuran", label: "THF", name: "THF", aliases: ["thf", "tetrahydrofuran", "tetrahydrofuran (thf)"], strength: 4.5, match50Acn: THF_MATCH_50 },
+  { id: "ethanol", label: "Ethanol", name: "Ethanol", aliases: ["ethanol", "etoh"], strength: 3.6, match50Acn: 44 },
+  { id: "isopropanol", label: "IPA", name: "IPA", aliases: ["ipa", "isopropanol", "isopropanol (ipa)", "2-propanol"], strength: 4.2, match50Acn: 35 },
+  { id: "acetone", label: "Acetone", name: "Acetone", aliases: ["acetone"], strength: 3.4, match50Acn: 40 },
+  { id: "propanol", label: "Propanol", name: "Propanol", aliases: ["propanol", "n-propanol", "1-propanol"], strength: 4.0, match50Acn: 37 },
+  { id: "butanol", label: "Butanol", name: "Butanol", aliases: ["butanol", "n-butanol", "1-butanol"], strength: null, match50Acn: BUTANOL_MATCH_50 },
 ];
 
-/** Percent, then the nomograph x of that tick. Piecewise linear between ticks. */
-const CHART_TICKS = {
-  methanol: [
-    [0, 26],
-    [10, 64.5],
-    [20, 122.5],
-    [30, 177.5],
-    [40, 239.5],
-    [50, 292.5],
-    [60, 365.5],
-    [70, 431.5],
-    [80, 515.5],
-    [90, 617.5],
-    [100, 713.5],
-  ],
-  acetonitrile: [
-    [0, 26],
-    [100, 713.5],
-  ],
-  tetrahydrofuran: [
-    [0, 26],
-    [10, 116.5],
-    [20, 211.5],
-    [30, 294.5],
-    [40, 385.5],
-    [50, 477.5],
-    [60, 579],
-    [70, 693.5],
-    [80, 794.5],
-    [90, 894.5],
-    [100, 991.5],
-  ],
-} as const;
-
-const NOMOGRAPH_IDS = ["methanol", "acetonitrile", "tetrahydrofuran"] as const;
-
-export const CHART_X_MIN = 26;
-export const CHART_X_MAX = 991.5;
+/** Scale that lines up every solvent’s 50% ACN match on one vertical line. */
+const CHART_SCALE = 100;
 
 export const LIGANDS = ["C18", "C18aq", "PFPP", "C8", "biphenyl", "IBD"] as const;
 
@@ -178,63 +155,31 @@ export function formatMatchedPercent(percent: number, capped: boolean): string {
   return percent.toFixed(1);
 }
 
-type ChartTicks = readonly (readonly [number, number])[];
-
-function chartTicks(solventId: string): ChartTicks | null {
-  if (solventId === "methanol" || solventId === "acetonitrile" || solventId === "tetrahydrofuran") {
-    return CHART_TICKS[solventId];
-  }
-  return null;
-}
-
-function percentToX(ticks: ChartTicks, percent: number): number {
-  const clamped = Math.min(100, Math.max(0, percent));
-  for (let index = 0; index < ticks.length - 1; index++) {
-    const [startPercent, startX] = ticks[index];
-    const [endPercent, endX] = ticks[index + 1];
-    if (clamped <= endPercent) {
-      const span = endPercent - startPercent;
-      const t = span === 0 ? 0 : (clamped - startPercent) / span;
-      return startX + t * (endX - startX);
-    }
-  }
-  return ticks[ticks.length - 1][1];
-}
-
-function xToPercent(ticks: ChartTicks, x: number): { percent: number; capped: boolean } {
-  const lastX = ticks[ticks.length - 1][1];
-  const firstX = ticks[0][1];
-  if (x > lastX) return { percent: 100, capped: true };
-  if (x <= firstX) return { percent: 0, capped: false };
-  for (let index = 0; index < ticks.length - 1; index++) {
-    const [startPercent, startX] = ticks[index];
-    const [endPercent, endX] = ticks[index + 1];
-    if (x <= endX) {
-      const span = endX - startX;
-      const t = span === 0 ? 0 : (x - startX) / span;
-      const raw = startPercent + t * (endPercent - startPercent);
-      const percent = Math.min(100, Math.max(0, roundTenths(raw)));
-      return { percent, capped: false };
-    }
-  }
-  return { percent: 100, capped: true };
+function isoeluotropicPercent(
+  anchorPercent: number,
+  from: Solvent,
+  to: Solvent,
+): { percent: number; capped: boolean } {
+  const raw = (anchorPercent * to.match50Acn) / from.match50Acn;
+  if (raw > 100) return { percent: 100, capped: true };
+  const percent = Math.min(100, Math.max(0, roundTenths(raw)));
+  return { percent, capped: false };
 }
 
 export function chartX(solventId: string, percent: number): number | null {
-  const ticks = chartTicks(solventId);
-  if (!ticks) return null;
-  return percentToX(ticks, percent);
+  const solvent = solventById(solventId);
+  if (!solvent || !(solvent.match50Acn > 0)) return null;
+  const clamped = Math.min(100, Math.max(0, percent));
+  return (clamped / solvent.match50Acn) * CHART_SCALE;
 }
 
 export function solventNomograph(oldPercent: number, oldSolvent: string): NomographEntry[] | null {
   const current = findSolvent(oldSolvent);
-  if (!current || !chartTicks(current.id)) return null;
-  const x = percentToX(chartTicks(current.id)!, oldPercent);
-  return NOMOGRAPH_IDS.map((id) => {
-    const solvent = solventById(id)!;
-    const matched = xToPercent(chartTicks(id)!, x);
+  if (!current) return null;
+  return SOLVENTS.map((solvent) => {
+    const matched = isoeluotropicPercent(oldPercent, current, solvent);
     return {
-      id,
+      id: solvent.id,
       label: solvent.label,
       percentText: formatMatchedPercent(matched.percent, matched.capped),
       capped: matched.capped,
@@ -998,7 +943,7 @@ function solventPlan(args: {
     following: `After the solvent, try 40°C and then 60°C at the chart %B. ${SELECTIVITY_ORDER}`,
     why: [
       `Change the solvent and go back to ${back}°C. ${args.ambient.sentence}`,
-      `Pick ACN, MeOH, or THF. The %B comes from the chart for the solvent you pick, matched to the retention minimum of ${minimum}% B. The chart does not choose the solvent.`,
+      `Pick ACN, MeOH, THF, Ethanol, IPA, Acetone, Propanol, or Butanol. The %B comes from the chart for the solvent you pick, matched to the retention minimum of ${minimum}% B. The chart does not choose the solvent.`,
     ].join("\n\n"),
     prefill: {
       percentB: "",

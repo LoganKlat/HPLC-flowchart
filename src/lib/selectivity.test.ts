@@ -46,24 +46,37 @@ function run(overrides: Partial<SelectivityRun> = {}): SelectivityRun {
 }
 
 describe("solvent nomograph", () => {
-  it("reads 20% acetonitrile as methanol 27.5 and tetrahydrofuran 14.9", () => {
-    expect(percents(20)).toEqual(["27.5", "20.0", "14.9"]);
+  it("reads 20% acetonitrile from the eight-solvent equivalents", () => {
+    expect(percents(20)).toEqual(["20.0", "25.2", "14.0", "17.6", "14.0", "16.0", "14.8", "9.0"]);
   });
 
-  it("reads 40% acetonitrile as methanol 51.2 and tetrahydrofuran 30.7", () => {
-    expect(percents(40)).toEqual(["51.2", "40.0", "30.7"]);
+  it("reads 40% acetonitrile from the eight-solvent equivalents", () => {
+    expect(percents(40)).toEqual(["40.0", "50.4", "28.0", "35.2", "28.0", "32.0", "29.6", "18.0"]);
   });
 
-  it("reads 50% acetonitrile as methanol 60.6 and tetrahydrofuran 38.3", () => {
-    expect(percents(50)).toEqual(["60.6", "50.0", "38.3"]);
+  it("reads 50% acetonitrile as the table matches, using range midpoints", () => {
+    expect(percents(50)).toEqual(["50.0", "63.0", "35.0", "44.0", "35.0", "40.0", "37.0", "22.5"]);
+    expect(findSolvent("ACN")?.strength).toBe(3.2);
+    expect(findSolvent("MeOH")?.strength).toBe(2.6);
+    expect(findSolvent("THF")?.strength).toBe(4.5);
+    expect(findSolvent("Ethanol")?.strength).toBe(3.6);
+    expect(findSolvent("IPA")?.strength).toBe(4.2);
+    expect(findSolvent("Acetone")?.strength).toBe(3.4);
+    expect(findSolvent("Propanol")?.strength).toBe(4);
+    expect(findSolvent("Butanol")?.strength).toBeNull();
   });
 
-  it("reads 100% acetonitrile as methanol 100 and tetrahydrofuran 72.0", () => {
+  it("caps methanol at 100 when 100% acetonitrile is past that scale", () => {
     const rows = solventNomograph(100, "acetonitrile");
-    expect(rows?.map((row) => [row.percentText, row.capped])).toEqual([
-      ["100", false],
-      ["100", false],
-      ["72.0", false],
+    expect(rows?.map((row) => [row.label, row.percentText, row.capped])).toEqual([
+      ["ACN", "100", false],
+      ["MeOH", "100", true],
+      ["THF", "70.0", false],
+      ["Ethanol", "88.0", false],
+      ["IPA", "70.0", false],
+      ["Acetone", "80.0", false],
+      ["Propanol", "74.0", false],
+      ["Butanol", "45.0", false],
     ]);
   });
 
@@ -75,21 +88,32 @@ describe("solvent nomograph", () => {
     expect(formatMatchedPercent(100, true)).toBe("100");
   });
 
-  it("does not invent a match for solvents that are not on the chart", () => {
-    expect(solventNomograph(50, "ethanol")).toBeNull();
-    expect(solventNomograph(50, "acetone")).toBeNull();
-    expect(solventNomograph(50, "n-propanol")).toBeNull();
-    expect(solventNomograph(50, "isopropanol")).toBeNull();
-    expect(solventNomograph(50, "n-butanol")).toBeNull();
-    expect(solventChoicePercent(50, "acetonitrile", "ethanol")).toBeNull();
-    expect(solventChoicePercent(50, "ethanol", "methanol")).toBeNull();
+  it("matches every supported solvent and does not invent one outside the list", () => {
+    expect(solventNomograph(50, "ethanol")?.find((row) => row.id === "acetonitrile")?.percentText).toBe("56.8");
+    expect(solventNomograph(50, "acetone")).toBeTruthy();
+    expect(solventNomograph(50, "n-propanol")).toBeTruthy();
+    expect(solventNomograph(50, "isopropanol")).toBeTruthy();
+    expect(solventNomograph(50, "n-butanol")?.find((row) => row.id === "butanol")?.percentText).toBe("50.0");
+    expect(solventChoicePercent(50, "acetonitrile", "ethanol")?.percentText).toBe("44.0");
+    expect(solventChoicePercent(50, "ethanol", "methanol")?.percentText).toBe("71.5");
     expect(findSolvent("ACN")?.label).toBe("ACN");
     expect(findSolvent("MeOH")?.id).toBe("methanol");
     expect(findSolvent("THF")?.label).toBe("THF");
     expect(findSolvent("acetonitrile")?.label).toBe("ACN");
-    expect(solventNomograph(40, "ACN")?.map((row) => row.label)).toEqual(["MeOH", "ACN", "THF"]);
-    expect(findSolvent("2-Propanol")).toBeNull();
-    expect(findSolvent("ethanol")).toBeNull();
+    expect(solventNomograph(40, "ACN")?.map((row) => row.label)).toEqual([
+      "ACN",
+      "MeOH",
+      "THF",
+      "Ethanol",
+      "IPA",
+      "Acetone",
+      "Propanol",
+      "Butanol",
+    ]);
+    expect(findSolvent("2-Propanol")?.id).toBe("isopropanol");
+    expect(findSolvent("ethanol")?.id).toBe("ethanol");
+    expect(findSolvent("hexane")).toBeNull();
+    expect(findSolvent("ethyl acetate")).toBeNull();
     expect(recommendLigand(["C18", "C18aq", "PFPP", "C8", "biphenyl", "IBD"])).toBeNull();
   });
 });
@@ -699,7 +723,7 @@ describe("selectivity plan", () => {
     expect(history.plan.showSolventChoices).toBe(true);
     expect(history.plan.why).toContain("blank, so 25°C is used");
     expect(history.plan.why).toContain("retention minimum of 35% B");
-    expect(history.plan.why).toContain("ACN, MeOH, or THF");
+    expect(history.plan.why).toContain("ACN, MeOH, THF, Ethanol, IPA, Acetone, Propanol, or Butanol");
     expect(history.plan.why).not.toContain("40°C");
     expect(history.plan.why).not.toContain("60%");
     expect(history.plan.why.toLowerCase()).not.toContain("intermediate");

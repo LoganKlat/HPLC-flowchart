@@ -30,7 +30,7 @@ type Setup = {
 
 const solvents: FunctionNote = {
   does: "Bottles of the liquids that carry the sample. One is usually water, sometimes with a set pH. The other is the organic solvent, such as acetonitrile or methanol. The mix of organic solvent is the %B.",
-  sets: "The solvent bottles hold the liquids. The pump blends them into %B. In this class the organic solvent is ACN, MeOH, or THF.",
+  sets: "The solvent bottles hold the liquids. The pump blends them into %B. The organic solvents on the chart are ACN, MeOH, THF, Ethanol, IPA, Acetone, Propanol, and Butanol.",
   range: "%B is a percent of organic solvent, from 0% to 100%. The bottles themselves have no number to type.",
   changes:
     "A higher %B lowers retention (k), so compounds come off sooner. A lower %B raises retention, quickly. Changing which organic solvent is in the bottle is a selectivity change: peaks can pull apart or change order. The bottles do not change efficiency (how narrow the peaks are) by themselves.",

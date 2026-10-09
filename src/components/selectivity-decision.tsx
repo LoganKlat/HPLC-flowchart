@@ -2,7 +2,7 @@ import { decisionBesideClass, decisionUnderClass, nextChangeValueClass } from "@
 import { NextFileNameLine } from "@/components/next-file-name";
 import { Button } from "@/components/ui/button";
 import { selectivityChangeLabel } from "@/lib/change-label";
-import { chartX, findSolvent, type SelectivityPlan, type TempPath } from "@/lib/selectivity";
+import { SOLVENTS, chartX, findSolvent, type SelectivityPlan, type TempPath } from "@/lib/selectivity";
 import { CHART_SOLVENT_NOTE } from "@/lib/solvent-menu";
 import { PERCENT_B_SENTENCE, SELECTIVITY_ORDER } from "@/lib/setting-kind";
 
@@ -180,37 +180,44 @@ function NomographSketch({ oldSolvent, percentB }: { oldSolvent: string; percent
   const solvent = findSolvent(oldSolvent);
   const x = solvent ? chartX(solvent.id, percentB) : null;
   if (x == null) return null;
-  const origin = 26;
-  const chartEnd = 991.5;
-  const left = 48;
-  const width = 276;
-  const mapX = (value: number) => left + ((value - origin) / (chartEnd - origin)) * width;
-  const lineX = mapX(Math.min(chartEnd, Math.max(origin, x)));
-  const rows = [
-    { name: "MeOH", end: 713.5, y: 18 },
-    { name: "ACN", end: 713.5, y: 42 },
-    { name: "THF", end: 991.5, y: 66 },
-  ];
+  const ends = SOLVENTS.map((entry) => chartX(entry.id, 100) ?? 0);
+  const maxX = Math.max(x, ...ends);
+  if (!(maxX > 0)) return null;
+  const left = 72;
+  const width = 256;
+  const rowH = 22;
+  const top = 16;
+  const height = top + SOLVENTS.length * rowH;
+  const mapX = (value: number) => left + (Math.min(maxX, Math.max(0, value)) / maxX) * width;
+  const lineX = mapX(x);
   return (
     <figure>
-      <svg viewBox="0 0 340 84" className="h-24 w-full max-w-md" role="img" aria-label="Three solvent scales crossed by one vertical line">
-        {rows.map((row) => (
-          <g key={row.name}>
-            <text x="0" y={row.y + 4} fill="#144237" fontSize="11">
-              {row.name}
-            </text>
-            <line
-              x1={left}
-              y1={row.y}
-              x2={mapX(row.end)}
-              y2={row.y}
-              stroke="#144237"
-              strokeWidth="3"
-              strokeLinecap="round"
-            />
-          </g>
-        ))}
-        <line x1={lineX} y1={6} x2={lineX} y2={78} stroke="#c2410c" strokeWidth="1.5" />
+      <svg
+        viewBox={`0 0 340 ${height}`}
+        className="h-auto w-full max-w-md"
+        role="img"
+        aria-label="Eight solvent scales crossed by one vertical line"
+      >
+        {SOLVENTS.map((entry, index) => {
+          const y = top + index * rowH;
+          return (
+            <g key={entry.id}>
+              <text x="0" y={y + 4} fill="#144237" fontSize="11">
+                {entry.label}
+              </text>
+              <line
+                x1={left}
+                y1={y}
+                x2={mapX(ends[index])}
+                y2={y}
+                stroke="#144237"
+                strokeWidth="3"
+                strokeLinecap="round"
+              />
+            </g>
+          );
+        })}
+        <line x1={lineX} y1={8} x2={lineX} y2={height - 8} stroke="#c2410c" strokeWidth="1.5" />
       </svg>
     </figure>
   );

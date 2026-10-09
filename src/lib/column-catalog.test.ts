@@ -81,11 +81,12 @@ describe("session lists", () => {
     expect(recommendLigand(["C18", "C18aq", "PFPP", "C8", "biphenyl", "IBD"])).toBeNull();
   });
 
-  it("starts solvents with the chart three and other common HPLC solvents", () => {
-    expect(MENU_SOLVENTS.slice(0, 3)).toEqual(["ACN", "MeOH", "THF"]);
-    expect(MENU_SOLVENTS).toEqual(
-      expect.arrayContaining(["Ethanol", "Isopropanol", "Acetone", "Propanol", "Butanol", "Ethyl acetate", "Hexane"]),
+  it("lists only the eight chart solvents", () => {
+    expect(MENU_SOLVENTS).toEqual(["ACN", "MeOH", "THF", "Ethanol", "IPA", "Acetone", "Propanol", "Butanol"]);
+    expect(MENU_SOLVENTS).not.toContain("Ethyl acetate");
+    expect(MENU_SOLVENTS).not.toContain("Hexane");
+    expect(CHART_SOLVENT_NOTE).toBe(
+      "The chart covers ACN, MeOH, THF, Ethanol, IPA, Acetone, Propanol, and Butanol.",
     );
-    expect(CHART_SOLVENT_NOTE).toBe("The chart only covers ACN, MeOH, and THF. Pick one of those.");
   });
 });

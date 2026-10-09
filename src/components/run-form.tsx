@@ -40,7 +40,7 @@ const runNotes = {
     note: {
       does: "The organic solvent in the mix that carries the sample.",
       sets: "The solvent bottles, blended by the pump. This menu records which organic solvent Run 1 uses. Settings chooses the list.",
-      range: "The Settings list. A name, not a number. The chart only covers ACN, MeOH, and THF.",
+      range: "The Settings list. A name, not a number. The chart covers ACN, MeOH, THF, Ethanol, IPA, Acetone, Propanol, and Butanol.",
       changes:
         "A solvent change is a selectivity change: peaks can pull apart or change order. The chart %B keeps the retention time similar when the solvent changes. It does not change efficiency by itself.",
     },
