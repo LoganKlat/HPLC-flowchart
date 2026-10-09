@@ -602,12 +602,12 @@ describe("retention rule edges", () => {
   it("leaves out the first run and the highest %B when they are different files", () => {
     const decision = decideRetention(
       [
-        sample({ percentB: 40, peakCount: 3, lastPeakTimeMin: 5, firstPeakTimeMin: 1 }),
-        sample({ percentB: 50, peakCount: 3, lastPeakTimeMin: 4, firstPeakTimeMin: 1 }),
-        sample({ percentB: 60, peakCount: 3, lastPeakTimeMin: 3.5, firstPeakTimeMin: 1 }),
-        sample({ percentB: 55, peakCount: 3, lastPeakTimeMin: 3.5, firstPeakTimeMin: 1 }),
+        sample({ percentB: 40, peakCount: 3, lastPeakTimeMin: 2, firstPeakTimeMin: 1 }),
+        sample({ percentB: 50, peakCount: 3, lastPeakTimeMin: 3, firstPeakTimeMin: 1 }),
+        sample({ percentB: 60, peakCount: 3, lastPeakTimeMin: 4, firstPeakTimeMin: 1 }),
+        sample({ percentB: 55, peakCount: 3, lastPeakTimeMin: 6, firstPeakTimeMin: 1 }),
       ],
-      { requiredPeaks: 10, lastPeakTimeMin: 4, maxBackPressurePsi: 500 },
+      { requiredPeaks: 10, lastPeakTimeMin: 10, maxBackPressurePsi: 500 },
     );
     expect(decision.move).toBe("calculated");
     expect(decision.fit!.excluded.map((row) => row.runNumber)).toEqual([1, 3]);
@@ -942,14 +942,12 @@ describe("first-peak time outliers", () => {
     expect(four.nextPercentB).toBe(45);
 
     const five = decideRetention(series.slice(0, 5), rules);
-    expect(five.move).toBe("calculated");
-    expect(five.fit!.rows.map((row) => row.t0)).toEqual([1.075, 1.064, 1.068]);
-    expect(five.fit!.excluded.map((row) => row.percentB)).toEqual([90, 80]);
-    expect(five.why).toContain(
-      "The Q-test left out Run 1 at 90% B (t0 peak 1.190 min) and Run 2 at 80% B (t0 peak 1.110 min).",
-    );
-    expect(five.nextPercentB).toBe(40);
-    expect(five.fit!.rawPercentB).toBeCloseTo(39.212, 3);
+    expect(five.move).toBeNull();
+    expect(five.fit).toBeNull();
+    expect(five.afterMinimum).toBe(true);
+    expect(five.reason).not.toBe("calculated");
+    expect(five.why).not.toContain("The calculated %B still aims");
+    expect(five.why).not.toContain("target logK");
 
     const six = decideRetention(series, rules);
     expect(six.status).toBe("look");
@@ -961,9 +959,9 @@ describe("first-peak time outliers", () => {
   it("says the t0 peaks passed the Q-test when none is an outlier", () => {
     const decision = decideRetention(
       [
-        sample({ percentB: 80, peakCount: 2, firstPeakTimeMin: 1.064, lastPeakTimeMin: 7 }),
-        sample({ percentB: 60, peakCount: 2, firstPeakTimeMin: 1.068, lastPeakTimeMin: 8 }),
-        sample({ percentB: 40, peakCount: 2, firstPeakTimeMin: 1.076, lastPeakTimeMin: 9 }),
+        sample({ percentB: 80, peakCount: 2, firstPeakTimeMin: 1.064, lastPeakTimeMin: 3 }),
+        sample({ percentB: 60, peakCount: 2, firstPeakTimeMin: 1.068, lastPeakTimeMin: 4 }),
+        sample({ percentB: 40, peakCount: 2, firstPeakTimeMin: 1.076, lastPeakTimeMin: 6 }),
       ],
       { requiredPeaks: 8, lastPeakTimeMin: 10, maxBackPressurePsi: 500 },
     );
@@ -980,9 +978,9 @@ describe("first-peak time outliers", () => {
   it("leaves out one extreme t0 peak when there are only three runs", () => {
     const decision = decideRetention(
       [
-        sample({ percentB: 80, peakCount: 2, firstPeakTimeMin: 1, lastPeakTimeMin: 7 }),
-        sample({ percentB: 60, peakCount: 2, firstPeakTimeMin: 1.01, lastPeakTimeMin: 8 }),
-        sample({ percentB: 40, peakCount: 2, firstPeakTimeMin: 1.5, lastPeakTimeMin: 9 }),
+        sample({ percentB: 80, peakCount: 2, firstPeakTimeMin: 1, lastPeakTimeMin: 3 }),
+        sample({ percentB: 60, peakCount: 2, firstPeakTimeMin: 1.01, lastPeakTimeMin: 4 }),
+        sample({ percentB: 40, peakCount: 2, firstPeakTimeMin: 1.5, lastPeakTimeMin: 6 }),
       ],
       { requiredPeaks: 8, lastPeakTimeMin: 10, maxBackPressurePsi: 500 },
     );
@@ -1244,6 +1242,50 @@ describe("declining selectivity after the 35% file", () => {
     expect(declined.bChoices ?? null).toBeNull();
     expect(declined.nextTemperature ?? null).toBeNull();
     expect(declined.why).toContain("36% B is the optimal %B");
+    expect(declined.chart?.lines.length).toBeGreaterThan(1);
+    expect(declined.fit).toBeNull();
+    expect(declined.why).not.toContain("still aims at that time");
+    expect(declined.why).not.toContain("target logK");
+
+    const firstMinimum = decideRetention(samples.slice(0, 5), rules);
+    expect(firstMinimum.move).toBe("calculated");
+    expect(firstMinimum.fit).not.toBeNull();
+    const offRecommendation = decideRetention(
+      [
+        ...samples.slice(0, 5),
+        {
+          percentB: 55,
+          peakCount: 4,
+          lastPeakTimeMin: 3,
+          firstPeakTimeMin: 1.06,
+          minResolutionExcludingFirst: 1,
+          maxBackPressurePsi: 1500,
+          peaks: [1.06, 1.4, 2.1, 3].map((timeMin) => ({ timeMin, area: 1, height: 1, name: null, id: null })),
+        },
+      ],
+      rules,
+    );
+    expect(offRecommendation.reason).toBe("intermediate");
+    expect(offRecommendation.move).toBeNull();
+    expect(offRecommendation.fit).toBeNull();
+    expect(offRecommendation.chart?.lines.length).toBeGreaterThan(1);
+    expect(offRecommendation.why).toContain("optimal %B");
+    expect(offRecommendation.why).not.toContain("still aims at that time");
+    expect(retentionChangeLabel(offRecommendation)).toMatch(/^Run at \d+% B$/);
+    const lateShort = { ...samples[5], peakCount: 6 };
+    const between = {
+      percentB: 55,
+      peakCount: 4,
+      lastPeakTimeMin: 3,
+      firstPeakTimeMin: 1.06,
+      minResolutionExcludingFirst: 1,
+      maxBackPressurePsi: 1500,
+      peaks: [1.06, 1.4, 2.1, 3].map((timeMin) => ({ timeMin, area: 1, height: 1, name: null, id: null })),
+    };
+    const secondTry = decideRetention([...samples.slice(0, 5), between, lateShort], rules);
+    expect(secondTry.fit).toBeNull();
+    expect(secondTry.move).not.toBe("calculated");
+    expect(secondTry.reason).toBe("intermediate");
     expect(declined.why).toContain("The predicted last peak is");
     expect(declined.why).not.toContain("40°C");
     expect(declined.why).not.toContain("60°C");

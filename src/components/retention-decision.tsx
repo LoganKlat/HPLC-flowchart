@@ -12,6 +12,7 @@ import {
   minimumPercentHeading,
   minimumPercentNote,
   refitMinimumPercent,
+  type IntermediateChart,
   type MinimumFit,
   type RetentionDecision,
   type RetentionFit,
@@ -49,8 +50,7 @@ export function RetentionDecisionView({
     onLinePercent?.(reported);
   }, [onLinePercent, reported]);
   const shownPercent = overridden && solved ? solved.nextPercentB : (pickedPercent ?? decision.nextPercentB);
-  const intermediateHeading =
-    decision.reason === "intermediate" && shownPercent != null ? minimumPercentHeading(shownPercent) : null;
+  const intermediate = decision.reason === "intermediate";
   const label = retentionChangeLabel(
     shownPercent === decision.nextPercentB ? decision : { ...decision, nextPercentB: shownPercent },
     shownPercent,
@@ -81,10 +81,12 @@ export function RetentionDecisionView({
         {nextFileName ? <NextFileNameLine name={nextFileName} /> : null}
       </section>
       <section
-        id={intermediateHeading ? "intermediate-b" : "min-b-note"}
+        id={intermediate ? "intermediate-b" : "min-b-note"}
         className={`rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10 ${decisionUnderClass}`}
       >
-        {fit ? (
+        {intermediate && decision.chart ? (
+          <IntermediateWhy why={decision.why} chart={decision.chart} />
+        ) : fit ? (
           <MinimumPercentFit
             fit={fit}
             brief={decision.brief ?? []}
@@ -98,7 +100,7 @@ export function RetentionDecisionView({
           />
         ) : (
           <>
-            <h2 className="font-heading text-base">{intermediateHeading ?? "Why"}</h2>
+            <h2 className="font-heading text-base">{intermediate && shownPercent != null ? `Why ${formatPercentB(shownPercent)}% B is the optimal %B` : "Why"}</h2>
             <div className="mt-1 flex flex-col gap-2 text-sm leading-relaxed text-foreground">
               {whyParagraphs(decision.why).map((paragraph, index) => (
                 <p key={index}>{paragraph}</p>
@@ -187,6 +189,99 @@ function isOtherStage(paragraph: string): boolean {
     return true;
   }
   return false;
+}
+
+const LINE_COLORS = ["#0f6b56", "#c2410c", "#1d4ed8", "#7c3aed", "#b45309", "#be185d", "#0e7490", "#365314"];
+
+function IntermediateWhy({ why, chart }: { why: string; chart: IntermediateChart }) {
+  return (
+    <div id="intermediate-fit" className="flex flex-col gap-4" data-lines={chart.lines.length}>
+      <div>
+        <h2 className="font-heading text-base">{`Why ${formatPercentB(chart.percentB)}% B is the optimal %B`}</h2>
+        <div className="mt-1 flex flex-col gap-2 text-sm leading-relaxed text-foreground">
+          {whyParagraphs(why).map((paragraph, index) => (
+            <p key={index}>{paragraph}</p>
+          ))}
+        </div>
+      </div>
+      <PeakLineGraph chart={chart} />
+    </div>
+  );
+}
+
+function PeakLineGraph({ chart }: { chart: IntermediateChart }) {
+  const width = 680;
+  const height = 340;
+  const left = 52;
+  const right = 16;
+  const top = 28;
+  const bottom = 36;
+  const plotW = width - left - right;
+  const plotH = height - top - bottom;
+  const spanX = Math.max(1, chart.maxPercentB - chart.minPercentB);
+  const minX = chart.minPercentB - spanX * 0.04;
+  const maxX = chart.maxPercentB + spanX * 0.04;
+  const yAt = (line: IntermediateChart["lines"][number], percent: number) => line.m * percent + line.c;
+  const ys = chart.lines.flatMap((line) => [yAt(line, chart.minPercentB), yAt(line, chart.maxPercentB), ...line.points.map((point) => point.logK)]);
+  let minY = Math.min(...ys);
+  let maxY = Math.max(...ys);
+  const spanY = Math.max(0.05, maxY - minY);
+  minY -= spanY * 0.12;
+  maxY += spanY * 0.16;
+  const sx = (value: number) => left + ((value - minX) / (maxX - minX)) * plotW;
+  const sy = (value: number) => top + ((maxY - value) / (maxY - minY)) * plotH;
+  const markerX = sx(chart.percentB);
+  return (
+    <figure id="intermediate-graph">
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        className="h-auto w-full"
+        role="img"
+        aria-label={`LogK versus %B for ${chart.lines.length} peaks. The closest pair is ${chart.pairLabel}. The chosen %B is ${formatPercentB(chart.percentB)}.`}
+      >
+        <line x1={left} y1={top} x2={left} y2={top + plotH} stroke="#144237" strokeWidth="1" />
+        <line x1={left} y1={top + plotH} x2={left + plotW} y2={top + plotH} stroke="#144237" strokeWidth="1" />
+        <text x={left + plotW / 2} y={height - 8} textAnchor="middle" fill="#144237" fontSize="12">
+          %B
+        </text>
+        <text x="14" y={top + plotH / 2} textAnchor="middle" fill="#144237" fontSize="12" transform={`rotate(-90 14 ${top + plotH / 2})`}>
+          logK
+        </text>
+        {chart.lines.map((line, index) => {
+          const color = LINE_COLORS[index % LINE_COLORS.length];
+          return (
+            <line
+              key={`${line.label}-${index}`}
+              x1={sx(chart.minPercentB)}
+              y1={sy(yAt(line, chart.minPercentB))}
+              x2={sx(chart.maxPercentB)}
+              y2={sy(yAt(line, chart.maxPercentB))}
+              stroke={color}
+              strokeWidth="2.5"
+              data-peak={line.label}
+            />
+          );
+        })}
+        <line x1={markerX} y1={top} x2={markerX} y2={top + plotH} stroke="#111827" strokeWidth="1.5" strokeDasharray="4 3" />
+        <text x={markerX} y={16} textAnchor="middle" fill="#111827" fontSize="12">
+          {`${formatPercentB(chart.percentB)}% B`}
+        </text>
+      </svg>
+      <ul className="mt-2 flex flex-col gap-1 text-sm">
+        {chart.lines.map((line, index) => (
+          <li key={`${line.label}-${index}`} className="flex items-center gap-2">
+            <span
+              className="inline-block h-1 w-6 rounded-full"
+              style={{ backgroundColor: LINE_COLORS[index % LINE_COLORS.length] }}
+            />
+            <span>
+              {line.label}: {lineEquation(line.m, line.c)}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </figure>
+  );
 }
 
 function MinimumPercentFit({

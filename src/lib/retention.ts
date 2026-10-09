@@ -195,6 +195,25 @@ export type RetentionDecision = {
   efficiencyChoice?: EfficiencyChoice | null;
   /** Continue on this run opens Look at the runs instead of heating immediately. */
   continueShowsLook?: boolean;
+  /** A minimum %B was already recommended earlier in this series. */
+  afterMinimum?: boolean;
+  /** One logK line per peak, for the intermediate %B graph. */
+  chart?: IntermediateChart | null;
+};
+
+export type PeakLogLine = {
+  label: string;
+  m: number;
+  c: number;
+  points: { percentB: number; logK: number }[];
+};
+
+export type IntermediateChart = {
+  lines: PeakLogLine[];
+  percentB: number;
+  minPercentB: number;
+  maxPercentB: number;
+  pairLabel: string;
 };
 
 type CompleteRules = {
@@ -256,14 +275,10 @@ export function decideRetention(
 
   if (samples.length >= 2) {
     const prior = decideRetention(samples.slice(0, -1), complete);
-    const ranLong =
-      current.lastPeakTimeMin != null && isPast(current.lastPeakTimeMin, complete.lastPeakTimeMin);
-    if (
-      prior.move === "calculated" &&
-      prior.nextPercentB != null &&
-      (nearly(current.percentB, prior.nextPercentB) || ranLong)
-    ) {
-      return afterCalculatedFile(samples, complete, choice);
+    const minimumDue = prior.move === "calculated" && prior.nextPercentB != null;
+    if (minimumDue || prior.afterMinimum) {
+      const next = afterCalculatedFile(samples, complete, choice);
+      return { ...next, afterMinimum: true };
     }
   }
 
@@ -663,6 +678,14 @@ function intermediateAfterMinimum(
     nextChange: `Run the next chromatogram at ${percent}% B.`,
     why,
     fit: null,
+    afterMinimum: true,
+    chart: {
+      lines: found.lines,
+      percentB: found.percentB,
+      minPercentB: found.minPercentB,
+      maxPercentB: found.maxPercentB,
+      pairLabel: found.pairLabel,
+    },
   };
 }
 
@@ -676,6 +699,9 @@ function optimalIntermediatePercent(
   pairLabel: string;
   calculation: string;
   named: boolean;
+  lines: PeakLogLine[];
+  minPercentB: number;
+  maxPercentB: number;
 } | null {
   const used = samples
     .map((sample) => sample.percentB)
@@ -701,13 +727,18 @@ function optimalIntermediatePercent(
       points.set(identity.key, line);
     });
   });
-  const fits: { m: number; c: number; label: string; named: boolean }[] = [];
+  const fits: { m: number; c: number; label: string; named: boolean; points: { percentB: number; logK: number }[] }[] = [];
   const t0Values: number[] = [];
   for (const line of points.values()) {
     if (line.length < 3) continue;
     const fit = slopeIntercept(line);
     if (!fit) continue;
-    fits.push({ ...fit, label: line[0].label, named: line[0].named });
+    fits.push({
+      ...fit,
+      label: line[0].label,
+      named: line[0].named,
+      points: line.map((point) => ({ percentB: point.x, logK: point.y })),
+    });
     for (const point of line) t0Values.push(point.t0);
   }
   if (fits.length < 2 || t0Values.length === 0) return null;
@@ -762,6 +793,9 @@ function optimalIntermediatePercent(
     gap: best.dMin,
     pairLabel: `${a.label} and ${b.label}`,
     named: fits.some((fit) => fit.named),
+    minPercentB: minB,
+    maxPercentB: maxB,
+    lines: fits.map((fit) => ({ label: fit.label, m: fit.m, c: fit.c, points: fit.points })),
     calculation: [
       "k = (tR − t0) / t0, then logK = log10(k).",
       `${a.label}: ${lineEquation(a.m, a.c)}. ${b.label}: ${lineEquation(b.m, b.c)}.`,
