@@ -1,9 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { NO_CHANGE_YET, retentionChangeLabel } from "@/lib/change-label";
-import { NextFileNameLine } from "@/components/next-file-name";
-import { decisionBesideClass, decisionUnderClass, nextChangeValueClass } from "@/components/decision-layout";
+import { NO_CHANGE_YET } from "@/lib/change-label";
 import {
   formatPercentB,
   formatRSquared,
@@ -22,14 +20,10 @@ export function RetentionDecisionView({
   decision,
   onLinePercent,
   onPickPercent,
-  pickedPercent = null,
-  nextFileName = null,
 }: {
   decision: RetentionDecision;
   onLinePercent?: (percent: number | null) => void;
   onPickPercent?: (percent: number | null) => void;
-  pickedPercent?: number | null;
-  nextFileName?: string | null;
 }) {
   const fit = decision.fit;
   const initial = fit?.catalog.filter((run) => run.included).map((run) => run.runNumber) ?? [];
@@ -48,22 +42,12 @@ export function RetentionDecisionView({
   useEffect(() => {
     onLinePercent?.(reported);
   }, [onLinePercent, reported]);
-  const shownPercent = overridden && solved ? solved.nextPercentB : (pickedPercent ?? decision.nextPercentB);
-  const label = retentionChangeLabel(
-    shownPercent === decision.nextPercentB ? decision : { ...decision, nextPercentB: shownPercent },
-    shownPercent,
-  );
 
   return (
     <div className="contents" id="retention-decision">
-      <section
-        id="next-change"
-        className={`flex flex-col scroll-mt-16 rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10 ${decisionBesideClass}`}
-      >
-        <h2 className="font-heading text-base">Next change</h2>
-        <p className={nextChangeValueClass}>{label}</p>
+      <section id="min-b-note" className="rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10">
         {decision.bChoices && decision.bChoices.length > 1 ? (
-          <div id="percent-choices" className="mt-3 flex flex-col gap-2">
+          <div id="percent-choices" className="mb-3 flex flex-col gap-2">
             {decision.bChoices.map((choice) => (
               <button
                 key={choice.id}
@@ -76,19 +60,6 @@ export function RetentionDecisionView({
             ))}
           </div>
         ) : null}
-        {decision.choosePercent && decision.nextPercentB != null ? (
-          <SecondPercentChoice
-            recommended={decision.nextPercentB}
-            picked={pickedPercent}
-            onPick={(percent) => onPickPercent?.(percent)}
-          />
-        ) : null}
-        {nextFileName ? <NextFileNameLine name={nextFileName} /> : null}
-      </section>
-      <section
-        id="min-b-note"
-        className={`rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10 ${decisionUnderClass}`}
-      >
         {fit ? (
           <MinimumPercentFit
             fit={fit}
@@ -153,16 +124,8 @@ export function StartHighBNote() {
 export function LaterChangeNote({ decision }: { decision: RetentionDecision | null }) {
   const explanation =
     decision?.nextChange ?? "Retention is finished. The next kind of change is not built yet.";
-  const label = decision ? retentionChangeLabel(decision) : NO_CHANGE_YET;
   return (
     <div className="flex flex-col gap-4">
-      <section
-        id="next-change"
-        className="@container scroll-mt-16 rounded-xl bg-[#e7f3ee] px-4 py-4 text-[#144237]"
-      >
-        <h2 className="font-heading text-base">Next change</h2>
-        <p className="mt-1 text-base font-semibold">{label}</p>
-      </section>
       <section className="rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10">
         <h2 className="font-heading text-base">Why</h2>
         <div className="mt-1 flex flex-col gap-2 text-sm leading-relaxed text-foreground">

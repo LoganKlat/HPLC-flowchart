@@ -1,5 +1,3 @@
-import { decisionBesideClass, decisionUnderClass, nextChangeValueClass } from "@/components/decision-layout";
-import { NO_CHANGE_YET } from "@/lib/change-label";
 import { formatPercentB, type LookRun, type LookStep } from "@/lib/retention";
 
 function markWord(mark: LookRun["peaks"]): string {
@@ -19,11 +17,7 @@ export function LookAtRuns({
 
   return (
     <div className="contents" id="look-at-runs">
-      <section id="next-change" className={`flex flex-col scroll-mt-16 rounded-xl bg-[#e7f3ee] px-4 py-4 text-[#144237] ${decisionBesideClass}`}>
-        <h2 className="font-heading text-base">Next change</h2>
-        <p className={nextChangeValueClass}>{NO_CHANGE_YET}</p>
-      </section>
-      <section className={`rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10 ${decisionUnderClass}`}>
+      <section className="rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10">
         <h2 className="font-heading text-base">Why</h2>
         <p className="mt-1 text-sm leading-relaxed text-foreground">
           Look at the runs. Each row is one uploaded run. Met means that measurement is inside the specification. Not
@@ -31,7 +25,7 @@ export function LookAtRuns({
           before choosing the next change.
         </p>
       </section>
-      <div className={`overflow-x-auto rounded-xl bg-card ring-1 ring-foreground/10 ${decisionUnderClass}`}>
+      <div className="overflow-x-auto rounded-xl bg-card ring-1 ring-foreground/10">
         <table className="w-full min-w-[40rem] border-collapse text-left text-sm">
           <thead>
             <tr className="border-b border-border text-xs tracking-wide text-muted-foreground uppercase">
@@ -68,7 +62,7 @@ export function LookAtRuns({
         </table>
       </div>
       {showPicker ? (
-        <section id="pick-run" className={`rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10 ${decisionUnderClass}`}>
+        <section id="pick-run" className="rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10">
           <h2 className="font-heading text-base">Which run to heat</h2>
           <p className="mt-1 text-sm leading-relaxed text-foreground">
             Pick one uploaded run. The next change is heat, to 40°C, at that run’s %B. The goal is a selectivity change

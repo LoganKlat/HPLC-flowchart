@@ -54,21 +54,8 @@ export function ResultsPanel({ fileName, read, rows, aside, onRemove }: ResultsP
           ))}
         </ul>
       ) : null}
-      <div className="@container">
-      <div
-        className={cn(
-          "grid grid-cols-1 items-stretch gap-4",
-          aside &&
-            "@min-[26rem]:grid-cols-[minmax(0,1.15fr)_minmax(11.5rem,0.9fr)] @min-[26rem]:gap-x-0",
-        )}
-      >
-      <div
-        className={cn(
-          "min-w-0 overflow-x-auto rounded-xl bg-card ring-1 ring-foreground/10",
-          aside &&
-            "@min-[26rem]:col-start-1 @min-[26rem]:row-start-1 @min-[26rem]:h-full @min-[26rem]:rounded-r-none @min-[26rem]:ring-0 @min-[26rem]:border @min-[26rem]:border-r-0 @min-[26rem]:border-foreground/10",
-        )}
-      >
+      <div className="flex flex-col gap-4">
+      <div className="min-w-0 overflow-x-auto rounded-xl bg-card ring-1 ring-foreground/10">
         <table className="w-full min-w-[20rem] border-collapse text-left text-sm">
           <caption className="px-4 py-3 text-left font-heading text-base text-foreground">
             Does this run meet the rules?
@@ -110,7 +97,6 @@ export function ResultsPanel({ fileName, read, rows, aside, onRemove }: ResultsP
         </table>
       </div>
       {aside ? <div className="contents">{aside}</div> : null}
-      </div>
       </div>
     </div>
   );

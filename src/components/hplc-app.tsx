@@ -7,7 +7,8 @@ import { AboutPanel } from "@/components/about-panel";
 import { SettingsPanel } from "@/components/settings-panel";
 import { BackwardsRetentionView, EfficiencyChoiceView, LeaveSelectivityAsk, LeaveSelectivityDone } from "@/components/leave-selectivity";
 import { LookAtRuns } from "@/components/look-at-runs";
-import { LaterChangeNote, RetentionDecisionView, StartHighBNote } from "@/components/retention-decision";
+import { NextFileNameLine } from "@/components/next-file-name";
+import { LaterChangeNote, RetentionDecisionView, SecondPercentChoice, StartHighBNote } from "@/components/retention-decision";
 import { ResultsPanel } from "@/components/results-panel";
 import { RunForm } from "@/components/run-form";
 import { SelectivityDecisionView } from "@/components/selectivity-decision";
@@ -41,6 +42,7 @@ import {
   type SelectivityRun,
   type TempPath,
 } from "@/lib/selectivity";
+import { NO_CHANGE_YET, retentionChangeLabel, selectivityChangeLabel } from "@/lib/change-label";
 import { MENU_SOLVENTS, solventKey } from "@/lib/solvent-menu";
 
 type RestKey = Exclude<keyof RunDetails, "percentB" | "temperature" | "solvent" | "ligand">;
@@ -782,7 +784,8 @@ export function HplcApp() {
               heat={heatChoice}
               onLinePercent={index === readyCount - 1 ? reportLinePercent : undefined}
               onPickPercent={index === readyCount - 1 ? setPickedPercent : undefined}
-              pickedPercent={pickedPercent}
+              pickedPercent={index === readyCount - 1 ? pickedPercent : null}
+              linePercent={index === readyCount - 1 ? linePercent : null}
               backwards={index === readyCount - 1 ? backwards : null}
               backwardsChoice={backwardsChoice}
               onBackwardsContinue={() => setBackwardsChoice("continue")}
@@ -960,6 +963,7 @@ function RunPane({
   onLinePercent,
   onPickPercent,
   pickedPercent,
+  linePercent,
   backwards,
   backwardsChoice,
   onBackwardsContinue,
@@ -995,6 +999,7 @@ function RunPane({
   onLinePercent?: (percent: number | null) => void;
   onPickPercent?: (percent: number | null) => void;
   pickedPercent?: number | null;
+  linePercent?: number | null;
   backwards: BackwardsPair | null;
   backwardsChoice: "continue" | "redo" | null;
   onBackwardsContinue: () => void;
@@ -1005,13 +1010,22 @@ function RunPane({
 }) {
   if (run.afterRetention) {
     const prior = index > 0 ? explainRun(runs, index - 1, details, checks, { choice, heat, ligands }) : null;
+    const decision = prior?.kind === "retention" ? prior.decision : null;
+    const nextLabel = decision
+      ? retentionChangeLabel(decision)
+      : "Retention is finished. The next kind of change is not built yet.";
     return (
-      <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border-2 border-solid border-border bg-card lg:flex-row lg:items-stretch">
-        <div className="order-2 min-h-0 min-w-0 flex-1 overflow-y-auto p-4 sm:p-5 lg:order-1" data-chromatogram-scroll="">
-          <LaterChangeNote decision={prior?.kind === "retention" ? prior.decision : null} />
+      <>
+        <div className="shrink-0">
+          <RunSummary index={index} runs={runs} details={details} nextLabel={nextLabel} />
         </div>
-        {runTabs}
-      </section>
+        <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border-2 border-solid border-border bg-card lg:flex-row lg:items-stretch">
+          <div className="order-2 min-h-0 min-w-0 flex-1 overflow-y-auto p-4 sm:p-5 lg:order-1" data-chromatogram-scroll="">
+            <LaterChangeNote decision={decision} />
+          </div>
+          {runTabs}
+        </section>
+      </>
     );
   }
 
@@ -1035,6 +1049,31 @@ function RunPane({
     !leftSelectivity && retention?.status === "ask" && retention.efficiencyNow
       ? retention.efficiencyNow
       : null;
+  const choosingEfficiency = retention?.status === "efficiency" && retention.efficiencyChoice && !efficiencyContinued;
+  const looking = retention?.status === "look" && retention.look && !heat;
+  const holdingBack = Boolean(backwards && backwardsChoice !== "continue");
+  const nextLabel = describeNextChange({
+    ready: run.status === "ready",
+    holdingBack,
+    backwardsChoice,
+    leftSelectivity,
+    duringRetention: explanation?.kind === "retention",
+    asking: ask != null,
+    choosingEfficiency: Boolean(choosingEfficiency),
+    looking: Boolean(looking),
+    retention,
+    selectivity,
+    tempPath,
+    solventName: findSolvent(next?.solvent || "")?.label ?? (next?.solvent || ""),
+    ligand: next?.ligand || selectivity?.recommendedLigand || "",
+    linePercent: linePercent ?? null,
+    pickedPercent: pickedPercent ?? null,
+  });
+  const showNextFile = Boolean(nextFileName) && run.status === "ready" && !holdingBack && !leftSelectivity && !ask && !choosingEfficiency && !looking;
+  const secondMin =
+    retention?.choosePercent && retention.nextPercentB != null && onPickPercent
+      ? { recommended: retention.nextPercentB, picked: pickedPercent ?? null, onPick: onPickPercent }
+      : null;
 
   return (
     <>
@@ -1043,11 +1082,18 @@ function RunPane({
           <StartHighBNote />
         </div>
       ) : null}
-      {index === 0 ? null : (
+      {index > 0 || run.status === "ready" ? (
         <div className="shrink-0">
-        <RunSummary index={index} runs={runs} details={details} />
+          <RunSummary
+            index={index}
+            runs={runs}
+            details={details}
+            nextLabel={nextLabel}
+            nextFileName={showNextFile ? nextFileName : null}
+            secondMin={secondMin}
+          />
         </div>
-      )}
+      ) : null}
 
       <section
         className={
@@ -1098,8 +1144,6 @@ function RunPane({
                         decision={retention}
                         onLinePercent={onLinePercent}
                         onPickPercent={onPickPercent}
-                        pickedPercent={pickedPercent}
-                        nextFileName={nextFileName}
                       />
                     ) : null}
                     {selectivity ? (
@@ -1113,7 +1157,6 @@ function RunPane({
                         onLigand={onChooseLigand}
                         tempPath={tempPath}
                         onTempPath={onTempPath}
-                        nextFileName={nextFileName}
                       />
                     ) : null}
                   </>
@@ -1177,18 +1220,120 @@ function RunPane({
   );
 }
 
-function RunSummary({ index, runs, details }: { index: number; runs: RunState[]; details: RunDetails }) {
-  const lines = decisionChangeLines(index, runs, details);
-  if (lines.length === 0) return null;
+function RunSummary({
+  index,
+  runs,
+  details,
+  nextLabel,
+  nextFileName = null,
+  secondMin = null,
+}: {
+  index: number;
+  runs: RunState[];
+  details: RunDetails;
+  nextLabel: string;
+  nextFileName?: string | null;
+  secondMin?: {
+    recommended: number;
+    picked: number | null;
+    onPick: (percent: number | null) => void;
+  } | null;
+}) {
+  const lines = index > 0 ? decisionChangeLines(index, runs, details) : [];
   return (
-    <section id="run-context" className="rounded-xl bg-card px-4 py-3 ring-1 ring-foreground/10">
-      {lines.map((line) => (
-        <p key={line} className="text-base font-medium text-foreground">
-          {line}
-        </p>
-      ))}
+    <section
+      id="run-context"
+      className="grid grid-cols-1 overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10 sm:grid-cols-2"
+    >
+      <div id="this-run-change" className="border-b border-foreground/10 px-4 py-3 sm:border-r sm:border-b-0">
+        <h2 className="text-xs font-medium tracking-[0.14em] text-muted-foreground uppercase">This run's change</h2>
+        <div className="mt-1 flex flex-col gap-1">
+          {index === 0 ? (
+            <p className="text-base font-medium text-foreground">This is the first run.</p>
+          ) : lines.length === 0 ? (
+            <p className="text-base font-medium text-foreground">No change from the previous run.</p>
+          ) : (
+            lines.map((line) => (
+              <p key={line} className="text-base font-medium text-foreground">
+                {line}
+              </p>
+            ))
+          )}
+        </div>
+      </div>
+      <div id="next-run-change" className="px-4 py-3">
+        <h2 className="text-xs font-medium tracking-[0.14em] text-muted-foreground uppercase">Next run's change</h2>
+        <p className="mt-1 text-base font-semibold text-foreground">{nextLabel}</p>
+        {nextFileName ? <NextFileNameLine name={nextFileName} /> : null}
+        {secondMin ? (
+          <SecondPercentChoice recommended={secondMin.recommended} picked={secondMin.picked} onPick={secondMin.onPick} />
+        ) : null}
+      </div>
     </section>
   );
+}
+
+function describeNextChange(input: {
+  ready: boolean;
+  holdingBack: boolean;
+  backwardsChoice: "continue" | "redo" | null;
+  leftSelectivity: boolean;
+  duringRetention: boolean;
+  asking: boolean;
+  choosingEfficiency: boolean;
+  looking: boolean;
+  retention: RetentionDecision | null;
+  selectivity: SelectivityPlan | null;
+  tempPath: TempPath | null;
+  solventName: string;
+  ligand: string;
+  linePercent: number | null;
+  pickedPercent: number | null;
+}): string {
+  if (!input.ready) return NO_CHANGE_YET;
+  if (input.holdingBack) return input.backwardsChoice === "redo" ? "Re-do the runs" : NO_CHANGE_YET;
+  if (input.leftSelectivity) {
+    return input.duringRetention
+      ? "Retention and selectivity are finished. Efficiency is next. That stage is not built yet."
+      : "Selectivity is finished. Efficiency is next. That stage is not built yet.";
+  }
+  if (input.asking || input.choosingEfficiency) return NO_CHANGE_YET;
+  if (input.looking && input.retention) return input.retention.nextChange;
+  if (input.retention) {
+    return retentionChangeLabel(
+      input.retention,
+      retentionPercent(input.retention, input.linePercent, input.pickedPercent),
+    );
+  }
+  if (input.selectivity) {
+    return selectivityChangeLabel(input.selectivity, {
+      tempPath: input.tempPath,
+      solvent: input.solventName,
+      ligand: input.ligand,
+    });
+  }
+  return NO_CHANGE_YET;
+}
+
+function retentionPercent(
+  decision: RetentionDecision,
+  linePercent: number | null,
+  pickedPercent: number | null,
+): number | null {
+  if (
+    decision.reason === "second-minimum" &&
+    pickedPercent != null &&
+    Number.isFinite(pickedPercent) &&
+    pickedPercent >= 0 &&
+    pickedPercent <= 100
+  ) {
+    return pickedPercent;
+  }
+  if (pickedPercent != null && decision.bChoices?.some((item) => item.percentB === pickedPercent)) {
+    return pickedPercent;
+  }
+  if (decision.move === "calculated" && linePercent != null) return linePercent;
+  return decision.nextPercentB;
 }
 
 function decisionChangeLines(index: number, runs: RunState[], details: RunDetails): string[] {

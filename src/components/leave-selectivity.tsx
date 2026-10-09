@@ -1,6 +1,4 @@
-import { decisionBesideClass, decisionUnderClass, nextChangeValueClass } from "@/components/decision-layout";
 import { Button } from "@/components/ui/button";
-import { NO_CHANGE_YET } from "@/lib/change-label";
 import { BACKWARDS_REDO, backwardsWhy, EFFICIENCY_CONTINUE, EFFICIENCY_MOVE_ON, type BackwardsPair } from "@/lib/retention";
 
 const choiceClass =
@@ -19,9 +17,8 @@ export function EfficiencyChoiceView({
 }) {
   return (
     <div className="contents" id="efficiency-choice">
-      <section id="next-change" className={`flex flex-col scroll-mt-16 rounded-xl bg-[#e7f3ee] px-4 py-4 text-[#144237] ${decisionBesideClass}`}>
-        <h2 className="font-heading text-base">Next change</h2>
-        <p className={nextChangeValueClass}>{NO_CHANGE_YET}</p>
+      <section className="rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10">
+        <h2 className="font-heading text-base">Why</h2>
         <div id="efficiency-or-selectivity" className="mt-3 flex flex-col gap-2">
           <Button
             type="button"
@@ -62,10 +59,7 @@ export function EfficiencyChoiceView({
             </Button>
           ) : null}
         </div>
-      </section>
-      <section className={`rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10 ${decisionUnderClass}`}>
-        <h2 className="font-heading text-base">Why</h2>
-        <div className="mt-1 flex flex-col gap-2 text-sm leading-relaxed text-foreground">
+        <div className="mt-3 flex flex-col gap-2 text-sm leading-relaxed text-foreground">
           <p>{EFFICIENCY_MOVE_ON}</p>
           {why.split("\n\n").map((paragraph, index) => (
             <p key={index}>{paragraph}</p>
@@ -87,9 +81,8 @@ export function LeaveSelectivityAsk({
 }) {
   return (
     <div className="contents" id="leave-selectivity-ask">
-      <section id="next-change" className={`flex flex-col scroll-mt-16 rounded-xl bg-[#e7f3ee] px-4 py-4 text-[#144237] ${decisionBesideClass}`}>
-        <h2 className="font-heading text-base">Next change</h2>
-        <p className={nextChangeValueClass}>{NO_CHANGE_YET}</p>
+      <section className="rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10">
+        <h2 className="font-heading text-base">Why</h2>
         <div className="mt-3 grid grid-cols-2 gap-2">
           <button type="button" className={`${choiceClass} border-primary bg-accent text-foreground`} onClick={onYes}>
             Yes
@@ -102,10 +95,7 @@ export function LeaveSelectivityAsk({
             No
           </button>
         </div>
-      </section>
-      <section className={`rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10 ${decisionUnderClass}`}>
-        <h2 className="font-heading text-base">Why</h2>
-        <div className="mt-1 flex flex-col gap-2 text-sm leading-relaxed text-foreground">
+        <div className="mt-3 flex flex-col gap-2 text-sm leading-relaxed text-foreground">
           <p>{ask.question}</p>
           {ask.steps && ask.steps.length > 0 ? (
             <ol id="selectivity-steps" className="list-decimal space-y-2 pl-5">
@@ -135,12 +125,10 @@ export function BackwardsRetentionView({
   onRedo: () => void;
 }) {
   const warning = backwardsWhy(pair);
-  const nextChange = choice === "redo" ? "Re-do the runs" : NO_CHANGE_YET;
   return (
     <div className="contents" id="backwards-retention">
-      <section id="next-change" className={`flex flex-col scroll-mt-16 rounded-xl bg-[#e7f3ee] px-4 py-4 text-[#144237] ${decisionBesideClass}`}>
-        <h2 className="font-heading text-base">Next change</h2>
-        <p className={nextChangeValueClass}>{nextChange}</p>
+      <section className="rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10">
+        <h2 className="font-heading text-base">Why</h2>
         <div id="backwards-choices" className="mt-3 flex flex-col gap-2">
           <Button
             type="button"
@@ -162,10 +150,7 @@ export function BackwardsRetentionView({
             Re-do the runs
           </Button>
         </div>
-      </section>
-      <section className={`rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10 ${decisionUnderClass}`}>
-        <h2 className="font-heading text-base">Why</h2>
-        <div className="mt-1 flex flex-col gap-2 text-sm leading-relaxed text-foreground">
+        <div className="mt-3 flex flex-col gap-2 text-sm leading-relaxed text-foreground">
           <p>{warning}</p>
           {choice === "redo" ? <p>{BACKWARDS_REDO}</p> : null}
         </div>
@@ -180,11 +165,7 @@ export function LeaveSelectivityDone({ duringRetention }: { duringRetention: boo
     : "Selectivity is finished. Efficiency is next. That stage is not built yet.";
   return (
     <div className="contents" id="leave-selectivity-done">
-      <section id="next-change" className={`flex flex-col scroll-mt-16 rounded-xl bg-[#e7f3ee] px-4 py-4 text-[#144237] ${decisionBesideClass}`}>
-        <h2 className="font-heading text-base">Next change</h2>
-        <p className={nextChangeValueClass}>{NO_CHANGE_YET}</p>
-      </section>
-      <section className={`rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10 ${decisionUnderClass}`}>
+      <section className="rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10">
         <h2 className="font-heading text-base">Why</h2>
         <div className="mt-1 flex flex-col gap-2 text-sm leading-relaxed text-foreground">
           <p>{nextChange}</p>

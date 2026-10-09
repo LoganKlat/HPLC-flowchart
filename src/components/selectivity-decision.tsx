@@ -1,7 +1,4 @@
-import { decisionBesideClass, decisionUnderClass, nextChangeValueClass } from "@/components/decision-layout";
-import { NextFileNameLine } from "@/components/next-file-name";
 import { Button } from "@/components/ui/button";
-import { selectivityChangeLabel } from "@/lib/change-label";
 import { SOLVENTS, chartX, findSolvent, type SelectivityPlan, type TempPath } from "@/lib/selectivity";
 import { CHART_SOLVENT_NOTE } from "@/lib/solvent-menu";
 import { PERCENT_B_SENTENCE, SELECTIVITY_ORDER } from "@/lib/setting-kind";
@@ -19,7 +16,6 @@ export function SelectivityDecisionView({
   onLigand,
   tempPath,
   onTempPath,
-  nextFileName = null,
 }: {
   plan: SelectivityPlan;
   solventId: string;
@@ -30,7 +26,6 @@ export function SelectivityDecisionView({
   onLigand: (name: string) => void;
   tempPath: TempPath | null;
   onTempPath: (path: TempPath) => void;
-  nextFileName?: string | null;
 }) {
   const ligandChoices = [...ligands];
   const solventChoices =
@@ -39,15 +34,12 @@ export function SelectivityDecisionView({
   const recommendedPath = choice?.other ?? "solvent";
   const showSolvent = plan.showSolventChoices || (choice != null && tempPath === "solvent");
   const showLigand = plan.showLigandChoices || (choice != null && tempPath === "ligand");
-  const solventName = findSolvent(solventId)?.label ?? solventId;
   const chartSolvent = findSolvent(solventId);
-  const label = selectivityChangeLabel(plan, { tempPath, solvent: solventName, ligand });
 
   return (
     <div className="contents" id="selectivity-decision">
-      <section id="next-change" className={`flex flex-col scroll-mt-16 rounded-xl bg-[#e7f3ee] px-4 py-4 text-[#144237] ${decisionBesideClass}`}>
-        <h2 className="font-heading text-base">Next change</h2>
-        <p className={nextChangeValueClass}>{label}</p>
+      <section className="rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10">
+        <h2 className="font-heading text-base">Why</h2>
         {choice ? (
           <div id="temp-choice" className="mt-3 flex flex-col gap-2">
             <Button
@@ -86,10 +78,6 @@ export function SelectivityDecisionView({
             </Button>
           </div>
         ) : null}
-        {nextFileName ? <NextFileNameLine name={nextFileName} /> : null}
-      </section>
-      <section className={`rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10 ${decisionUnderClass}`}>
-        <h2 className="font-heading text-base">Why</h2>
         <div className="mt-1 flex flex-col gap-2 text-sm leading-relaxed text-foreground">
           {stepParagraphs(plan.why).map((paragraph, index) => (
             <p key={index}>{paragraph}</p>
