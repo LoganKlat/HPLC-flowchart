@@ -335,6 +335,11 @@ export function HplcApp() {
     [declinedEfficiencyNow],
   );
   const readyCount = readyPrefix(runs);
+  const [seenReady, setSeenReady] = useState(readyCount);
+  if (seenReady !== readyCount) {
+    setSeenReady(readyCount);
+    setPickedPercent(null);
+  }
   const continueRetention = retentionContinuedAt != null && retentionContinuedAt === readyCount - 1;
   const latestFlags = selectivityFlags(readyCount - 1, heatChoice, continuedSelectivity);
   const syncedRuns = syncNextRun(runs, details, checks, {
@@ -1040,7 +1045,7 @@ function RunPane({
   choice: RetentionChoice;
   heat: HeatStart | null;
   onLinePercent?: (percent: number | null) => void;
-  onPickPercent?: (percent: number) => void;
+  onPickPercent?: (percent: number | null) => void;
   pickedPercent?: number | null;
   backwards: BackwardsPair | null;
   backwardsChoice: "continue" | "redo" | null;
@@ -1425,10 +1430,19 @@ function prefillFor(
   }
   const decision = decideRetention(ready.slice(history.segmentStart).map(toSample), checks, choice);
   if (decision.status !== "recommend" || decision.nextPercentB == null) return null;
-  const picked =
-    pickedPercent != null && decision.bChoices?.some((item) => item.percentB === pickedPercent)
+  const typedSecond =
+    decision.reason === "second-minimum" &&
+    pickedPercent != null &&
+    Number.isFinite(pickedPercent) &&
+    pickedPercent >= 0 &&
+    pickedPercent <= 100
       ? pickedPercent
       : null;
+  const picked =
+    typedSecond ??
+    (pickedPercent != null && decision.bChoices?.some((item) => item.percentB === pickedPercent)
+      ? pickedPercent
+      : null);
   const percent =
     picked ??
     (decision.move === "calculated" && linePercent != null ? linePercent : decision.nextPercentB);

@@ -507,9 +507,16 @@ export function planHistory(
     let carryIndex: number | null = null;
     const raise = segment.findIndex((run) => isForty(run) || isSixty(run));
     const ovenSplit = !explicitHeat && raise > 0 && (continuePast || sameSolventHeatPair(segment));
-    if (ovenSplit) {
-      finishedOffset = raise - 1;
-      carryIndex = raise - 1;
+    const fortyAt = segment.findIndex((run) => isForty(run));
+    const secondMinThenHeat =
+      !explicitHeat &&
+      !ovenSplit &&
+      fortyAt > 0 &&
+      decideRetention(segment.slice(0, fortyAt).map(toRetentionSample), rules).reason === "second-minimum";
+    if (ovenSplit || secondMinThenHeat) {
+      const splitAt = ovenSplit ? raise : fortyAt;
+      finishedOffset = splitAt - 1;
+      carryIndex = splitAt - 1;
       forced = null;
     } else if (forced && start === 0) {
       finishedOffset = forced.finishedOffset;

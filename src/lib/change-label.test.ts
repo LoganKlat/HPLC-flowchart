@@ -24,6 +24,11 @@ describe("next change wording", () => {
 
   it("names temperature, solvent, and ligand the same way", () => {
     expect(retentionChangeLabel(retention({ nextTemperature: "40", nextPercentB: 60 }))).toBe("Run at 40°C");
+    expect(
+      retentionChangeLabel(
+        retention({ reason: "second-minimum", nextTemperature: "40", nextPercentB: 36, move: null }),
+      ),
+    ).toBe("Run at 40°C at 36% B");
     const plan = { status: "recommend", step: "solvent" } as SelectivityPlan;
     expect(
       selectivityChangeLabel(

@@ -78,9 +78,9 @@ export function AboutPanel({ onOpenNav }: { onOpenNav: () => void }) {
             available. Any exclusions are reported.
           </p>
           <p>
-            After the minimum-%B run, compare all runs by %B, peak count, worst resolution, last-peak time, and
-            pass/fail results. You may test an intermediate %B or select a previous run for temperature optimisation,
-            even if its last peak exceeds the time limit.
+            After you upload the recommended minimum-%B run, the page fits the last-peak line again, including
+            that run, and recommends a new minimum %B. Use that %B, or type a different one. Selectivity then
+            starts with a 40°C run at the %B you take.
           </p>
           <p>
             If more peaks appear than expected, stop and investigate possible impurities, carryover, or split peaks.

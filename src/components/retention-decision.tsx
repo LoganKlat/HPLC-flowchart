@@ -12,7 +12,6 @@ import {
   minimumPercentHeading,
   minimumPercentNote,
   refitMinimumPercent,
-  type IntermediateChart,
   type MinimumFit,
   type RetentionDecision,
   type RetentionFit,
@@ -28,7 +27,7 @@ export function RetentionDecisionView({
 }: {
   decision: RetentionDecision;
   onLinePercent?: (percent: number | null) => void;
-  onPickPercent?: (percent: number) => void;
+  onPickPercent?: (percent: number | null) => void;
   pickedPercent?: number | null;
   nextFileName?: string | null;
 }) {
@@ -50,7 +49,6 @@ export function RetentionDecisionView({
     onLinePercent?.(reported);
   }, [onLinePercent, reported]);
   const shownPercent = overridden && solved ? solved.nextPercentB : (pickedPercent ?? decision.nextPercentB);
-  const intermediate = decision.reason === "intermediate";
   const label = retentionChangeLabel(
     shownPercent === decision.nextPercentB ? decision : { ...decision, nextPercentB: shownPercent },
     shownPercent,
@@ -78,15 +76,20 @@ export function RetentionDecisionView({
             ))}
           </div>
         ) : null}
+        {decision.choosePercent && decision.nextPercentB != null ? (
+          <SecondPercentChoice
+            recommended={decision.nextPercentB}
+            picked={pickedPercent}
+            onPick={(percent) => onPickPercent?.(percent)}
+          />
+        ) : null}
         {nextFileName ? <NextFileNameLine name={nextFileName} /> : null}
       </section>
       <section
-        id={intermediate ? "intermediate-b" : "min-b-note"}
+        id="min-b-note"
         className={`rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10 ${decisionUnderClass}`}
       >
-        {intermediate && decision.chart ? (
-          <IntermediateWhy why={decision.why} chart={decision.chart} />
-        ) : fit ? (
+        {fit ? (
           <MinimumPercentFit
             fit={fit}
             brief={decision.brief ?? []}
@@ -100,7 +103,7 @@ export function RetentionDecisionView({
           />
         ) : (
           <>
-            <h2 className="font-heading text-base">{intermediate && shownPercent != null ? `Why ${formatPercentB(shownPercent)}% B is the optimal %B` : "Why"}</h2>
+            <h2 className="font-heading text-base">Why</h2>
             <div className="mt-1 flex flex-col gap-2 text-sm leading-relaxed text-foreground">
               {whyParagraphs(decision.why).map((paragraph, index) => (
                 <p key={index}>{paragraph}</p>
@@ -191,96 +194,62 @@ function isOtherStage(paragraph: string): boolean {
   return false;
 }
 
-const LINE_COLORS = ["#0f6b56", "#c2410c", "#1d4ed8", "#7c3aed", "#b45309", "#be185d", "#0e7490", "#365314"];
-
-function IntermediateWhy({ why, chart }: { why: string; chart: IntermediateChart }) {
+export function SecondPercentChoice({
+  recommended,
+  picked,
+  onPick,
+}: {
+  recommended: number;
+  picked: number | null;
+  onPick: (percent: number | null) => void;
+}) {
+  const typed = picked != null && Number.isFinite(picked) && Math.abs(picked - recommended) > 1e-6;
+  const [mode, setMode] = useState<"recommended" | "typed">(typed ? "typed" : "recommended");
+  const [draft, setDraft] = useState(typed ? String(picked) : "");
   return (
-    <div id="intermediate-fit" className="flex flex-col gap-4" data-lines={chart.lines.length}>
-      <div>
-        <h2 className="font-heading text-base">{`Why ${formatPercentB(chart.percentB)}% B is the optimal %B`}</h2>
-        <div className="mt-1 flex flex-col gap-2 text-sm leading-relaxed text-foreground">
-          {whyParagraphs(why).map((paragraph, index) => (
-            <p key={index}>{paragraph}</p>
-          ))}
-        </div>
-      </div>
-      <PeakLineGraph chart={chart} />
-    </div>
-  );
-}
-
-function PeakLineGraph({ chart }: { chart: IntermediateChart }) {
-  const width = 680;
-  const height = 340;
-  const left = 52;
-  const right = 16;
-  const top = 28;
-  const bottom = 36;
-  const plotW = width - left - right;
-  const plotH = height - top - bottom;
-  const spanX = Math.max(1, chart.maxPercentB - chart.minPercentB);
-  const minX = chart.minPercentB - spanX * 0.04;
-  const maxX = chart.maxPercentB + spanX * 0.04;
-  const yAt = (line: IntermediateChart["lines"][number], percent: number) => line.m * percent + line.c;
-  const ys = chart.lines.flatMap((line) => [yAt(line, chart.minPercentB), yAt(line, chart.maxPercentB), ...line.points.map((point) => point.logK)]);
-  let minY = Math.min(...ys);
-  let maxY = Math.max(...ys);
-  const spanY = Math.max(0.05, maxY - minY);
-  minY -= spanY * 0.12;
-  maxY += spanY * 0.16;
-  const sx = (value: number) => left + ((value - minX) / (maxX - minX)) * plotW;
-  const sy = (value: number) => top + ((maxY - value) / (maxY - minY)) * plotH;
-  const markerX = sx(chart.percentB);
-  return (
-    <figure id="intermediate-graph">
-      <svg
-        viewBox={`0 0 ${width} ${height}`}
-        className="h-auto w-full"
-        role="img"
-        aria-label={`LogK versus %B for ${chart.lines.length} peaks. The closest pair is ${chart.pairLabel}. The chosen %B is ${formatPercentB(chart.percentB)}.`}
+    <div id="second-min-choice" className="mt-3 flex flex-col gap-2">
+      <button
+        type="button"
+        id="use-recommended-b"
+        className="rounded-lg border border-[#0f6b56] bg-white px-3 py-2 text-left text-sm font-semibold text-[#144237]"
+        onClick={() => {
+          setMode("recommended");
+          setDraft("");
+          onPick(null);
+        }}
       >
-        <line x1={left} y1={top} x2={left} y2={top + plotH} stroke="#144237" strokeWidth="1" />
-        <line x1={left} y1={top + plotH} x2={left + plotW} y2={top + plotH} stroke="#144237" strokeWidth="1" />
-        <text x={left + plotW / 2} y={height - 8} textAnchor="middle" fill="#144237" fontSize="12">
-          %B
-        </text>
-        <text x="14" y={top + plotH / 2} textAnchor="middle" fill="#144237" fontSize="12" transform={`rotate(-90 14 ${top + plotH / 2})`}>
-          logK
-        </text>
-        {chart.lines.map((line, index) => {
-          const color = LINE_COLORS[index % LINE_COLORS.length];
-          return (
-            <line
-              key={`${line.label}-${index}`}
-              x1={sx(chart.minPercentB)}
-              y1={sy(yAt(line, chart.minPercentB))}
-              x2={sx(chart.maxPercentB)}
-              y2={sy(yAt(line, chart.maxPercentB))}
-              stroke={color}
-              strokeWidth="2.5"
-              data-peak={line.label}
-            />
-          );
-        })}
-        <line x1={markerX} y1={top} x2={markerX} y2={top + plotH} stroke="#111827" strokeWidth="1.5" strokeDasharray="4 3" />
-        <text x={markerX} y={16} textAnchor="middle" fill="#111827" fontSize="12">
-          {`${formatPercentB(chart.percentB)}% B`}
-        </text>
-      </svg>
-      <ul className="mt-2 flex flex-col gap-1 text-sm">
-        {chart.lines.map((line, index) => (
-          <li key={`${line.label}-${index}`} className="flex items-center gap-2">
-            <span
-              className="inline-block h-1 w-6 rounded-full"
-              style={{ backgroundColor: LINE_COLORS[index % LINE_COLORS.length] }}
-            />
-            <span>
-              {line.label}: {lineEquation(line.m, line.c)}
-            </span>
-          </li>
-        ))}
-      </ul>
-    </figure>
+        {`Use ${formatPercentB(recommended)}% B`}
+      </button>
+      <button
+        type="button"
+        id="choose-other-b"
+        className="rounded-lg border border-[#0f6b56] bg-white px-3 py-2 text-left text-sm font-semibold text-[#144237]"
+        onClick={() => setMode("typed")}
+      >
+        Choose another %B
+      </button>
+      {mode === "typed" ? (
+        <label className="flex flex-col gap-1 text-sm" htmlFor="typed-percent-b">
+          %B for the 40°C run
+          <input
+            id="typed-percent-b"
+            type="number"
+            min={0}
+            max={100}
+            step="any"
+            inputMode="decimal"
+            value={draft}
+            className="h-10 rounded-lg border border-input bg-white px-2.5 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+            onChange={(event) => {
+              const text = event.target.value;
+              setDraft(text);
+              const value = Number(text);
+              if (Number.isFinite(value) && value >= 0 && value <= 100) onPick(value);
+            }}
+          />
+        </label>
+      ) : null}
+    </div>
   );
 }
 

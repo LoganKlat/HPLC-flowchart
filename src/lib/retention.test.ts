@@ -231,7 +231,7 @@ describe("retention %B along the four lab files", () => {
     expect(decision.nextPercentB).toBe(53);
   });
 
-  it("finishes after a run at the calculated %B even when peaks are still short", () => {
+  it("recommends a second minimum after a run at the calculated %B even when peaks are still short", () => {
     const calculated = decideRetention(samples, pathRules);
     expect(calculated.nextPercentB).toBe(42);
     const followed = decideRetention(
@@ -248,20 +248,22 @@ describe("retention %B along the four lab files", () => {
       ],
       pathRules,
     );
-    expect(followed.status).toBe("look");
-    expect(followed.reason).toBe("look");
-    expect(followed.look?.mode).toBe("between-then-heat");
-    expect(followed.nextPercentB).toBeNull();
-    expect(followed.nextChange).toBe("Look at the runs.");
+    expect(followed.status).toBe("recommend");
+    expect(followed.reason).toBe("second-minimum");
+    expect(followed.move).toBeNull();
+    expect(followed.choosePercent).toBe(true);
+    expect(followed.nextTemperature).toBe("40");
+    expect(followed.fit).not.toBeNull();
+    expect(followed.nextChange).toContain("40°C");
     expect(followed.nextChange).not.toContain("Carry forward");
     expect(followed.why).not.toContain("Carry forward");
   });
 
-  it("recommends an intermediate %B after the minimum %B run, not during the 10% ladder", () => {
+  it("recommends a second minimum %B after the recommended minimum file, not during the 10% ladder", () => {
     const ladder = decideRetention(samples.slice(0, 2), pathRules);
     expect(ladder.reason).toBe("drop-10");
     expect(ladder.nextPercentB).toBe(50);
-    expect(ladder.reason).not.toBe("intermediate");
+    expect(ladder.reason).not.toBe("second-minimum");
 
     const minimum = decideRetention(samples, pathRules);
     expect(minimum.move).toBe("calculated");
@@ -270,41 +272,38 @@ describe("retention %B along the four lab files", () => {
 
     const followed = decideRetention([...samples, sampleFromRead(42, reads[3])], pathRules);
     expect(followed.status).toBe("recommend");
-    expect(followed.reason).toBe("intermediate");
+    expect(followed.reason).toBe("second-minimum");
     expect(followed.move).toBeNull();
-    expect(followed.nextPercentB).toBe(62);
-    expect(followed.fit).toBeNull();
-    expect(followed.nextChange).toContain("62%");
-    expect(followed.why).toContain("62% B is the optimal %B");
-    expect(followed.why).toContain("2.628 min");
-    expect(followed.why).toContain("The predicted last peak is");
-    expect(followed.why).toContain("A peak with no name uses its peak number.");
-    expect(followed.why).toContain("stand-in");
-    expect(followed.why).toContain("better minimum");
-    expect(followed.why).not.toContain("inside the set time");
-    expect(followed.why).not.toContain("40°C");
+    expect(followed.fit).not.toBeNull();
+    expect(followed.fit!.rows.length).toBeGreaterThan(1);
+    expect(followed.choosePercent).toBe(true);
+    expect(followed.nextTemperature).toBe("40");
+    expect(followed.nextPercentB).not.toBeNull();
+    expect(retentionChangeLabel(followed)).toMatch(/^Run at 40°C at .+% B$/);
+    expect(followed.nextChange).toContain("40°C");
+    expect(followed.why).not.toContain("optimal %B");
+    expect(followed.why.toLowerCase()).not.toContain("intermediate");
     expect(followed.why).not.toContain("coating");
-    expect(followed.why.toLowerCase()).not.toContain("solvent");
-    expect(followed.why).not.toContain("15 minute");
-    expect(followed.why).not.toContain("One more run should confirm");
 
     const stillEarly = decideRetention(
       [...samples, { ...sampleFromRead(42, reads[3]), lastPeakTimeMin: 5 }],
       pathRules,
     );
-    expect(stillEarly.reason).toBe("intermediate");
-    expect(stillEarly.nextPercentB).toBe(62);
-    expect(retentionChangeLabel(stillEarly)).toBe("Run at 62% B");
+    expect(stillEarly.reason).toBe("second-minimum");
+    expect(stillEarly.nextTemperature).toBe("40");
+    expect(stillEarly.fit).not.toBeNull();
+    expect(retentionChangeLabel(stillEarly)).toMatch(/^Run at 40°C at .+% B$/);
 
     const underHalf = decideRetention(
       [...samples, { ...sampleFromRead(42, reads[3]), lastPeakTimeMin: 4 }],
       pathRules,
     );
-    expect(underHalf.reason).toBe("intermediate");
-    expect(underHalf.nextPercentB).toBe(62);
+    expect(underHalf.reason).toBe("second-minimum");
+    expect(underHalf.fit).not.toBeNull();
+    expect(underHalf.move).toBeNull();
   });
 
-  it("goes to the intermediate %B when the minimum-%B file runs past the set time", () => {
+  it("does not start the second minimum when a later file is not the recommended %B", () => {
     const minimum = decideRetention(samples, pathRules);
     expect(minimum.move).toBe("calculated");
     expect(minimum.reason).toBe("calculated");
@@ -315,24 +314,13 @@ describe("retention %B along the four lab files", () => {
     expect(late.percentB).not.toBe(minimum.nextPercentB);
 
     const followed = decideRetention([...samples, late], pathRules);
-    expect(followed.status).toBe("recommend");
-    expect(followed.reason).toBe("intermediate");
-    expect(followed.move).toBeNull();
-    expect(followed.fit).toBeNull();
-    expect(followed.nextPercentB).toBe(62);
-    expect(retentionChangeLabel(followed)).toBe("Run at 62% B");
-    expect(followed.nextChange).toContain("62%");
-    expect(followed.why).toContain("62% B is the optimal %B");
-    expect(followed.why).toContain("2.618 min");
-    expect(followed.why).toContain("The predicted last peak is");
-    expect(followed.why).not.toContain("inside the set time");
+    expect(followed.reason).not.toBe("second-minimum");
+    expect(followed.nextTemperature ?? null).toBeNull();
+    expect(followed.why).not.toContain("optimal %B");
     expect(followed.why).not.toContain("40°C");
-    expect(followed.why).not.toContain("coating");
-    expect(followed.why.toLowerCase()).not.toContain("solvent");
-    expect(followed.why).not.toContain("The calculated %B still aims");
   });
 
-  it("follows a compound name instead of assuming the same peak number", () => {
+  it("fits one last-peak line when the recommended minimum file is uploaded", () => {
     const namedRuns = samples.map((sample) => ({
       ...sample,
       peaks: sample.peaks?.map((peak, index) => ({ ...peak, name: `compound-${index}` })),
@@ -341,20 +329,11 @@ describe("retention %B along the four lab files", () => {
       [...namedRuns, { ...namedRuns[3], percentB: 42 }],
       pathRules,
     );
-    expect(followed.reason).toBe("intermediate");
-    expect(followed.nextPercentB).toBe(62);
-    expect(followed.why).toContain("Named compounds stay on their own line");
-    expect(followed.why).toContain("2.628 min");
-
-    const unmatched = {
-      ...sampleFromRead(42, reads[3]),
-      peaks: reads[3].peaks.map((peak, index) => ({ ...peak, name: `only-${index}` })),
-    };
-    const apart = decideRetention([...samples, unmatched], pathRules);
-    expect(apart.reason).toBe("intermediate");
-    expect(apart.nextPercentB).toBe(62);
-    expect(apart.why).toContain("2.615 min");
-    expect(apart.why).toContain("A peak with no name uses its peak number.");
+    expect(followed.reason).toBe("second-minimum");
+    expect(followed.fit).not.toBeNull();
+    expect(followed.fit!.rows.length).toBeGreaterThan(1);
+    expect(followed.why).not.toContain("Named compounds stay on their own line");
+    expect(followed.why).not.toContain("optimal %B");
   });
 });
 
@@ -919,8 +898,11 @@ describe("first-peak time outliers", () => {
     expect(four.why).not.toContain("middle t0");
     expect(four.nextPercentB).toBe(40);
     const followed = decideRetention(series, rules);
-    expect(followed.status).toBe("look");
+    expect(followed.reason).toBe("second-minimum");
     expect(followed.move).toBeNull();
+    expect(followed.nextTemperature).toBe("40");
+    expect(followed.fit).not.toBeNull();
+    expect(followed.choosePercent).toBe(true);
   });
 
   it("at 90% keeps 1.110 until a later run, then leaves both 1.190 and 1.110 out", () => {
@@ -942,18 +924,21 @@ describe("first-peak time outliers", () => {
     expect(four.nextPercentB).toBe(45);
 
     const five = decideRetention(series.slice(0, 5), rules);
-    expect(five.move).toBeNull();
-    expect(five.fit).toBeNull();
-    expect(five.afterMinimum).toBe(true);
-    expect(five.reason).not.toBe("calculated");
-    expect(five.why).not.toContain("The calculated %B still aims");
-    expect(five.why).not.toContain("target logK");
+    expect(five.move).toBe("calculated");
+    expect(five.reason).toBe("calculated");
+    expect(five.fit!.rows.map((row) => row.t0)).toEqual([1.075, 1.064, 1.068]);
+    expect(five.fit!.excluded.map((row) => row.percentB)).toEqual([90, 80]);
+    expect(five.nextPercentB).toBe(40);
+    expect(five.fit!.rawPercentB).toBeCloseTo(39.212, 2);
 
     const six = decideRetention(series, rules);
-    expect(six.status).toBe("look");
+    expect(six.reason).toBe("second-minimum");
     expect(six.move).toBeNull();
+    expect(six.nextTemperature).toBe("40");
+    expect(six.fit).not.toBeNull();
     expect(six.why).not.toContain("middle t0");
     expect(six.why).not.toContain("95%");
+    expect(six.why).not.toContain("optimal %B");
   });
 
   it("says the t0 peaks passed the Q-test when none is an outlier", () => {
@@ -1060,13 +1045,15 @@ describe("which run to carry forward after the calculated %B", () => {
       rules,
     );
     expect(followed.status).toBe("recommend");
-    expect(followed.reason).toBe("intermediate");
-    expect(followed.nextPercentB).toBe(37);
-    expect(retentionChangeLabel(followed)).toBe("Run at 37% B");
-    expect(followed.why).toContain("37% B is the optimal %B");
-    expect(followed.why).toContain("The predicted last peak is");
-    expect(followed.why).not.toContain("inside the set time");
+    expect(followed.reason).toBe("second-minimum");
+    expect(followed.move).toBeNull();
+    expect(followed.nextTemperature).toBe("40");
+    expect(followed.fit).not.toBeNull();
+    expect(followed.choosePercent).toBe(true);
+    expect(retentionChangeLabel(followed)).toMatch(/^Run at 40°C at .+% B$/);
+    expect(followed.why).not.toContain("optimal %B");
     expect(followed.why.toLowerCase()).not.toContain("do you want");
+    expect(followed.nextChange).toContain("40°C");
     expect(followed.nextChange).not.toContain("Carry forward");
     expect(followed.why).not.toContain("Carry forward");
     expect(followed.look).toBeUndefined();
@@ -1093,8 +1080,9 @@ describe("which run to carry forward after the calculated %B", () => {
     expect(index).toBe(0);
   });
 
-  it("does not carry forward a calculated run whose last peak is past the time", () => {
+  it("still recommends a second minimum when the recommended file's last peak is past the time", () => {
     const calculated = decideRetention(series, rules);
+    expect(calculated.nextPercentB).toBe(36);
     const followed = decideRetention(
       [
         ...series,
@@ -1107,33 +1095,14 @@ describe("which run to carry forward after the calculated %B", () => {
       ],
       rules,
     );
-    expect(followed.status).toBe("efficiency");
-    expect(followed.why).toContain("18.258");
-    expect(followed.why).toContain("Efficiency is next to bring the last peak time to the specification.");
+    expect(followed.reason).toBe("second-minimum");
+    expect(followed.move).toBeNull();
+    expect(followed.nextTemperature).toBe("40");
+    expect(followed.fit).not.toBeNull();
+    expect(followed.choosePercent).toBe(true);
+    expect(followed.status).not.toBe("efficiency");
     expect(followed.why).not.toContain("Carry forward");
-    expect(followed.nextChange).toContain("Move on to efficiency");
-    expect(followed.efficiencyChoice?.continueLabel).toBe("Continue selectivity.");
-    expect(followed.continueShowsLook).toBe(true);
-    expect(followed.nextChange).not.toContain("40°C");
-    const looked = decideRetention(
-      [
-        ...series,
-        {
-          ...sampleFromRead(calculated.nextPercentB!, read37),
-          lastPeakTimeMin: 18.258,
-          peakCount: 7,
-          minResolutionExcludingFirst: 2,
-        },
-      ],
-      rules,
-      { continueToLook: true },
-    );
-    expect(looked.status).toBe("look");
-    expect(looked.look?.mode).toBe("between-then-heat");
-    expect(looked.nextChange).toBe("Look at the runs.");
-    expect(looked.nextChange).not.toContain("40°C");
-    expect(followed.nextChange).not.toContain("Carry forward");
-    expect(followed.nextPercentB).toBeNull();
+    expect(followed.nextChange).toContain("40°C");
   });
 });
 
@@ -1236,20 +1205,21 @@ describe("declining selectivity after the 35% file", () => {
 
     const declined = decideRetention(samples, rules, { continueRetention: true });
     expect(declined.status).toBe("recommend");
-    expect(declined.reason).toBe("intermediate");
-    expect(declined.nextPercentB).toBe(36);
-    expect(retentionChangeLabel(declined)).toBe("Run at 36% B");
+    expect(declined.reason).toBe("calculated");
+    expect(declined.move).toBe("calculated");
+    expect(declined.fit).not.toBeNull();
     expect(declined.bChoices ?? null).toBeNull();
     expect(declined.nextTemperature ?? null).toBeNull();
-    expect(declined.why).toContain("36% B is the optimal %B");
-    expect(declined.chart?.lines.length).toBeGreaterThan(1);
-    expect(declined.fit).toBeNull();
-    expect(declined.why).not.toContain("still aims at that time");
-    expect(declined.why).not.toContain("target logK");
+    expect(declined.choosePercent ?? false).toBe(false);
+    expect(declined.why).not.toContain("optimal %B");
+    expect(declined.why).not.toContain("40°C");
+    expect(declined.why).not.toContain("60°C");
+    expect(declined.look ?? null).toBeNull();
 
     const firstMinimum = decideRetention(samples.slice(0, 5), rules);
     expect(firstMinimum.move).toBe("calculated");
     expect(firstMinimum.fit).not.toBeNull();
+    expect(firstMinimum.nextPercentB).toBe(36);
     const offRecommendation = decideRetention(
       [
         ...samples.slice(0, 5),
@@ -1265,13 +1235,9 @@ describe("declining selectivity after the 35% file", () => {
       ],
       rules,
     );
-    expect(offRecommendation.reason).toBe("intermediate");
-    expect(offRecommendation.move).toBeNull();
-    expect(offRecommendation.fit).toBeNull();
-    expect(offRecommendation.chart?.lines.length).toBeGreaterThan(1);
-    expect(offRecommendation.why).toContain("optimal %B");
-    expect(offRecommendation.why).not.toContain("still aims at that time");
-    expect(retentionChangeLabel(offRecommendation)).toMatch(/^Run at \d+% B$/);
+    expect(offRecommendation.reason).not.toBe("second-minimum");
+    expect(offRecommendation.why).not.toContain("optimal %B");
+    expect(offRecommendation.nextTemperature ?? null).toBeNull();
     const lateShort = { ...samples[5], peakCount: 6 };
     const between = {
       percentB: 55,
@@ -1283,13 +1249,19 @@ describe("declining selectivity after the 35% file", () => {
       peaks: [1.06, 1.4, 2.1, 3].map((timeMin) => ({ timeMin, area: 1, height: 1, name: null, id: null })),
     };
     const secondTry = decideRetention([...samples.slice(0, 5), between, lateShort], rules);
-    expect(secondTry.fit).toBeNull();
-    expect(secondTry.move).not.toBe("calculated");
-    expect(secondTry.reason).toBe("intermediate");
-    expect(declined.why).toContain("The predicted last peak is");
-    expect(declined.why).not.toContain("40°C");
-    expect(declined.why).not.toContain("60°C");
-    expect(declined.look ?? null).toBeNull();
+    expect(secondTry.reason).not.toBe("second-minimum");
+    expect(secondTry.why).not.toContain("optimal %B");
+
+    const matched = decideRetention(
+      [...samples.slice(0, 5), { ...samples[4], percentB: firstMinimum.nextPercentB! }],
+      rules,
+    );
+    expect(matched.reason).toBe("second-minimum");
+    expect(matched.choosePercent).toBe(true);
+    expect(matched.nextTemperature).toBe("40");
+    expect(matched.fit).not.toBeNull();
+    expect(matched.move).toBeNull();
+    expect(retentionChangeLabel(matched)).toMatch(/^Run at 40°C at .+% B$/);
   });
 });
 

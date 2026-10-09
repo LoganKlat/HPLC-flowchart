@@ -31,7 +31,7 @@ export type RetentionChoice = {
   declinedEfficiencyNow?: boolean;
   /** Continue selectivity on this run, before a run has been picked to heat. */
   continueToLook?: boolean;
-  /** Decline selectivity and stay on retention: one calculated intermediate %B. */
+  /** Decline selectivity and stay on the single-line minimum %B. */
   continueRetention?: boolean;
 };
 
@@ -162,7 +162,7 @@ export type RetentionReason =
   | "specs-met"
   | "efficiency"
   | "look"
-  | "intermediate"
+  | "second-minimum"
   | "cannot-calculate";
 
 export type PercentChoice = {
@@ -195,25 +195,8 @@ export type RetentionDecision = {
   efficiencyChoice?: EfficiencyChoice | null;
   /** Continue on this run opens Look at the runs instead of heating immediately. */
   continueShowsLook?: boolean;
-  /** A minimum %B was already recommended earlier in this series. */
-  afterMinimum?: boolean;
-  /** One logK line per peak, for the intermediate %B graph. */
-  chart?: IntermediateChart | null;
-};
-
-export type PeakLogLine = {
-  label: string;
-  m: number;
-  c: number;
-  points: { percentB: number; logK: number }[];
-};
-
-export type IntermediateChart = {
-  lines: PeakLogLine[];
-  percentB: number;
-  minPercentB: number;
-  maxPercentB: number;
-  pairLabel: string;
+  /** The second minimum %B: use the recommendation, or type another %B, then run at 40°C. */
+  choosePercent?: boolean;
 };
 
 type CompleteRules = {
@@ -275,11 +258,12 @@ export function decideRetention(
 
   if (samples.length >= 2) {
     const prior = decideRetention(samples.slice(0, -1), complete);
-    const minimumDue = prior.move === "calculated" && prior.nextPercentB != null;
-    if (minimumDue || prior.afterMinimum) {
-      const next = afterCalculatedFile(samples, complete, choice);
-      return { ...next, afterMinimum: true };
-    }
+    const matchedMinimum =
+      prior.move === "calculated" &&
+      prior.nextPercentB != null &&
+      nearly(current.percentB, prior.nextPercentB);
+    if (matchedMinimum) return secondMinimumDecision(samples, complete);
+    if (prior.reason === "second-minimum") return prior;
   }
 
   const missing = missingMeasurements(current);
@@ -432,29 +416,19 @@ function investigateDecision(sample: RetentionSample, rules: CompleteRules): Ret
   };
 }
 
-function afterCalculatedFile(
-  samples: RetentionSample[],
-  rules: CompleteRules,
-  choice: RetentionChoice | undefined,
-): RetentionDecision {
-  const current = samples[samples.length - 1];
-  if (current.peakCount != null && current.peakCount > rules.requiredPeaks) {
-    return investigateDecision(current, rules);
-  }
-  if (current.peakCount === rules.requiredPeaks) {
-    const judged = judgeEqualPeaks(current, rules);
-    if (judged.resolutionMeets && !judged.timeLate) return specsMet(current, rules, judged);
-    if (judged.timeLate && !judged.resolutionPositive) return holdLate(current, rules, judged);
-    if (choice?.continueRetention) {
-      const intermediate = intermediateAfterMinimum(samples, rules);
-      if (intermediate) return intermediate;
-    }
-    if (choice?.continueToLook) return lookDecision(samples, rules, "between-then-heat");
-    return efficiencyStop(current, rules, judged, true);
-  }
-  const intermediate = intermediateAfterMinimum(samples, rules);
-  if (intermediate) return intermediate;
-  return lookDecision(samples, rules, "between-then-heat");
+function secondMinimumDecision(samples: RetentionSample[], rules: CompleteRules): RetentionDecision {
+  const calculated = calculatePercentB(samples, rules);
+  if (calculated.fit == null || calculated.nextPercentB == null) return calculated;
+  const percent = formatPercentB(calculated.nextPercentB);
+  return {
+    ...calculated,
+    reason: "second-minimum",
+    move: null,
+    nextTemperature: "40",
+    choosePercent: true,
+    nextChange: `Run the next chromatogram at 40°C, at ${percent}% B. This %B is the new minimum from the last-peak line, including the run just uploaded. Use it, or type a different %B. Selectivity starts at 40°C with the %B you take.`,
+    following: SELECTIVITY_ORDER,
+  };
 }
 
 function afterInBetweenFile(
@@ -483,10 +457,7 @@ function equalPeakCount(
   const current = samples[samples.length - 1];
   const judged = judgeEqualPeaks(current, rules);
   if (judged.resolutionMeets && !judged.timeLate) return specsMet(current, rules, judged);
-  if (choice?.continueRetention) {
-    const intermediate = intermediateAfterMinimum(samples, rules);
-    if (intermediate) return intermediate;
-  }
+  if (choice?.continueRetention) return minimumPercentOnce(samples, rules, choice);
   if (judged.timeLate && judged.resolutionPositive) return efficiencyStop(current, rules, judged);
   if (judged.timeLate) return holdLate(current, rules, judged);
   return minimumPercentOnce(samples, rules, choice);
@@ -597,10 +568,6 @@ function minimumPercentOnce(
       ].join("\n\n"),
       fit: null,
     };
-  } else if (nearly(current.percentB!, calculated.nextPercentB!)) {
-    const intermediate = intermediateAfterMinimum(samples, rules);
-    if (intermediate) return intermediate;
-    return lookDecision(samples, rules, "between");
   } else {
     decision = calculated;
   }
@@ -645,200 +612,6 @@ function ruleLines(sample: RetentionSample, rules: CompleteRules, judged: EqualJ
     );
   }
   return lines;
-}
-
-/**
- * After the minimum-%B chromatogram has been tested: the whole %B, inside the
- * tested range, where the closest logK lines are farthest apart. A predicted
- * last peak past the set time does not drop that %B.
- */
-function intermediateAfterMinimum(
-  samples: RetentionSample[],
-  rules: CompleteRules,
-): RetentionDecision | null {
-  const current = samples[samples.length - 1];
-  if (timedPeaks(current).length < 2) return null;
-  const found = optimalIntermediatePercent(samples, rules);
-  if (!found) return null;
-  const percent = formatPercentB(found.percentB);
-  const gap = formatCalc(found.gap, 3);
-  const identity = found.named
-    ? "Named compounds stay on their own line."
-    : "A peak with no name uses its peak number.";
-  const why = [
-    `${percent}% B is the optimal %B. The minimum logK separation is ${gap}, between ${found.pairLabel}. The predicted last peak is ${formatMinutes(found.predictedLastMin)} min.`,
-    `${found.calculation} ${identity}`,
-    "That logK gap is a stand-in for how well the peaks separate, not the measured resolution. This %B can be a better minimum than the first one, because raising %B shortens the run and often separates the peaks more.",
-  ].join("\n\n");
-  return {
-    status: "recommend",
-    reason: "intermediate",
-    move: null,
-    nextPercentB: found.percentB,
-    nextChange: `Run the next chromatogram at ${percent}% B.`,
-    why,
-    fit: null,
-    afterMinimum: true,
-    chart: {
-      lines: found.lines,
-      percentB: found.percentB,
-      minPercentB: found.minPercentB,
-      maxPercentB: found.maxPercentB,
-      pairLabel: found.pairLabel,
-    },
-  };
-}
-
-function optimalIntermediatePercent(
-  samples: RetentionSample[],
-  _rules: CompleteRules,
-): {
-  percentB: number;
-  predictedLastMin: number;
-  gap: number;
-  pairLabel: string;
-  calculation: string;
-  named: boolean;
-  lines: PeakLogLine[];
-  minPercentB: number;
-  maxPercentB: number;
-} | null {
-  const used = samples
-    .map((sample) => sample.percentB)
-    .filter((percent): percent is number => percent != null && Number.isFinite(percent));
-  if (used.length < 2) return null;
-  const points = new Map<string, { x: number; y: number; t0: number; label: string; named: boolean }[]>();
-  samples.forEach((sample) => {
-    if (sample.percentB == null || !Number.isFinite(sample.percentB)) return;
-    const peaks = timedPeaks(sample);
-    if (peaks.length < 2) return;
-    const t0 = peaks[0].timeMin!;
-    if (!(t0 > 0)) return;
-    const seen = new Set<string>();
-    peaks.slice(1).forEach((peak, index) => {
-      const tR = peak.timeMin!;
-      const k = (tR - t0) / t0;
-      if (!(k > 0)) return;
-      const identity = compoundKey(peak, index);
-      if (seen.has(identity.key)) return;
-      seen.add(identity.key);
-      const line = points.get(identity.key) ?? [];
-      line.push({ x: sample.percentB!, y: Math.log10(k), t0, label: identity.label, named: identity.named });
-      points.set(identity.key, line);
-    });
-  });
-  const fits: { m: number; c: number; label: string; named: boolean; points: { percentB: number; logK: number }[] }[] = [];
-  const t0Values: number[] = [];
-  for (const line of points.values()) {
-    if (line.length < 3) continue;
-    const fit = slopeIntercept(line);
-    if (!fit) continue;
-    fits.push({
-      ...fit,
-      label: line[0].label,
-      named: line[0].named,
-      points: line.map((point) => ({ percentB: point.x, logK: point.y })),
-    });
-    for (const point of line) t0Values.push(point.t0);
-  }
-  if (fits.length < 2 || t0Values.length === 0) return null;
-  const minB = Math.min(...used);
-  const maxB = Math.max(...used);
-  const low = Math.floor(minB) + 1;
-  const high = Math.ceil(maxB) - 1;
-  if (low > high) return null;
-  const t0Average = t0Values.reduce((sum, value) => sum + value, 0) / t0Values.length;
-  const middle = (minB + maxB) / 2;
-  let best: {
-    percentB: number;
-    dMin: number;
-    predictedLastMin: number;
-    pair: [number, number];
-    logs: number[];
-  } | null = null;
-  for (let percent = low; percent <= high; percent++) {
-    if (used.some((value) => nearly(value, percent))) continue;
-    const logs = fits.map((fit) => fit.m * percent + fit.c);
-    let dMin = Infinity;
-    let pair: [number, number] = [0, 1];
-    for (let i = 0; i < logs.length; i++) {
-      for (let j = i + 1; j < logs.length; j++) {
-        const gap = Math.abs(logs[i] - logs[j]);
-        if (gap < dMin - 1e-12) {
-          dMin = gap;
-          pair = [i, j];
-        }
-      }
-    }
-    if (!Number.isFinite(dMin)) continue;
-    const predictedLast = Math.max(...logs.map((logK) => t0Average * (1 + 10 ** logK)));
-    if (!Number.isFinite(predictedLast)) continue;
-    const nearer =
-      best == null ||
-      dMin > best.dMin + 1e-12 ||
-      (Math.abs(dMin - best.dMin) <= 1e-12 && Math.abs(percent - middle) < Math.abs(best.percentB - middle) - 1e-9);
-    if (nearer) best = { percentB: percent, dMin, predictedLastMin: predictedLast, pair, logs };
-  }
-  if (!best) return null;
-  const [left, right] = best.pair;
-  const a = fits[left];
-  const b = fits[right];
-  const logA = best.logs[left];
-  const logB = best.logs[right];
-  const maxLog = Math.max(...best.logs);
-  const percent = formatPercentB(best.percentB);
-  return {
-    percentB: best.percentB,
-    predictedLastMin: best.predictedLastMin,
-    gap: best.dMin,
-    pairLabel: `${a.label} and ${b.label}`,
-    named: fits.some((fit) => fit.named),
-    minPercentB: minB,
-    maxPercentB: maxB,
-    lines: fits.map((fit) => ({ label: fit.label, m: fit.m, c: fit.c, points: fit.points })),
-    calculation: [
-      "k = (tR − t0) / t0, then logK = log10(k).",
-      `${a.label}: ${lineEquation(a.m, a.c)}. ${b.label}: ${lineEquation(b.m, b.c)}.`,
-      `At ${percent}% B, logK is ${formatCalc(logA, 3)} and ${formatCalc(logB, 3)}. The gap is |${formatCalc(logA, 3)} − ${formatCalc(logB, 3)}| = ${formatCalc(best.dMin, 3)}.`,
-      `The predicted last peak uses the average t0, ${formatMinutes(t0Average)} min, and the largest logK, ${formatCalc(maxLog, 3)}: tR = ${formatMinutes(t0Average)} × (1 + 10^${formatCalc(maxLog, 3)}) = ${formatMinutes(best.predictedLastMin)} min.`,
-    ].join(" "),
-  };
-}
-
-function timedPeaks(sample: RetentionSample): PeakMeasurement[] {
-  return (sample.peaks ?? [])
-    .filter((peak) => peak.timeMin != null && Number.isFinite(peak.timeMin))
-    .slice()
-    .sort((a, b) => a.timeMin! - b.timeMin!);
-}
-
-function compoundKey(peak: PeakMeasurement, elutionIndex: number): { key: string; label: string; named: boolean } {
-  const name = peak.name?.trim();
-  if (name) return { key: `name:${name.toLowerCase()}`, label: name, named: true };
-  const id = peak.id?.trim();
-  if (id) return { key: `id:${id.toLowerCase()}`, label: id, named: true };
-  return { key: `order:${elutionIndex}`, label: `peak ${elutionIndex + 2}`, named: false };
-}
-
-function slopeIntercept(points: { x: number; y: number }[]): { m: number; c: number } | null {
-  const n = points.length;
-  if (n < 2) return null;
-  let sumX = 0;
-  let sumY = 0;
-  let sumXY = 0;
-  let sumX2 = 0;
-  for (const point of points) {
-    sumX += point.x;
-    sumY += point.y;
-    sumXY += point.x * point.y;
-    sumX2 += point.x * point.x;
-  }
-  const denominator = n * sumX2 - sumX * sumX;
-  if (denominator === 0) return null;
-  const m = (n * sumXY - sumX * sumY) / denominator;
-  const c = (sumY - m * sumX) / n;
-  if (!Number.isFinite(m) || !Number.isFinite(c)) return null;
-  return { m, c };
 }
 
 function lookDecision(

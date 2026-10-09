@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { evaluateRun, resolutionForDecision } from "@/lib/evaluate";
 import { readLabFile } from "@/lib/lab-file";
 import { selectivityChangeLabel } from "@/lib/change-label";
-import { carryForwardIndex, decideRetention } from "@/lib/retention";
+import { carryForwardIndex, decideRetention, formatPercentB } from "@/lib/retention";
 import {
   adjustedPercentB,
   assessHappy,
@@ -785,5 +785,54 @@ describe("selectivity plan", () => {
     if (history.phase !== "selectivity") return;
     expect(history.plan.why).toContain("empty");
     expect(history.plan.why).toContain("25°C");
+  });
+
+  it("starts selectivity at 40°C after the second minimum, using that run's %B", () => {
+    const fixtureDir = path.join(process.cwd(), "fixtures/retention");
+    const files = [
+      { percentB: 70, name: "GR41-06-70.csv" },
+      { percentB: 60, name: "GR41-07-60.csv" },
+      { percentB: 50, name: "GR41-08-50.csv" },
+      { percentB: 40, name: "GR41-09-40.csv" },
+    ];
+    const reads = files.map((file) => readLabFile(readFileSync(path.join(fixtureDir, file.name))));
+    const asRun = (percentB: number, index: number, temperatureC: number): SelectivityRun => {
+      const read = reads[index];
+      return {
+        percentB,
+        temperatureC,
+        solvent: "ACN",
+        ligand: "C18",
+        peakCount: read.peakCount,
+        lastPeakTimeMin: read.lastPeakTimeMin,
+        firstPeakTimeMin: read.firstPeakTimeMin,
+        minResolutionExcludingFirst: read.minResolutionExcludingFirst,
+        maxBackPressurePsi: read.maxBackPressurePsi,
+      };
+    };
+    const ladder = files.map((file, index) => asRun(file.percentB, index, 25));
+    const toSample = (item: SelectivityRun) => ({
+      percentB: item.percentB,
+      peakCount: item.peakCount,
+      lastPeakTimeMin: item.lastPeakTimeMin,
+      firstPeakTimeMin: item.firstPeakTimeMin,
+      minResolutionExcludingFirst: item.minResolutionExcludingFirst,
+      maxBackPressurePsi: item.maxBackPressurePsi,
+    });
+    const minimum = decideRetention(ladder.map(toSample), setup);
+    expect(minimum.nextPercentB).toBe(42);
+    const atMinimum = asRun(42, 3, 25);
+    const second = decideRetention([...ladder, atMinimum].map(toSample), setup);
+    expect(second.reason).toBe("second-minimum");
+    expect(second.nextPercentB).not.toBeNull();
+    const at40 = asRun(second.nextPercentB!, 3, 40);
+    const history = planHistory([...ladder, atMinimum, at40], setup);
+    expect(history.phase).toBe("selectivity");
+    if (history.phase !== "selectivity") return;
+    expect(history.plan.step).toBe("temp-60");
+    expect(history.plan.prefill).toMatchObject({
+      percentB: formatPercentB(at40.percentB!),
+      temperature: "60",
+    });
   });
 });
