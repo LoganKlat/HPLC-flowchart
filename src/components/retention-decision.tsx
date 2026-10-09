@@ -48,16 +48,21 @@ export function RetentionDecisionView({
       <section id="min-b-note" className="rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10">
         {decision.bChoices && decision.bChoices.length > 1 ? (
           <div id="percent-choices" className="mb-3 flex flex-col gap-2">
-            {decision.bChoices.map((choice) => (
-              <button
-                key={choice.id}
-                type="button"
-                className="rounded-lg border border-[#0f6b56] bg-white px-3 py-2 text-left text-sm font-semibold text-[#144237]"
-                onClick={() => onPickPercent?.(choice.percentB)}
-              >
-                {`%B ${formatPercentB(choice.percentB)}`}
-              </button>
-            ))}
+            {decision.bChoices.map((choice) => {
+              const preferred =
+                decision.nextPercentB != null && Math.abs(choice.percentB - decision.nextPercentB) < 1e-6;
+              return (
+                <button
+                  key={choice.id}
+                  type="button"
+                  className="flex flex-col items-start gap-1 rounded-lg border border-[#0f6b56] bg-white px-3 py-2 text-left text-sm font-semibold text-[#144237]"
+                  onClick={() => onPickPercent?.(choice.percentB)}
+                >
+                  {preferred ? <RecommendedMark /> : null}
+                  <span>{`%B ${formatPercentB(choice.percentB)}`}</span>
+                </button>
+              );
+            })}
           </div>
         ) : null}
         {fit ? (
@@ -138,6 +143,10 @@ export function LaterChangeNote({ decision }: { decision: RetentionDecision | nu
   );
 }
 
+function RecommendedMark() {
+  return <span className="text-xs font-medium tracking-[0.14em] uppercase">Recommended</span>;
+}
+
 function whyParagraphs(why: string): string[] {
   const parts = why
     .split("\n\n")
@@ -174,14 +183,15 @@ export function SecondPercentChoice({
       <button
         type="button"
         id="use-recommended-b"
-        className="rounded-lg border border-[#0f6b56] bg-white px-3 py-2 text-left text-sm font-semibold text-[#144237]"
+        className="flex flex-col items-start gap-1 rounded-lg border border-[#0f6b56] bg-white px-3 py-2 text-left text-sm font-semibold text-[#144237]"
         onClick={() => {
           setMode("recommended");
           setDraft("");
           onPick(null);
         }}
       >
-        {`Use ${formatPercentB(recommended)}% B`}
+        <RecommendedMark />
+        <span>{`Use ${formatPercentB(recommended)}% B`}</span>
       </button>
       <button
         type="button"
