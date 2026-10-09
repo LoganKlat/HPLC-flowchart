@@ -275,10 +275,13 @@ describe("retention %B along the four lab files", () => {
     expect(followed.nextPercentB).toBe(62);
     expect(followed.fit).toBeNull();
     expect(followed.nextChange).toContain("62%");
-    expect(followed.why).toContain("62% B is where that gap is largest");
+    expect(followed.why).toContain("62% B is the optimal %B");
     expect(followed.why).toContain("2.628 min");
-    expect(followed.why).toContain("inside the set time of 10 min");
-    expect(followed.why).toContain("same peak number");
+    expect(followed.why).toContain("The predicted last peak is");
+    expect(followed.why).toContain("A peak with no name uses its peak number.");
+    expect(followed.why).toContain("stand-in");
+    expect(followed.why).toContain("better minimum");
+    expect(followed.why).not.toContain("inside the set time");
     expect(followed.why).not.toContain("40°C");
     expect(followed.why).not.toContain("coating");
     expect(followed.why.toLowerCase()).not.toContain("solvent");
@@ -319,9 +322,10 @@ describe("retention %B along the four lab files", () => {
     expect(followed.nextPercentB).toBe(62);
     expect(retentionChangeLabel(followed)).toBe("Run at 62% B");
     expect(followed.nextChange).toContain("62%");
-    expect(followed.why).toContain("62% B is where that gap is largest");
+    expect(followed.why).toContain("62% B is the optimal %B");
     expect(followed.why).toContain("2.618 min");
-    expect(followed.why).toContain("inside the set time of 10 min");
+    expect(followed.why).toContain("The predicted last peak is");
+    expect(followed.why).not.toContain("inside the set time");
     expect(followed.why).not.toContain("40°C");
     expect(followed.why).not.toContain("coating");
     expect(followed.why.toLowerCase()).not.toContain("solvent");
@@ -350,7 +354,7 @@ describe("retention %B along the four lab files", () => {
     expect(apart.reason).toBe("intermediate");
     expect(apart.nextPercentB).toBe(62);
     expect(apart.why).toContain("2.615 min");
-    expect(apart.why).toContain("same peak number");
+    expect(apart.why).toContain("A peak with no name uses its peak number.");
   });
 });
 
@@ -1061,8 +1065,9 @@ describe("which run to carry forward after the calculated %B", () => {
     expect(followed.reason).toBe("intermediate");
     expect(followed.nextPercentB).toBe(37);
     expect(retentionChangeLabel(followed)).toBe("Run at 37% B");
-    expect(followed.why).toContain("37% B is where that gap is largest");
-    expect(followed.why).toContain("inside the set time of 15 min");
+    expect(followed.why).toContain("37% B is the optimal %B");
+    expect(followed.why).toContain("The predicted last peak is");
+    expect(followed.why).not.toContain("inside the set time");
     expect(followed.why.toLowerCase()).not.toContain("do you want");
     expect(followed.nextChange).not.toContain("Carry forward");
     expect(followed.why).not.toContain("Carry forward");
@@ -1238,7 +1243,8 @@ describe("declining selectivity after the 35% file", () => {
     expect(retentionChangeLabel(declined)).toBe("Run at 36% B");
     expect(declined.bChoices ?? null).toBeNull();
     expect(declined.nextTemperature ?? null).toBeNull();
-    expect(declined.why).toContain("where that gap is largest");
+    expect(declined.why).toContain("36% B is the optimal %B");
+    expect(declined.why).toContain("The predicted last peak is");
     expect(declined.why).not.toContain("40°C");
     expect(declined.why).not.toContain("60°C");
     expect(declined.look ?? null).toBeNull();
