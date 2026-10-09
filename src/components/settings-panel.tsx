@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 export function SettingsPanel({
-  onOpenNav,
   columns,
   solvents,
   onAddColumn,
@@ -13,7 +12,6 @@ export function SettingsPanel({
   onAddSolvent,
   onRemoveSolvent,
 }: {
-  onOpenNav: () => void;
   columns: readonly { label: string; locked: boolean }[];
   solvents: readonly string[];
   onAddColumn: (name: string) => boolean | "invalid";
@@ -23,11 +21,6 @@ export function SettingsPanel({
 }) {
   return (
     <div id="settings-page" className="flex flex-col gap-8">
-      <div className="md:hidden">
-        <Button type="button" variant="outline" className="h-10 px-3" onClick={onOpenNav}>
-          Sections
-        </Button>
-      </div>
       <header className="flex max-w-3xl flex-col gap-2">
         <p className="text-xs tracking-[0.16em] text-[#0f6b56] uppercase">This session</p>
         <h1 className="font-heading text-3xl text-foreground sm:text-4xl">Settings</h1>

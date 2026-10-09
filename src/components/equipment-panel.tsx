@@ -7,7 +7,6 @@ import { ColumnRetentionAnimation } from "@/components/column-retention-animatio
 import { FunctionNoteView, type FunctionNote } from "@/components/function-note";
 import { HplcSketch } from "@/components/hplc-drawing";
 import { KindMark } from "@/components/setting-legend";
-import { Button } from "@/components/ui/button";
 import type { SettingKind } from "@/lib/setting-kind";
 
 type Box = { left: number; top: number; width: number; height: number };
@@ -443,11 +442,9 @@ function HplcDiagram({
 }
 
 export function EquipmentPanel({
-  onOpenNav,
   columnRuns,
   ligands,
 }: {
-  onOpenNav: () => void;
   columnRuns: ColumnRunTrace[];
   ligands: readonly string[];
 }) {
@@ -462,11 +459,6 @@ export function EquipmentPanel({
 
   return (
     <div id="equipment" className="flex flex-col gap-5">
-      <div className="md:hidden">
-        <Button type="button" variant="outline" className="h-10 px-3" onClick={onOpenNav}>
-          Sections
-        </Button>
-      </div>
       <header>
         <p className="text-xs tracking-[0.16em] text-[#0f6b56] uppercase">Lab setups</p>
         <h1 className="mt-1 font-heading text-3xl text-foreground sm:text-4xl">Equipment</h1>

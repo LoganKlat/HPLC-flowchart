@@ -1,16 +1,10 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
 import type { ReactNode } from "react";
 
-export function AboutPanel({ onOpenNav }: { onOpenNav: () => void }) {
+export function AboutPanel() {
   return (
     <div id="about-page" className="flex flex-col gap-8">
-      <div className="md:hidden">
-        <Button type="button" variant="outline" className="h-10 px-3" onClick={onOpenNav}>
-          Sections
-        </Button>
-      </div>
       <article className="flex max-w-[40rem] flex-col gap-8 text-base leading-7 text-foreground">
         <header className="flex flex-col gap-4">
           <p className="text-sm font-medium tracking-[0.14em] text-[#0f6b56] uppercase">User guide</p>

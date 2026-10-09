@@ -290,7 +290,6 @@ function runTabStyle(selected: boolean, hovered: boolean): CSSProperties {
 export function HplcApp() {
   const [active, setActive] = useState(0);
   const [section, setSection] = useState<(typeof sections)[number]["id"]>("decision-engine");
-  const [navOpen, setNavOpen] = useState(false);
   const [details, setDetails] = useState<RunDetails>(emptyRunDetails);
   const [rules, setRules] = useState<RuleInputs>(emptyRuleInputs);
   const [runs, setRuns] = useState<RunState[]>([emptyRun()]);
@@ -686,29 +685,20 @@ export function HplcApp() {
     <div
       className={
         section === "decision-engine"
-          ? "flex h-dvh max-h-dvh w-full flex-none flex-col overflow-hidden p-3 sm:p-4 md:flex-row md:items-stretch"
-          : "flex min-h-dvh flex-1 flex-col md:flex-row"
+          ? "flex h-dvh max-h-dvh w-full flex-none flex-col overflow-hidden"
+          : "flex min-h-dvh flex-1 flex-col"
       }
     >
-      <AppSidebar
-        open={navOpen}
-        section={section}
-        onClose={() => setNavOpen(false)}
-        onSelect={(id) => {
-          setSection(id);
-          setNavOpen(false);
-        }}
-      />
+      <SectionNav section={section} onSelect={setSection} />
       {section === "about" || section === "equipment" || section === "settings" ? (
       <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 py-6 sm:px-6 sm:py-8">
       <Watermark />
-      {section === "about" ? <AboutPanel onOpenNav={() => setNavOpen(true)} /> : null}
+      {section === "about" ? <AboutPanel /> : null}
       {section === "equipment" ? (
-        <EquipmentPanel onOpenNav={() => setNavOpen(true)} columnRuns={columnRuns} ligands={columnCoatings} />
+        <EquipmentPanel columnRuns={columnRuns} ligands={columnCoatings} />
       ) : null}
       {section === "settings" ? (
         <SettingsPanel
-          onOpenNav={() => setNavOpen(true)}
           columns={columns.map((column) => ({ label: column.label, locked: isUltraColumn(column) }))}
           solvents={solvents}
           onAddColumn={addColumn}
@@ -727,17 +717,12 @@ export function HplcApp() {
           const index = Number(value);
           if (index >= 0 && index < syncedRuns.length) setActive(index);
         }}
-        className="flex! h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden"
+        className="flex! h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden p-3 sm:p-4"
       >
-      <div className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden pl-4 sm:pl-5">
+      <div className="flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden">
       <div id="decision-layout" className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden lg:grid lg:grid-cols-[22.25rem_minmax(0,1fr)] lg:grid-rows-[auto_minmax(0,1fr)_auto] lg:gap-x-5 lg:gap-y-3">
       <header className="order-2 flex shrink-0 items-start justify-between gap-4 lg:col-span-2 lg:col-start-1 lg:row-start-1">
         <div className="min-w-0">
-        <div className="mb-3 md:hidden">
-          <Button type="button" variant="outline" className="h-10 px-3" onClick={() => setNavOpen(true)}>
-            Sections
-          </Button>
-        </div>
         <p className="text-xs tracking-[0.16em] text-[#0f6b56] uppercase">Composite sample</p>
         <h1 className="mt-1 font-heading text-3xl text-foreground sm:text-4xl">HPLC run check</h1>
         <p className="mt-2 max-w-2xl text-base text-muted-foreground">
@@ -899,37 +884,32 @@ function Watermark({ className = "mb-3" }: { className?: string }) {
 
 function sectionTabStyle(selected: boolean, hovered: boolean): CSSProperties {
   if (selected && hovered) {
-    return { backgroundColor: "#b7d8cb", borderColor: "#0f6b56", color: "#144237", fontWeight: 600 };
+    return { backgroundColor: "#b7d8cb", borderColor: "#0a5644", color: "#0f6b56", fontWeight: 600 };
   }
   if (selected) {
-    return { backgroundColor: "#e7f3ee", borderColor: "#c5ddd2", color: "#144237", fontWeight: 600 };
+    return { backgroundColor: "#e7f3ee", borderColor: "#0f6b56", color: "#0f6b56", fontWeight: 600 };
   }
   if (hovered) {
     return { backgroundColor: "#efe6c4", borderColor: "#b0893e", color: "#3d3416", fontWeight: 600 };
   }
   return {
     backgroundColor: "var(--background)",
-    borderColor: "transparent",
+    borderColor: "var(--border)",
     color: "var(--foreground)",
     fontWeight: 500,
   };
 }
 
-function AppSidebar({
-  open,
+function SectionNav({
   section,
-  onClose,
   onSelect,
 }: {
-  open: boolean;
   section: (typeof sections)[number]["id"];
-  onClose: () => void;
   onSelect: (id: (typeof sections)[number]["id"]) => void;
 }) {
   const [hovered, setHovered] = useState<string | null>(null);
-  const nav = (
-    <nav aria-label="Sections" className="flex flex-col gap-1">
-      <p className="px-3 pb-2 text-xs tracking-[0.14em] text-muted-foreground uppercase">Sections</p>
+  return (
+    <nav aria-label="Sections" className="grid w-full shrink-0 grid-cols-4">
       {sections.map((item) => {
         const selected = item.id === section;
         return (
@@ -937,7 +917,7 @@ function AppSidebar({
             key={item.id}
             type="button"
             aria-current={selected ? "page" : undefined}
-            className="flex items-center gap-2 rounded-lg border border-solid px-3 py-2 text-left text-sm transition-none"
+            className="flex min-h-16 flex-col items-center justify-center gap-1 border border-r-0 border-solid px-1 py-2 text-center text-xs leading-tight last:border-r sm:min-h-[4.5rem] sm:flex-row sm:gap-2 sm:px-3 sm:text-sm"
             style={sectionTabStyle(selected, hovered === item.id)}
             onMouseEnter={() => setHovered(item.id)}
             onMouseLeave={() => setHovered((current) => (current === item.id ? null : current))}
@@ -949,38 +929,6 @@ function AppSidebar({
         );
       })}
     </nav>
-  );
-
-  return (
-    <>
-      <aside
-        className={
-          section === "decision-engine"
-            ? "hidden h-full min-h-0 w-60 shrink-0 flex-col self-stretch border-r border-border bg-card md:flex"
-            : "hidden w-60 shrink-0 border-r border-border bg-card md:block"
-        }
-      >
-        <div className={section === "decision-engine" ? "px-3 py-4" : "sticky top-0 px-3 py-6"}>{nav}</div>
-      </aside>
-      {open ? (
-        <div className="fixed inset-0 z-40 md:hidden">
-          <button
-            type="button"
-            aria-label="Close sections"
-            className="absolute inset-0 bg-black/40"
-            onClick={onClose}
-          />
-          <aside className="relative z-10 flex h-full w-72 max-w-[85vw] flex-col border-r border-border bg-card px-3 py-4 shadow-lg">
-            <div className="mb-4 flex justify-end">
-              <Button type="button" variant="outline" className="h-9 px-3" onClick={onClose}>
-                Close
-              </Button>
-            </div>
-            {nav}
-          </aside>
-        </div>
-      ) : null}
-    </>
   );
 }
 
