@@ -33,7 +33,8 @@ export function SelectivityDecisionView({
   nextFileName?: string | null;
 }) {
   const ligandChoices = [...ligands];
-  const solventChoices = [...solvents];
+  const solventChoices =
+    plan.step === "solvent" ? solvents.filter((name) => findSolvent(name)) : [...solvents];
   const choice = plan.tempChoice;
   const recommendedPath = choice?.other ?? "solvent";
   const showSolvent = plan.showSolventChoices || (choice != null && tempPath === "solvent");

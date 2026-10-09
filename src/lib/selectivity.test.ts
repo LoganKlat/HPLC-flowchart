@@ -664,6 +664,94 @@ describe("selectivity plan", () => {
     expect(history.plan.prefill).toMatchObject({ percentB: "80", temperature: "60" });
   });
 
+  it("changes solvent at the original temperature after 40°C and then 60°C", () => {
+    const rules: SelectivitySetup = { ...setup, ambientTemperatureC: null, lastPeakTimeMin: 15 };
+    const cold = run({
+      percentB: 35,
+      temperatureC: null,
+      peakCount: 6,
+      minResolutionExcludingFirst: 0.4,
+      lastPeakTimeMin: 12,
+    });
+    const at40 = run({
+      percentB: 35,
+      temperatureC: 40,
+      peakCount: 6,
+      minResolutionExcludingFirst: 0.4,
+      lastPeakTimeMin: 8,
+    });
+    const at60 = run({
+      percentB: 60,
+      temperatureC: 60,
+      peakCount: 6,
+      minResolutionExcludingFirst: 0.3,
+      lastPeakTimeMin: 6,
+    });
+    const history = planHistory([cold, at40, at60], rules);
+    expect(history.phase).toBe("selectivity");
+    if (history.phase !== "selectivity") return;
+    expect(history.plan.step).toBe("solvent");
+    expect(selectivityChangeLabel(history.plan)).toBe("Change solvent, back at 25°C");
+    expect(selectivityChangeLabel(history.plan)).not.toBe("Run at 60% B");
+    expect(history.plan.nextChange).toBe("Change solvent, back at 25°C.");
+    expect(history.plan.anchorPercentB).toBe(35);
+    expect(history.plan.recommendedSolventId).toBeNull();
+    expect(history.plan.showSolventChoices).toBe(true);
+    expect(history.plan.why).toContain("blank, so 25°C is used");
+    expect(history.plan.why).toContain("retention minimum of 35% B");
+    expect(history.plan.why).toContain("ACN, MeOH, or THF");
+    expect(history.plan.why).not.toContain("40°C");
+    expect(history.plan.why).not.toContain("60%");
+    expect(history.plan.why.toLowerCase()).not.toContain("intermediate");
+    expect(history.plan.prefill).toMatchObject({ temperature: "25", solvent: "", percentB: "" });
+
+    const matched = solventNomograph(35, "ACN")?.find((row) => row.id === "methanol");
+    expect(matched).toBeTruthy();
+    const chartPercent = Number(matched!.percentText);
+    const solventRun = run({
+      percentB: chartPercent,
+      temperatureC: 25,
+      solvent: "MeOH",
+      peakCount: 6,
+      minResolutionExcludingFirst: 0.4,
+      lastPeakTimeMin: 12,
+    });
+    const again = planHistory([cold, at40, at60, solventRun], rules);
+    expect(again.phase).toBe("selectivity");
+    if (again.phase !== "selectivity") return;
+    expect(again.plan.step).toBe("temp-40");
+    expect(again.plan.prefill).toMatchObject({
+      percentB: matched!.percentText,
+      temperature: "40",
+      solvent: "MeOH",
+    });
+    const heated = planHistory(
+      [
+        cold,
+        at40,
+        at60,
+        solventRun,
+        run({
+          percentB: chartPercent,
+          temperatureC: 40,
+          solvent: "MeOH",
+          peakCount: 6,
+          minResolutionExcludingFirst: 0.4,
+          lastPeakTimeMin: 8,
+        }),
+      ],
+      rules,
+    );
+    expect(heated.phase).toBe("selectivity");
+    if (heated.phase !== "selectivity") return;
+    expect(heated.plan.step).toBe("temp-60");
+    expect(heated.plan.prefill).toMatchObject({
+      percentB: matched!.percentText,
+      temperature: "60",
+      solvent: "MeOH",
+    });
+  });
+
   it("uses 25°C when Run 1 has no temperature", () => {
     const history = withHeat([run({ peakCount: 4, temperatureC: null, minResolutionExcludingFirst: 0.4 })], {
       ...setup,

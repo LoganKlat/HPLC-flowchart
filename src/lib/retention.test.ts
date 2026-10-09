@@ -1197,6 +1197,54 @@ describe("backwards retention", () => {
   });
 });
 
+describe("declining selectivity after the 35% file", () => {
+  const rules: RetentionRules = {
+    requiredPeaks: 7,
+    lastPeakTimeMin: 15,
+    minResolution: 1.5,
+    maxBackPressurePsi: 4000,
+  };
+  const times = [
+    [1.11, 1.315, 1.687],
+    [1.075, 1.507, 1.785, 1.916],
+    [1.064, 1.837, 2.124, 2.483, 2.795],
+    [1.068, 2.582, 4.259, 4.986],
+    [1.08, 3.866, 4.512, 4.83, 9.897, 11.633],
+    [1.134, 4.871, 6.672, 7.141, 8.013, 17.485, 19.854],
+  ];
+  const percents = [80, 70, 60, 50, 40, 35];
+  const resolutions = [1.093, 0.841, 1.773, 3.236, 1.107, 1.453];
+  const pressures = [1398.15, 1644.21, 1904.5, 2127.81, 2285.68, 1180.53];
+  const samples: RetentionSample[] = percents.map((percentB, index) => ({
+    percentB,
+    peakCount: times[index].length,
+    lastPeakTimeMin: times[index][times[index].length - 1],
+    firstPeakTimeMin: times[index][0],
+    minResolutionExcludingFirst: resolutions[index],
+    maxBackPressurePsi: pressures[index],
+    peaks: times[index].map((timeMin) => ({ timeMin, area: 1, height: 1, name: null, id: null })),
+  }));
+
+  it("keeps the selectivity offer, and declining it recommends one calculated %B", () => {
+    const offered = decideRetention(samples, rules);
+    expect(offered.status).toBe("efficiency");
+    expect(offered.efficiencyChoice?.continueLabel).toBe("Continue selectivity.");
+    expect(offered.nextPercentB).toBeNull();
+
+    const declined = decideRetention(samples, rules, { continueRetention: true });
+    expect(declined.status).toBe("recommend");
+    expect(declined.reason).toBe("intermediate");
+    expect(declined.nextPercentB).toBe(36);
+    expect(retentionChangeLabel(declined)).toBe("Run at 36% B");
+    expect(declined.bChoices ?? null).toBeNull();
+    expect(declined.nextTemperature ?? null).toBeNull();
+    expect(declined.why).toContain("where that gap is largest");
+    expect(declined.why).not.toContain("40°C");
+    expect(declined.why).not.toContain("60°C");
+    expect(declined.look ?? null).toBeNull();
+  });
+});
+
 function sampleFromRead(percentB: number, read: LabFileRead): RetentionSample {
   return {
     percentB,

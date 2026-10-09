@@ -25,7 +25,12 @@ describe("next change wording", () => {
   it("names temperature, solvent, and ligand the same way", () => {
     expect(retentionChangeLabel(retention({ nextTemperature: "40", nextPercentB: 60 }))).toBe("Run at 40°C");
     const plan = { status: "recommend", step: "solvent" } as SelectivityPlan;
-    expect(selectivityChangeLabel(plan, { solvent: "MeOH" })).toBe("Run with MeOH");
+    expect(
+      selectivityChangeLabel(
+        { ...plan, prefill: { percentB: "", temperature: "25", solvent: "", ligand: "" } },
+        { solvent: "MeOH" },
+      ),
+    ).toBe("Change solvent, back at 25°C");
     expect(selectivityChangeLabel({ ...plan, step: "ligand" }, { ligand: "C8" })).toBe("Run with C8");
     expect(selectivityChangeLabel({ ...plan, step: "temp-40" })).toBe("Run at 40°C");
   });

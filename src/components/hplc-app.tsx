@@ -295,6 +295,7 @@ export function HplcApp() {
   const [rules, setRules] = useState<RuleInputs>(emptyRuleInputs);
   const [runs, setRuns] = useState<RunState[]>([emptyRun()]);
   const [declinedEfficiencyNow, setDeclinedEfficiencyNow] = useState(false);
+  const [retentionContinuedAt, setRetentionContinuedAt] = useState<number | null>(null);
   const [efficiencyChosen, setEfficiencyChosen] = useState(false);
   const [continuedSelectivity, setContinuedSelectivity] = useState<Record<number, boolean>>({});
   const [heatChoice, setHeatChoice] = useState<HeatStart | null>(null);
@@ -334,10 +335,11 @@ export function HplcApp() {
     [declinedEfficiencyNow],
   );
   const readyCount = readyPrefix(runs);
+  const continueRetention = retentionContinuedAt != null && retentionContinuedAt === readyCount - 1;
   const latestFlags = selectivityFlags(readyCount - 1, heatChoice, continuedSelectivity);
   const syncedRuns = syncNextRun(runs, details, checks, {
     leftSelectivity: leftSelectivity || efficiencyChosen,
-    choice: { ...choice, continueToLook: latestFlags.continueToLook },
+    choice: { ...choice, continueToLook: latestFlags.continueToLook, continueRetention },
     heat: heatChoice,
     continuePastEfficiency: latestFlags.continuePast,
     linePercent,
@@ -761,6 +763,9 @@ export function HplcApp() {
               onOpen={(next) => setActive(next)}
               leftSelectivity={leftSelectivity || efficiencyChosen}
               efficiencyContinued={continuedSelectivity[index] === true}
+              onContinueRetention={
+                index === readyCount - 1 ? () => setRetentionContinuedAt(index) : undefined
+              }
               onContinueSelectivity={() => {
                 const flags = selectivityFlags(index, heatChoice, continuedSelectivity);
                 const explanation = explainRun(syncedRuns, index, details, checks, {
@@ -783,7 +788,7 @@ export function HplcApp() {
                 const count = readyPrefix(syncedRuns);
                 setHeatChoice({ carryIndex: pickIndex, seriesLength: count });
               }}
-              choice={choice}
+              choice={{ ...choice, continueRetention }}
               heat={heatChoice}
               onLinePercent={index === readyCount - 1 ? reportLinePercent : undefined}
               onPickPercent={index === readyCount - 1 ? setPickedPercent : undefined}
@@ -993,6 +998,7 @@ function RunPane({
   leftSelectivity,
   efficiencyContinued,
   onContinueSelectivity,
+  onContinueRetention,
   onLeave,
   onDeclineEfficiency,
   onPickRun,
@@ -1027,6 +1033,7 @@ function RunPane({
   leftSelectivity: boolean;
   efficiencyContinued: boolean;
   onContinueSelectivity: () => void;
+  onContinueRetention?: () => void;
   onLeave: () => void;
   onDeclineEfficiency: () => void;
   onPickRun: (index: number) => void;
@@ -1127,6 +1134,7 @@ function RunPane({
                     why={retention.why}
                     onEfficiency={onLeave}
                     onContinue={onContinueSelectivity}
+                    onContinueRetention={onContinueRetention}
                   />
                 ) : retention?.status === "look" && retention.look && !heat ? (
                   <LookAtRuns look={retention.look} onPickRun={onPickRun} />

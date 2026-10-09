@@ -31,6 +31,8 @@ export type RetentionChoice = {
   declinedEfficiencyNow?: boolean;
   /** Continue selectivity on this run, before a run has been picked to heat. */
   continueToLook?: boolean;
+  /** Decline selectivity and stay on retention: one calculated intermediate %B. */
+  continueRetention?: boolean;
 };
 
 export type LookMark = "met" | "not-met" | "blank";
@@ -428,6 +430,10 @@ function afterCalculatedFile(
     const judged = judgeEqualPeaks(current, rules);
     if (judged.resolutionMeets && !judged.timeLate) return specsMet(current, rules, judged);
     if (judged.timeLate && !judged.resolutionPositive) return holdLate(current, rules, judged);
+    if (choice?.continueRetention) {
+      const intermediate = intermediateAfterMinimum(samples, rules);
+      if (intermediate) return intermediate;
+    }
     if (choice?.continueToLook) return lookDecision(samples, rules, "between-then-heat");
     return efficiencyStop(current, rules, judged, true);
   }
@@ -462,6 +468,10 @@ function equalPeakCount(
   const current = samples[samples.length - 1];
   const judged = judgeEqualPeaks(current, rules);
   if (judged.resolutionMeets && !judged.timeLate) return specsMet(current, rules, judged);
+  if (choice?.continueRetention) {
+    const intermediate = intermediateAfterMinimum(samples, rules);
+    if (intermediate) return intermediate;
+  }
   if (judged.timeLate && judged.resolutionPositive) return efficiencyStop(current, rules, judged);
   if (judged.timeLate) return holdLate(current, rules, judged);
   return minimumPercentOnce(samples, rules, choice);

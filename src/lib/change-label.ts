@@ -43,7 +43,10 @@ export function selectivityChangeLabel(
   }
   if (plan.step === "temp-40" || plan.step === "temp-adjust") return "Run at 40°C";
   if (plan.step === "temp-60") return "Run at 60°C";
-  if (plan.step === "solvent") return solvent ? `Run with ${solvent}` : "Run with a new solvent";
+  if (plan.step === "solvent") {
+    const raw = plan.prefill?.temperature?.trim().replace(/°\s*C$/i, "") ?? "";
+    return `Change solvent, back at ${raw || "25"}°C`;
+  }
   if (plan.step === "ligand") return ligand ? `Run with ${ligand}` : "Run with a new ligand";
   return NO_CHANGE_YET;
 }

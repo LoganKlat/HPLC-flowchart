@@ -1,5 +1,4 @@
 import { resolutionForDecision } from "@/lib/evaluate";
-import { CHART_SOLVENT_NOTE } from "@/lib/solvent-menu";
 import { COATING_SENTENCE, PERCENT_B_SENTENCE, SELECTIVITY_ORDER } from "@/lib/setting-kind";
 import { carryForwardIndex, decideRetention, formatPercentB, roundTargetPercent, type RetentionRules, type RetentionSample } from "@/lib/retention";
 
@@ -539,6 +538,7 @@ export function planHistory(
 
   let start = 0;
   let forced: { finishedOffset: number; carryIndex: number } | null = null;
+  let explicitHeat = false;
   const heat = options?.heat;
   if (
     heat &&
@@ -549,6 +549,7 @@ export function planHistory(
     (continuePast || !peaksMatchSpec(runs[runs.length - 1], setup))
   ) {
     forced = { finishedOffset: heat.seriesLength - 1, carryIndex: heat.carryIndex };
+    explicitHeat = true;
   }
   if (!forced && autoShort) {
     const anchor = selectivityAnchor(runs, setup);
@@ -559,7 +560,13 @@ export function planHistory(
     const rules = retentionRules(setup);
     let finishedOffset = -1;
     let carryIndex: number | null = null;
-    if (forced && start === 0) {
+    const raise = segment.findIndex((run) => isForty(run) || isSixty(run));
+    const ovenSplit = !explicitHeat && raise > 0 && (continuePast || sameSolventHeatPair(segment));
+    if (ovenSplit) {
+      finishedOffset = raise - 1;
+      carryIndex = raise - 1;
+      forced = null;
+    } else if (forced && start === 0) {
       finishedOffset = forced.finishedOffset;
       carryIndex = forced.carryIndex;
       forced = null;
@@ -583,7 +590,7 @@ export function planHistory(
       if (continuePast) return heatLatest(runs, setup, tried, ligands);
       return { phase: "retention", segmentStart: start };
     }
-    if (peaksMatchSpec(runs[runs.length - 1], setup) && !continuePast) {
+    if (!ovenSplit && peaksMatchSpec(runs[runs.length - 1], setup) && !continuePast) {
       return { phase: "retention", segmentStart: start };
     }
 
@@ -750,10 +757,8 @@ function walkSelectivity(args: {
             anchor: args.carry,
             anchorNumber: args.carryRunNumber,
             setup: args.setup,
-            ambient,
+            ambient: temperatureBeforeOven(args.carry),
             ligandName: baseline.ligand || args.setup.originalLigand,
-            skipped60: !temperature.did60,
-            heated: pending.slice(0, temperature.consumed),
           }),
         };
       }
@@ -829,6 +834,24 @@ function walkTemperature(args: {
   }
 
   return { type: "advance", consumed: 2, did60: true };
+}
+
+/** 40°C and a later 60°C on that same solvent, so the next step is not another %B or another 60°C. */
+function sameSolventHeatPair(runs: SelectivityRun[]): boolean {
+  for (let index = 0; index < runs.length; index++) {
+    if (!isForty(runs[index])) continue;
+    const solvent = (runs[index].solvent || "").trim().toLowerCase();
+    for (let later = index + 1; later < runs.length; later++) {
+      const nextSolvent = (runs[later].solvent || "").trim().toLowerCase();
+      if (solvent && nextSolvent && nextSolvent !== solvent) break;
+      if (isSixty(runs[later])) return true;
+    }
+  }
+  return false;
+}
+
+function isForty(run: SelectivityRun): boolean {
+  return run.temperatureC != null && Math.abs(run.temperatureC - 40) < 0.51;
 }
 
 function isSixty(run: SelectivityRun): boolean {
@@ -961,36 +984,25 @@ function solventPlan(args: {
   setup: SelectivitySetup;
   ambient: Ambient;
   ligandName: string;
-  skipped60: boolean;
-  heated: SelectivityRun[];
 }): SelectivityPlan {
   const anchorPercent = args.anchor.percentB!;
-  const typed = args.setup.originalSolvent.trim();
+  const typed = args.anchor.solvent.trim() || args.setup.originalSolvent.trim();
   const recognized = findSolvent(typed);
   const nomograph = recognized ? solventNomograph(anchorPercent, recognized.name) : null;
-  const oldName = recognized?.label ?? typed;
-  const pick = "Pick a new solvent you can actually use.";
-  const oldSentence = typed ? `The old solvent is ${oldName} at ${formatPercentB(anchorPercent)}% B.` : "";
-  const readings = nomograph
-    ? `The chart reads ${nomograph[0].label} ${nomograph[0].percentText}% B, ${nomograph[1].label} ${nomograph[1].percentText}% B, and ${nomograph[2].label} ${nomograph[2].percentText}% B.`
-    : CHART_SOLVENT_NOTE;
-  const cap = nomograph?.some((entry) => entry.capped)
-    ? " A reading past a scale’s 100% end is held at 100. That is the strongest the pump can mix."
-    : "";
+  const back = formatTemperature(args.ambient.celsius);
+  const minimum = formatPercentB(anchorPercent);
   return {
     status: "recommend",
     step: "solvent",
-    nextChange: `Go back to ${args.ambient.celsius}°C and change the solvent. ${pick} The solvent is in the bottles. ${PERCENT_B_SENTENCE}`,
+    nextChange: `Change solvent, back at ${back}°C.`,
     following: `After the solvent, try 40°C and then 60°C at the chart %B. ${SELECTIVITY_ORDER}`,
     why: [
-      solventLead(args),
-      [oldSentence, pick, readings].filter(Boolean).join(" ") + cap,
-      "The matched %B is there so the retention time stays similar when the solvent changes. Pick the solvent you can actually use. The chart does not choose it. Changing the solvent is a selectivity change: peaks can pull apart or change order. It is not an efficiency change.",
-      args.ambient.sentence,
-    ].join(" "),
+      `Change the solvent and go back to ${back}°C. ${args.ambient.sentence}`,
+      `Pick ACN, MeOH, or THF. The %B comes from the chart for the solvent you pick, matched to the retention minimum of ${minimum}% B. The chart does not choose the solvent.`,
+    ].join("\n\n"),
     prefill: {
       percentB: "",
-      temperature: String(args.ambient.celsius),
+      temperature: back,
       solvent: "",
       ligand: args.ligandName,
     },
@@ -1150,37 +1162,6 @@ function resolutionSentence(run: SelectivityRun, setup: SelectivitySetup, check:
   return `Its minimum resolution is ${formatResolution(decision)}.`;
 }
 
-function solventLead(args: {
-  anchor: SelectivityRun;
-  anchorNumber: number;
-  setup: SelectivitySetup;
-  skipped60: boolean;
-  heated: SelectivityRun[];
-}): string {
-  if (!args.skipped60) {
-    return "The runs at 40°C and 60°C still do not meet both checks, so the solvent is changed. More heat is not next, because 60°C was already tried and the separation still does not meet the specification. A new solvent changes which compounds prefer the coating.";
-  }
-  const hot = args.heated[args.heated.length - 1];
-  const short =
-    hot != null &&
-    args.setup.requiredPeaks != null &&
-    hot.peakCount != null &&
-    hot.peakCount < args.setup.requiredPeaks;
-  const fewerThanBefore =
-    hot != null &&
-    args.anchor.peakCount != null &&
-    hot.peakCount != null &&
-    hot.peakCount < args.anchor.peakCount;
-  const compared = compareSentence(args.anchor, args.anchorNumber, args.heated, args.setup.requiredPeaks);
-  if (short) {
-    return `The 40°C run is worse because it has fewer peaks, so its minimum resolution is 0. The next step is a new solvent. ${compared}`;
-  }
-  if (fewerThanBefore) {
-    return `The 40°C run is worse because it has fewer peaks than Run ${args.anchorNumber}. 60°C is skipped. The next step is a new solvent. ${compared}`;
-  }
-  return `The 40°C runs did not raise the peak count or the minimum resolution compared with Run ${args.anchorNumber}. 60°C is skipped. ${compareSentence(args.anchor, args.anchorNumber, args.heated, args.setup.requiredPeaks)}`;
-}
-
 function compareSentence(
   baseline: SelectivityRun,
   baselineNumber: number,
@@ -1226,6 +1207,21 @@ function separationImproved(
 }
 
 type Ambient = { celsius: number; assumed: boolean; sentence: string };
+
+function temperatureBeforeOven(run: SelectivityRun): Ambient {
+  if (run.temperatureC == null || !Number.isFinite(run.temperatureC)) {
+    return {
+      celsius: 25,
+      assumed: true,
+      sentence: "The temperature from before the oven was raised was blank, so 25°C is used.",
+    };
+  }
+  return {
+    celsius: run.temperatureC,
+    assumed: false,
+    sentence: "That is the temperature from before the oven was raised.",
+  };
+}
 
 function ambientOf(setup: SelectivitySetup): Ambient {
   if (setup.ambientTemperatureC == null) {
