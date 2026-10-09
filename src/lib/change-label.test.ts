@@ -29,6 +29,17 @@ describe("next change wording", () => {
         retention({ reason: "second-minimum", nextTemperature: "40", nextPercentB: 36, move: null }),
       ),
     ).toBe("Run at 40°C at 36% B");
+    expect(
+      retentionChangeLabel(
+        retention({ reason: "choose-percent", nextTemperature: "40", nextPercentB: null, move: null }),
+      ),
+    ).toBe("Select a %B");
+    expect(
+      retentionChangeLabel(
+        retention({ reason: "choose-percent", nextTemperature: "40", nextPercentB: null, move: null }),
+        22,
+      ),
+    ).toBe("Run at 40°C at 22% B");
     const plan = { status: "recommend", step: "solvent" } as SelectivityPlan;
     expect(
       selectivityChangeLabel(

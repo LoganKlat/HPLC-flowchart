@@ -508,12 +508,11 @@ export function planHistory(
     const raise = segment.findIndex((run) => isForty(run) || isSixty(run));
     const ovenSplit = !explicitHeat && raise > 0 && (continuePast || sameSolventHeatPair(segment));
     const fortyAt = segment.findIndex((run) => isForty(run));
-    const secondMinThenHeat =
-      !explicitHeat &&
-      !ovenSplit &&
-      fortyAt > 0 &&
-      decideRetention(segment.slice(0, fortyAt).map(toRetentionSample), rules).reason === "second-minimum";
-    if (ovenSplit || secondMinThenHeat) {
+    const beforeHeat =
+      fortyAt > 0 ? decideRetention(segment.slice(0, fortyAt).map(toRetentionSample), rules) : null;
+    const secondMinThenHeat = !explicitHeat && !ovenSplit && beforeHeat?.reason === "second-minimum";
+    const ownPercentThenHeat = !explicitHeat && !ovenSplit && beforeHeat?.status === "efficiency";
+    if (ovenSplit || secondMinThenHeat || ownPercentThenHeat) {
       const splitAt = ovenSplit ? raise : fortyAt;
       finishedOffset = splitAt - 1;
       carryIndex = splitAt - 1;
@@ -542,7 +541,7 @@ export function planHistory(
       if (continuePast) return heatLatest(runs, setup, tried, ligands);
       return { phase: "retention", segmentStart: start };
     }
-    if (!ovenSplit && peaksMatchSpec(runs[runs.length - 1], setup) && !continuePast) {
+    if (!ovenSplit && !ownPercentThenHeat && peaksMatchSpec(runs[runs.length - 1], setup) && !continuePast) {
       return { phase: "retention", segmentStart: start };
     }
 

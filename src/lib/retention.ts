@@ -31,7 +31,7 @@ export type RetentionChoice = {
   declinedEfficiencyNow?: boolean;
   /** Continue selectivity on this run, before a run has been picked to heat. */
   continueToLook?: boolean;
-  /** Decline selectivity and stay on the single-line minimum %B. */
+  /** Stay in retention after the efficiency offer, and pick a %B instead of another minimum. */
   continueRetention?: boolean;
 };
 
@@ -66,7 +66,7 @@ export type EfficiencyNow = {
 export const EFFICIENCY_MOVE_ON =
   "Move on to efficiency. This is recommended because the peak count equals the specification.";
 
-export const EFFICIENCY_CONTINUE = "Continue selectivity.";
+export const EFFICIENCY_CONTINUE = "Move on to selectivity";
 
 export type EfficiencyChoice = {
   recommendedSentence: string;
@@ -163,6 +163,7 @@ export type RetentionReason =
   | "efficiency"
   | "look"
   | "second-minimum"
+  | "choose-percent"
   | "cannot-calculate";
 
 export type PercentChoice = {
@@ -197,6 +198,8 @@ export type RetentionDecision = {
   continueShowsLook?: boolean;
   /** The second minimum %B: use the recommendation, or type another %B, then run at 40°C. */
   choosePercent?: boolean;
+  /** Stay in retention: ask for a %B, then start selectivity at 40°C. No new minimum is fitted. */
+  pickOwnPercent?: boolean;
 };
 
 type CompleteRules = {
@@ -263,7 +266,7 @@ export function decideRetention(
       prior.nextPercentB != null &&
       nearly(current.percentB, prior.nextPercentB);
     if (matchedMinimum) return secondMinimumDecision(samples, complete);
-    if (prior.reason === "second-minimum") return prior;
+    if (prior.reason === "second-minimum" || prior.reason === "choose-percent") return prior;
   }
 
   const missing = missingMeasurements(current);
@@ -457,7 +460,7 @@ function equalPeakCount(
   const current = samples[samples.length - 1];
   const judged = judgeEqualPeaks(current, rules);
   if (judged.resolutionMeets && !judged.timeLate) return specsMet(current, rules, judged);
-  if (choice?.continueRetention) return minimumPercentOnce(samples, rules, choice);
+  if (choice?.continueRetention) return chooseOwnPercentDecision(current, rules);
   if (judged.timeLate && judged.resolutionPositive) return efficiencyStop(current, rules, judged);
   if (judged.timeLate) return holdLate(current, rules, judged);
   return minimumPercentOnce(samples, rules, choice);
@@ -496,6 +499,25 @@ function specsMet(sample: RetentionSample, rules: CompleteRules, judged: EqualJu
       rules.minResolution != null && rules.minResolution > 0
         ? "The specifications are met. Do not keep going. The peaks are there, the worst pair is far enough apart, the last peak is inside the specified time, and the back-pressure is inside the specification. Retention, selectivity, and efficiency already meet the specification, so none of them is changed."
         : "The specifications are met. Do not keep going. The peaks are there, the last peak is inside the specified time, and the back-pressure is inside the specification. Retention is already inside the specified time, so it is not changed. Selectivity is not the next step either.",
+    ].join("\n\n"),
+    fit: null,
+  };
+}
+
+function chooseOwnPercentDecision(sample: RetentionSample, rules: CompleteRules): RetentionDecision {
+  return {
+    status: "recommend",
+    reason: "choose-percent",
+    move: null,
+    nextPercentB: null,
+    nextTemperature: "40",
+    pickOwnPercent: true,
+    nextChange: "Select a %B of your choosing. The next run is selectivity at 40°C at that %B.",
+    following: SELECTIVITY_ORDER,
+    why: [
+      ...ruleLines(sample, rules, judgeEqualPeaks(sample, rules)),
+      "Staying in retention does not calculate another minimum %B, and it does not refit the last-peak line.",
+      "Select a %B of your choosing. With that %B, selectivity starts at 40°C.",
     ].join("\n\n"),
     fit: null,
   };

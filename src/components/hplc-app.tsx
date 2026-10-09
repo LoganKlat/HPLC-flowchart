@@ -8,7 +8,7 @@ import { SettingsPanel } from "@/components/settings-panel";
 import { BackwardsRetentionView, EfficiencyChoiceView, LeaveSelectivityAsk, LeaveSelectivityDone } from "@/components/leave-selectivity";
 import { LookAtRuns } from "@/components/look-at-runs";
 import { NextFileNameLine } from "@/components/next-file-name";
-import { LaterChangeNote, RetentionDecisionView, SecondPercentChoice, StartHighBNote } from "@/components/retention-decision";
+import { LaterChangeNote, PickOwnPercent, RetentionDecisionView, SecondPercentChoice, StartHighBNote } from "@/components/retention-decision";
 import { ResultsPanel } from "@/components/results-panel";
 import { RunForm } from "@/components/run-form";
 import { SelectivityDecisionView } from "@/components/selectivity-decision";
@@ -237,6 +237,10 @@ function runTabLabel(
 function decisionTabLabel(explanation: Explanation, run: RunState | undefined): string | null {
   if (explanation.kind === "retention") {
     const decision = explanation.decision;
+    if (decision.reason === "choose-percent") {
+      const percent = run?.percentB?.trim();
+      return percent ? `40°C at ${percentWords(percent)}` : "choose %B";
+    }
     if (decision.nextTemperature) return degreeWords(decision.nextTemperature);
     if (decision.nextPercentB != null) return percentWords(run?.percentB || String(decision.nextPercentB));
     if (decision.status === "investigate" || decision.reason === "investigate") return "investigate";
@@ -368,7 +372,7 @@ export function HplcApp() {
         {
           id: `run-${index}`,
           tabLabel: runTabLabel(index, syncedRuns, details, checks, {
-            choice,
+            choice: { ...choice, continueRetention },
             heat: heatChoice,
             continued: continuedSelectivity,
             ligands: columnCoatings,
@@ -384,7 +388,7 @@ export function HplcApp() {
         },
       ];
     });
-  }, [syncedRuns, details, checks, choice, heatChoice, continuedSelectivity, columnCoatings]);
+  }, [syncedRuns, details, checks, choice, continueRetention, heatChoice, continuedSelectivity, columnCoatings]);
   const shown = Math.min(active, Math.max(0, syncedRuns.length - 1));
 
   function onDetails(next: RunDetails) {
@@ -1074,6 +1078,10 @@ function RunPane({
     retention?.choosePercent && retention.nextPercentB != null && onPickPercent
       ? { recommended: retention.nextPercentB, picked: pickedPercent ?? null, onPick: onPickPercent }
       : null;
+  const ownPercent =
+    retention?.pickOwnPercent && onPickPercent
+      ? { picked: pickedPercent ?? null, onPick: onPickPercent }
+      : null;
 
   return (
     <>
@@ -1091,6 +1099,7 @@ function RunPane({
             nextLabel={nextLabel}
             nextFileName={showNextFile ? nextFileName : null}
             secondMin={secondMin}
+            ownPercent={ownPercent}
           />
         </div>
       ) : null}
@@ -1227,6 +1236,7 @@ function RunSummary({
   nextLabel,
   nextFileName = null,
   secondMin = null,
+  ownPercent = null,
 }: {
   index: number;
   runs: RunState[];
@@ -1235,6 +1245,10 @@ function RunSummary({
   nextFileName?: string | null;
   secondMin?: {
     recommended: number;
+    picked: number | null;
+    onPick: (percent: number | null) => void;
+  } | null;
+  ownPercent?: {
     picked: number | null;
     onPick: (percent: number | null) => void;
   } | null;
@@ -1268,6 +1282,7 @@ function RunSummary({
         {secondMin ? (
           <SecondPercentChoice recommended={secondMin.recommended} picked={secondMin.picked} onPick={secondMin.onPick} />
         ) : null}
+        {ownPercent ? <PickOwnPercent picked={ownPercent.picked} onPick={ownPercent.onPick} /> : null}
       </div>
     </section>
   );
@@ -1320,6 +1335,12 @@ function retentionPercent(
   linePercent: number | null,
   pickedPercent: number | null,
 ): number | null {
+  if (decision.reason === "choose-percent") {
+    if (pickedPercent != null && Number.isFinite(pickedPercent) && pickedPercent >= 0 && pickedPercent <= 100) {
+      return pickedPercent;
+    }
+    return null;
+  }
   if (
     decision.reason === "second-minimum" &&
     pickedPercent != null &&
@@ -1522,6 +1543,19 @@ function prefillFor(
     return history.plan.status === "recommend" ? history.plan.prefill : null;
   }
   const decision = decideRetention(ready.slice(history.segmentStart).map(toSample), checks, choice);
+  if (decision.reason === "choose-percent") {
+    if (pickedPercent == null || !Number.isFinite(pickedPercent) || pickedPercent < 0 || pickedPercent > 100) {
+      return null;
+    }
+    const lastIndex = ready.length - 1;
+    const inherited = inheritedConditions(ready[lastIndex], lastIndex, details);
+    return {
+      percentB: formatPercentB(pickedPercent),
+      temperature: "40",
+      solvent: inherited.solvent,
+      ligand: inherited.ligand,
+    };
+  }
   if (decision.status !== "recommend" || decision.nextPercentB == null) return null;
   const typedSecond =
     decision.reason === "second-minimum" &&

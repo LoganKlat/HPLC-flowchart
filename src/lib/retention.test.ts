@@ -437,7 +437,7 @@ describe("retention stops and keeps going", () => {
     expect(decision.reason).toBe("efficiency");
     expect(decision.nextPercentB).toBeNull();
     expect(decision.nextChange).toContain("Move on to efficiency");
-    expect(decision.efficiencyChoice?.continueLabel).toBe("Continue selectivity.");
+    expect(decision.efficiencyChoice?.continueLabel).toBe("Move on to selectivity");
     expect(decision.nextChange).not.toContain("40°C");
   });
 
@@ -1197,24 +1197,29 @@ describe("declining selectivity after the 35% file", () => {
     peaks: times[index].map((timeMin) => ({ timeMin, area: 1, height: 1, name: null, id: null })),
   }));
 
-  it("keeps the selectivity offer, and declining it recommends one calculated %B", () => {
+  it("keeps the selectivity offer, and staying in retention asks for a %B", () => {
     const offered = decideRetention(samples, rules);
     expect(offered.status).toBe("efficiency");
-    expect(offered.efficiencyChoice?.continueLabel).toBe("Continue selectivity.");
+    expect(offered.efficiencyChoice?.continueLabel).toBe("Move on to selectivity");
     expect(offered.nextPercentB).toBeNull();
 
     const declined = decideRetention(samples, rules, { continueRetention: true });
     expect(declined.status).toBe("recommend");
-    expect(declined.reason).toBe("calculated");
-    expect(declined.move).toBe("calculated");
-    expect(declined.fit).not.toBeNull();
-    expect(declined.bChoices ?? null).toBeNull();
-    expect(declined.nextTemperature ?? null).toBeNull();
+    expect(declined.reason).toBe("choose-percent");
+    expect(declined.move).toBeNull();
+    expect(declined.fit).toBeNull();
+    expect(declined.nextPercentB).toBeNull();
+    expect(declined.pickOwnPercent).toBe(true);
+    expect(declined.nextTemperature).toBe("40");
     expect(declined.choosePercent ?? false).toBe(false);
     expect(declined.why).not.toContain("optimal %B");
-    expect(declined.why).not.toContain("40°C");
+    expect(declined.why).toContain("does not calculate another minimum");
+    expect(declined.why).toContain("does not refit the last-peak line");
+    expect(declined.nextChange).toContain("40°C");
     expect(declined.why).not.toContain("60°C");
     expect(declined.look ?? null).toBeNull();
+    expect(retentionChangeLabel(declined)).toBe("Select a %B");
+    expect(retentionChangeLabel(declined, 22)).toBe("Run at 40°C at 22% B");
 
     const firstMinimum = decideRetention(samples.slice(0, 5), rules);
     expect(firstMinimum.move).toBe("calculated");

@@ -166,6 +166,70 @@ function isOtherStage(paragraph: string): boolean {
   return false;
 }
 
+export function PickOwnPercent({
+  picked,
+  onPick,
+}: {
+  picked: number | null;
+  onPick: (percent: number | null) => void;
+}) {
+  const hasPick = picked != null && Number.isFinite(picked);
+  const [asking, setAsking] = useState<"yes" | "no" | null>(hasPick ? "yes" : null);
+  const [draft, setDraft] = useState(hasPick ? String(picked) : "");
+  return (
+    <div id="own-percent-choice" className="mt-3 flex flex-col gap-2">
+      <p className="text-sm font-medium text-foreground">Select a %B of your choosing?</p>
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          id="choose-own-yes"
+          className="rounded-lg border border-[#0f6b56] bg-white px-3 py-2 text-left text-sm font-semibold text-[#144237]"
+          onClick={() => setAsking("yes")}
+        >
+          Yes
+        </button>
+        <button
+          type="button"
+          id="choose-own-no"
+          className="rounded-lg border border-[#0f6b56] bg-white px-3 py-2 text-left text-sm font-semibold text-[#144237]"
+          onClick={() => {
+            setAsking("no");
+            setDraft("");
+            onPick(null);
+          }}
+        >
+          No
+        </button>
+      </div>
+      {asking === "yes" ? (
+        <label className="flex flex-col gap-1 text-sm" htmlFor="own-percent-b">
+          %B for the 40°C run
+          <input
+            id="own-percent-b"
+            type="number"
+            min={0}
+            max={100}
+            step="any"
+            inputMode="decimal"
+            value={draft}
+            className="h-10 rounded-lg border border-input bg-white px-2.5 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+            onChange={(event) => {
+              const text = event.target.value;
+              setDraft(text);
+              if (text.trim() === "") {
+                onPick(null);
+                return;
+              }
+              const value = Number(text);
+              if (Number.isFinite(value) && value >= 0 && value <= 100) onPick(value);
+            }}
+          />
+        </label>
+      ) : null}
+    </div>
+  );
+}
+
 export function SecondPercentChoice({
   recommended,
   picked,

@@ -55,12 +55,11 @@ export function EfficiencyChoiceView({
               style={{ height: "auto", whiteSpace: "normal" }}
               onClick={onContinueRetention}
             >
-              Continue retention
-            </Button>
+            Stay in retention
+          </Button>
           ) : null}
         </div>
         <div className="mt-3 flex flex-col gap-2 text-sm leading-relaxed text-foreground">
-          <p>{EFFICIENCY_MOVE_ON}</p>
           {why.split("\n\n").map((paragraph, index) => (
             <p key={index}>{paragraph}</p>
           ))}

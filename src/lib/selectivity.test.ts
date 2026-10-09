@@ -184,7 +184,7 @@ describe("selectivity checks", () => {
     );
     expect(decision.status).toBe("efficiency");
     expect(decision.nextChange).toContain("Move on to efficiency");
-    expect(decision.efficiencyChoice?.continueLabel).toBe("Continue selectivity.");
+    expect(decision.efficiencyChoice?.continueLabel).toBe("Move on to selectivity");
     expect(decision.efficiencyChoice?.recommendedSentence).toContain("peak count equals the specification");
     expect(decision.nextPercentB).toBeNull();
     expect(decision.why).toContain("Peaks: 7. The specification is 7. Met.");
@@ -785,6 +785,41 @@ describe("selectivity plan", () => {
     if (history.phase !== "selectivity") return;
     expect(history.plan.why).toContain("empty");
     expect(history.plan.why).toContain("25°C");
+  });
+
+  it("starts selectivity at the typed %B after staying in retention", () => {
+    const rules = { ...setup, requiredPeaks: 8, lastPeakTimeMin: 10 };
+    const late = run({
+      percentB: 35,
+      peakCount: 8,
+      minResolutionExcludingFirst: 1.2,
+      lastPeakTimeMin: 14,
+    });
+    const sample = {
+      percentB: late.percentB,
+      peakCount: late.peakCount,
+      lastPeakTimeMin: late.lastPeakTimeMin,
+      firstPeakTimeMin: late.firstPeakTimeMin,
+      minResolutionExcludingFirst: late.minResolutionExcludingFirst,
+      maxBackPressurePsi: late.maxBackPressurePsi,
+    };
+    expect(decideRetention([sample], rules).status).toBe("efficiency");
+    const stayed = decideRetention([sample], rules, { continueRetention: true });
+    expect(stayed.reason).toBe("choose-percent");
+    expect(stayed.fit).toBeNull();
+    expect(stayed.move).toBeNull();
+    const at40 = run({
+      percentB: 22,
+      temperatureC: 40,
+      peakCount: 8,
+      minResolutionExcludingFirst: 1.2,
+      lastPeakTimeMin: 12,
+    });
+    const history = planHistory([late, at40], rules);
+    expect(history.phase).toBe("selectivity");
+    if (history.phase !== "selectivity") return;
+    expect(history.plan.prefill).toMatchObject({ percentB: "22", temperature: "60" });
+    expect(history.plan.step).not.toBe("temp-40");
   });
 
   it("starts selectivity at 40°C after the second minimum, using that run's %B", () => {
