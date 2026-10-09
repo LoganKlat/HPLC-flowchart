@@ -7,6 +7,7 @@ import {
   FILE_NAME_MISMATCH,
   FILE_NAME_STRUCTURE_NOTE,
   detailsFromFileName,
+  nextRunFileName,
   parseRunFileName,
 } from "@/lib/filename-details";
 import { readLabFile } from "@/lib/lab-file";
@@ -336,5 +337,48 @@ describe("run file names", () => {
     if (kept.ok) return;
     expect(kept.note).toBe(FILE_NAME_MISMATCH);
     expect(kept.details.percentB).toBe("42");
+  });
+
+  it("builds the next run file name from the latest identity and the next run’s details", () => {
+    const next = {
+      ...emptyRunDetails(),
+      solvent: "ACN",
+      ph: "3",
+      method: "ISO",
+      percentB: "62",
+      flowRate: "1.5",
+      injectionVolume: "20",
+      sampleType: "CP",
+      sampleConcentration: "0.1",
+      ligand: "biphenyl",
+      lengthMm: "150",
+      diameterMm: "4.6",
+      particleSize: "5",
+      temperature: "ambient",
+      wavelength: "254",
+    };
+    const latest = "GR41-05-5-ACN-3-ISO-80-1.5-20u-CP-0.1-BiphP-150x4.6x5-amb-254.csv";
+    const name = nextRunFileName(latest, next);
+    expect(name).toBe("GR41-06-5-ACN-3-ISO-62-1.5-20u-CP-0.1-BiphP-150x4.6x5-amb-254");
+    expect(name).not.toMatch(/[–—]/);
+    const filled = detailsFromFileName(emptyRunDetails(), `${name}.csv`);
+    expect(filled.ok).toBe(true);
+    if (!filled.ok) return;
+    expect(filled.details.percentB).toBe("62");
+    expect(filled.details.ligand).toBe("biphenyl");
+    expect(filled.details.temperature).toBe("ambient");
+    expect(filled.details.solvent).toBe("ACN");
+
+    const heated = nextRunFileName(latest, { ...next, ligand: "C18aq", temperature: "60°C", percentB: "62" });
+    expect(heated).toContain("-C18aqP-");
+    expect(heated.endsWith("-T60-254")).toBe(true);
+
+    const fromShort = nextRunFileName("GR41-09-40.csv", next);
+    expect(fromShort.startsWith("GR41-10-1-")).toBe(true);
+    expect(fromShort).toContain("-62-");
+    expect(fromShort).not.toContain("-40-");
+
+    const unseen = nextRunFileName(null, next);
+    expect(unseen.startsWith("GR-01-1-")).toBe(true);
   });
 });

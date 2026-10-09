@@ -1,4 +1,5 @@
 import { decisionBesideClass, decisionUnderClass, nextChangeValueClass } from "@/components/decision-layout";
+import { NextFileNameLine } from "@/components/next-file-name";
 import { Button } from "@/components/ui/button";
 import { selectivityChangeLabel } from "@/lib/change-label";
 import { chartX, findSolvent, type SelectivityPlan, type TempPath } from "@/lib/selectivity";
@@ -18,6 +19,7 @@ export function SelectivityDecisionView({
   onLigand,
   tempPath,
   onTempPath,
+  nextFileName = null,
 }: {
   plan: SelectivityPlan;
   solventId: string;
@@ -28,6 +30,7 @@ export function SelectivityDecisionView({
   onLigand: (name: string) => void;
   tempPath: TempPath | null;
   onTempPath: (path: TempPath) => void;
+  nextFileName?: string | null;
 }) {
   const ligandChoices = [...ligands];
   const solventChoices = [...solvents];
@@ -82,6 +85,7 @@ export function SelectivityDecisionView({
             </Button>
           </div>
         ) : null}
+        {nextFileName ? <NextFileNameLine name={nextFileName} /> : null}
       </section>
       <section className={`rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10 ${decisionUnderClass}`}>
         <h2 className="font-heading text-base">Why</h2>

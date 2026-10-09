@@ -16,7 +16,7 @@ import { EquipmentPanel } from "@/components/equipment-panel";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { evaluateRun, parseUserCount, parseUserNumber, type RuleNumbers } from "@/lib/evaluate";
-import { detailsFromFileName, parseRunFileName } from "@/lib/filename-details";
+import { detailsFromFileName, nextRunFileName, parseRunFileName } from "@/lib/filename-details";
 import { readLabFile, type LabFileRead } from "@/lib/lab-file";
 import {
   decideRetention,
@@ -166,6 +166,14 @@ function sizePickOf(details: RunDetails): SizePick {
 /** A file name or a menu cannot leave the run on a column that is Ultra. */
 function withoutUltraColumn(details: RunDetails, list: readonly ColumnSpec[]): RunDetails {
   return ultraOnlyPick(list, sizePickOf(details)) ? clearColumn(details) : details;
+}
+
+function latestIdentityFile(runs: RunState[], index: number): string | null {
+  for (let i = index; i >= 0; i--) {
+    const name = runs[i]?.fileName;
+    if (name) return name;
+  }
+  return null;
 }
 
 function detailsForRun(index: number, runs: RunState[], base: RunDetails): RunDetails {
@@ -1057,6 +1065,10 @@ function RunPane({
   });
   const rows = run.read ? evaluateRun(run.read, checks) : null;
   const next = runs[index + 1];
+  const nextFileName =
+    next && run.status === "ready"
+      ? nextRunFileName(latestIdentityFile(runs, index), detailsForRun(index + 1, runs, details))
+      : null;
   const selectivity = explanation?.kind === "selectivity" ? explanation.plan : null;
   const retention = explanation?.kind === "retention" ? explanation.decision : null;
   const ask =
@@ -1126,6 +1138,7 @@ function RunPane({
                         onLinePercent={onLinePercent}
                         onPickPercent={onPickPercent}
                         pickedPercent={pickedPercent}
+                        nextFileName={nextFileName}
                       />
                     ) : null}
                     {selectivity ? (
@@ -1139,6 +1152,7 @@ function RunPane({
                         onLigand={onChooseLigand}
                         tempPath={tempPath}
                         onTempPath={onTempPath}
+                        nextFileName={nextFileName}
                       />
                     ) : null}
                   </>

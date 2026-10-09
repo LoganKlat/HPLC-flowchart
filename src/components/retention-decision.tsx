@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { NO_CHANGE_YET, retentionChangeLabel } from "@/lib/change-label";
+import { NextFileNameLine } from "@/components/next-file-name";
 import { decisionBesideClass, decisionUnderClass, nextChangeValueClass } from "@/components/decision-layout";
 import {
   formatPercentB,
@@ -22,11 +23,13 @@ export function RetentionDecisionView({
   onLinePercent,
   onPickPercent,
   pickedPercent = null,
+  nextFileName = null,
 }: {
   decision: RetentionDecision;
   onLinePercent?: (percent: number | null) => void;
   onPickPercent?: (percent: number) => void;
   pickedPercent?: number | null;
+  nextFileName?: string | null;
 }) {
   const fit = decision.fit;
   const initial = fit?.catalog.filter((run) => run.included).map((run) => run.runNumber) ?? [];
@@ -75,6 +78,7 @@ export function RetentionDecisionView({
             ))}
           </div>
         ) : null}
+        {nextFileName ? <NextFileNameLine name={nextFileName} /> : null}
       </section>
       <section
         id={intermediateHeading ? "intermediate-b" : "min-b-note"}

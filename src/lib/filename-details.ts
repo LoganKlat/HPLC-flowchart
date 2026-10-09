@@ -26,6 +26,16 @@ LIGAND_NAMES.set("c18aqp", "C18aq");
 LIGAND_NAMES.set("biphp", "biphenyl");
 LIGAND_NAMES.set("bipp", "biphenyl");
 
+/** File-name tokens that parse back through LIGAND_NAMES. */
+const LIGAND_FILE_TOKENS = new Map<string, string>([
+  ["c18aq", "C18aqP"],
+  ["biphenyl", "BiphP"],
+  ["c18", "C18"],
+  ["pfpp", "PFPP"],
+  ["c8", "C8"],
+  ["ibd", "IBD"],
+]);
+
 export function parseRunFileName(fileName: string): FilenameParse {
   for (const stem of nameStems(fileName)) {
     const parsed = parseStem(stem);
@@ -212,4 +222,87 @@ function isDigits(value: string): boolean {
 
 function isNumber(value: string): boolean {
   return /^\d+(?:\.\d+)?$/.test(value);
+}
+
+type RunIdentity = { group: string; injection: string; hplc: string | null };
+
+/** Group, injection, and HPLC from the latest file name. A short name has no HPLC number. */
+export function identityFromFileName(fileName: string | null | undefined): RunIdentity | null {
+  if (!fileName?.trim()) return null;
+  const stems = nameStems(fileName);
+  for (const stem of stems) {
+    const parts = splitPieces(stem);
+    if (parts.length >= 15 && isGroup(parts[0]) && isDigits(parts[1]) && isDigits(parts[2])) {
+      return { group: parts[0], injection: parts[1], hplc: parts[2] };
+    }
+  }
+  for (const stem of stems) {
+    const parts = splitPieces(stem);
+    if ((parts.length === 3 || parts.length === 4) && isGroup(parts[0]) && isDigits(parts[1])) {
+      return { group: parts[0], injection: parts[1], hplc: null };
+    }
+  }
+  return null;
+}
+
+function nextInjection(raw: string): string {
+  const value = Number(raw) + 1;
+  const text = String(value);
+  return text.length >= raw.length ? text : text.padStart(raw.length, "0");
+}
+
+function plainNumber(raw: string, fallback: string): string {
+  const match = raw.trim().replace(/%$/, "").match(/(\d+(?:\.\d+)?)/);
+  if (!match) return fallback;
+  const value = Number(match[1]);
+  if (!Number.isFinite(value)) return fallback;
+  return Number.isInteger(value) ? String(value) : String(value);
+}
+
+function lettersToken(raw: string, fallback: string): string {
+  const letters = raw.trim().match(/[A-Za-z]+/g)?.join("") ?? "";
+  return letters || fallback;
+}
+
+function ligandToken(raw: string): string {
+  const key = raw.trim().toLowerCase();
+  if (!key) return "NA";
+  return LIGAND_FILE_TOKENS.get(key) ?? lettersToken(raw, "NA");
+}
+
+function temperatureToken(raw: string): string {
+  const cleaned = raw.trim().replace(/\s+/g, "").replace(/°/g, "");
+  if (!cleaned || /^(amb|ambient)$/i.test(cleaned)) return "amb";
+  const numbered = cleaned.match(/^t?(\d+(?:\.\d+)?)c?$/i);
+  return numbered ? `T${plainNumber(numbered[1], numbered[1])}` : "amb";
+}
+
+/**
+ * The file name for the run that has not been done yet.
+ * Group and HPLC stay from the latest file. Injection is one higher.
+ * The other pieces are the next run’s own details.
+ */
+export function nextRunFileName(latestFileName: string | null | undefined, next: RunDetails): string {
+  const identity = identityFromFileName(latestFileName);
+  const group = identity?.group ?? "GR";
+  const injection = identity ? nextInjection(identity.injection) : "01";
+  const hplc = identity?.hplc ?? "1";
+  const pieces = [
+    group,
+    injection,
+    hplc,
+    lettersToken(next.solvent, "NA"),
+    plainNumber(next.ph, "0"),
+    lettersToken(next.method, "NA"),
+    plainNumber(next.percentB, "0"),
+    plainNumber(next.flowRate, "0"),
+    `${plainNumber(next.injectionVolume, "0")}u`,
+    lettersToken(next.sampleType, "NA"),
+    plainNumber(next.sampleConcentration, "0"),
+    ligandToken(next.ligand),
+    `${plainNumber(next.lengthMm, "0")}x${plainNumber(next.diameterMm, "0")}x${plainNumber(next.particleSize, "0")}`,
+    temperatureToken(next.temperature),
+    plainNumber(next.wavelength, "0"),
+  ];
+  return pieces.join("-");
 }
