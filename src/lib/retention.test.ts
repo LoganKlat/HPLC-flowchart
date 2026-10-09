@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { retentionChangeLabel } from "@/lib/change-label";
 import { evaluateRun } from "@/lib/evaluate";
 import { readLabFile, type LabFileRead } from "@/lib/lab-file";
 import {
@@ -297,6 +298,34 @@ describe("retention %B along the four lab files", () => {
     );
     expect(underHalf.reason).not.toBe("intermediate");
     expect(underHalf.status).toBe("look");
+  });
+
+  it("goes to the intermediate %B when the minimum-%B file runs past the set time", () => {
+    const minimum = decideRetention(samples, pathRules);
+    expect(minimum.move).toBe("calculated");
+    expect(minimum.reason).toBe("calculated");
+    expect(minimum.nextPercentB).toBe(42);
+
+    const late = sampleFromRead(40, reads[3]);
+    expect(late.lastPeakTimeMin!).toBeGreaterThan(pathRules.lastPeakTimeMin!);
+    expect(late.percentB).not.toBe(minimum.nextPercentB);
+
+    const followed = decideRetention([...samples, late], pathRules);
+    expect(followed.status).toBe("recommend");
+    expect(followed.reason).toBe("intermediate");
+    expect(followed.move).toBeNull();
+    expect(followed.fit).toBeNull();
+    expect(followed.nextPercentB).toBe(62);
+    expect(retentionChangeLabel(followed)).toBe("Run at 62% B");
+    expect(followed.nextChange).toContain("62%");
+    expect(followed.why).toContain("intermediate %B");
+    expect(followed.why).toContain("62% B is where that gap is largest");
+    expect(followed.why).toContain("2.618 min");
+    expect(followed.why).toContain("inside the set time of 10 min");
+    expect(followed.why).not.toContain("40°C");
+    expect(followed.why).not.toContain("coating");
+    expect(followed.why.toLowerCase()).not.toContain("solvent");
+    expect(followed.why).not.toContain("The calculated %B still aims");
   });
 
   it("follows a compound name instead of assuming the same peak number", () => {

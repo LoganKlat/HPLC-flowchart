@@ -315,4 +315,26 @@ describe("run file names", () => {
     expect(mismatch.note).toBe("This file name does not follow naming conventions.");
     expect(mismatch.details).toEqual(second.details);
   });
+
+  it("uses the file name %B on a later run when that %B is not the recommended 42%", () => {
+    const recommended = { ...emptyRunDetails(), percentB: "42", ligand: "C18", solvent: "ACN", temperature: "ambient" };
+    const next = detailsFromFileName(
+      recommended,
+      "GR09-16-4-ACN-3-ISO-35-1.5-20u-CP-0.1-C18aqP-150x4.6x5-T60-254.csv",
+    );
+    expect(next.ok).toBe(true);
+    if (!next.ok) return;
+    expect(next.details.percentB).toBe("35");
+    expect(next.details.ligand).toBe("C18aq");
+    expect(next.details.lengthMm).toBe("150");
+    expect(next.details.diameterMm).toBe("4.6");
+    expect(next.details.particleSize).toBe("5");
+    expect(next.details.percentB).not.toBe(recommended.percentB);
+
+    const kept = detailsFromFileName(recommended, "not-a-run-name.csv");
+    expect(kept.ok).toBe(false);
+    if (kept.ok) return;
+    expect(kept.note).toBe(FILE_NAME_MISMATCH);
+    expect(kept.details.percentB).toBe("42");
+  });
 });

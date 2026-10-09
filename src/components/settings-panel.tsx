@@ -16,7 +16,7 @@ export function SettingsPanel({
   onOpenNav: () => void;
   columns: readonly string[];
   solvents: readonly string[];
-  onAddColumn: (name: string) => boolean;
+  onAddColumn: (name: string) => boolean | "invalid";
   onRemoveColumn: (name: string) => void;
   onAddSolvent: (name: string) => boolean;
   onRemoveSolvent: (name: string) => void;
@@ -32,20 +32,20 @@ export function SettingsPanel({
         <p className="text-xs tracking-[0.16em] text-[#0f6b56] uppercase">This session</p>
         <h1 className="font-heading text-3xl text-foreground sm:text-4xl">Settings</h1>
         <p className="text-base text-muted-foreground">
-          Columns and solvents for the run menus. Adding or removing one here changes the ligand and solvent choices.
-          The lists last until you reload the page.
+          Each column is one real column: the coating and its sizes. Adding or removing one changes the run menus
+          immediately. The lists last until you reload the page.
         </p>
       </header>
       <div className="grid items-start gap-6 lg:grid-cols-2">
         <NameList
           id="settings-columns"
           title="Columns"
-          description="The ligand or coating. Names come from the column workbook. Internal codes are left out."
+          description="The coating and the sizes from the column workbook. A PFPP 100 × 4.6 is not a PFPP 150 × 4.6."
           items={columns}
           empty="No columns yet. Add one to use it in Run details."
           addLabel="Add a column"
           inputId="add-column"
-          placeholder="Column name"
+          placeholder="PFPP, 100 × 4.6 mm, 5 µm"
           removeLabel={(name) => `Remove ${name}`}
           onAdd={onAddColumn}
           onRemove={onRemoveColumn}
@@ -90,7 +90,7 @@ function NameList({
   inputId: string;
   placeholder: string;
   removeLabel: (name: string) => string;
-  onAdd: (name: string) => boolean;
+  onAdd: (name: string) => boolean | "invalid";
   onRemove: (name: string) => void;
 }) {
   const [draft, setDraft] = useState("");
@@ -99,6 +99,10 @@ function NameList({
   function submit(event: FormEvent) {
     event.preventDefault();
     const added = onAdd(draft);
+    if (added === "invalid") {
+      setError("Type the coating and the sizes, such as PFPP, 100 × 4.6 mm, 5 µm.");
+      return;
+    }
     if (!added) {
       setError(draft.trim() ? "That name is already on the list." : "Type a name first.");
       return;

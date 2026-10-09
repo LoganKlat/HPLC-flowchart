@@ -7,13 +7,13 @@ import { NotePop } from "@/components/note-pop";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { applySizeChoice, sizeChoices, type ColumnSpec, type SizeField, type SizePick } from "@/lib/column-catalog";
 import { parseUserCount, parseUserNumber } from "@/lib/evaluate";
 import { FILE_NAME_CHECKBOX_LABEL, FILE_NAME_STRUCTURE_NOTE } from "@/lib/filename-details";
 import type { RuleInputs, RunDetails } from "@/lib/run-details";
 
 type FileNameFill = {
   checked: boolean;
-  note: string | null;
   onToggle: (checked: boolean) => void;
 };
 
@@ -21,12 +21,14 @@ type RunFormProps = {
   title: string;
   details: RunDetails;
   rules: RuleInputs;
-  columns: readonly string[];
+  columns: readonly ColumnSpec[];
   solvents: readonly string[];
   onDetails: (details: RunDetails) => void;
   onRules: (rules: RuleInputs) => void;
   /** Run 1 only. Later runs omit it. */
   fileNameFill?: FileNameFill | null;
+  /** Shown on every run when the latest file name does not match. */
+  fileNote?: string | null;
 };
 
 type Explained = { title: string; note: FunctionNote };
@@ -223,10 +225,29 @@ function DetailNote({ explained }: { explained: Explained }) {
 
 const cardTitleClass = "font-heading text-xl! leading-tight font-bold!";
 
-export function RunForm({ title, details, rules, columns, solvents, onDetails, onRules, fileNameFill }: RunFormProps) {
+export function RunForm({ title, details, rules, columns, solvents, onDetails, onRules, fileNameFill, fileNote }: RunFormProps) {
   function setDetail<K extends keyof RunDetails>(key: K, value: RunDetails[K]) {
     onDetails({ ...details, [key]: value });
   }
+
+  function setSize(field: SizeField, value: string) {
+    const next = applySizeChoice(columns, sizePick(details), field, value);
+    onDetails({
+      ...details,
+      ligand: next.coating,
+      lengthMm: next.lengthMm,
+      diameterMm: next.diameterMm,
+      particleSize: next.particleUm,
+      poreSize: next.poreA,
+    });
+  }
+
+  const pick = sizePick(details);
+  const coatingOptions = sizeChoices(columns, pick, "coating").map((value) => ({ value, label: value }));
+  const lengthOptions = sizeChoices(columns, pick, "lengthMm").map((value) => ({ value, label: `${value} mm` }));
+  const diameterOptions = sizeChoices(columns, pick, "diameterMm").map((value) => ({ value, label: `${value} mm` }));
+  const particleOptions = sizeChoices(columns, pick, "particleUm").map((value) => ({ value, label: `${value} µm` }));
+  const poreOptions = sizeChoices(columns, pick, "poreA").map((value) => ({ value, label: `${value} Å` }));
 
   function setRule<K extends keyof RuleInputs>(key: K, value: string) {
     onRules({ ...rules, [key]: value });
@@ -326,12 +347,12 @@ export function RunForm({ title, details, rules, columns, solvents, onDetails, o
               <div className="col-start-3 row-start-1">
                 <NotePop text={FILE_NAME_STRUCTURE_NOTE} label="Autofill from file name" />
               </div>
-              {fileNameFill.note ? (
-                <p className="col-span-3 text-sm text-red-700" role="status">
-                  {fileNameFill.note}
-                </p>
-              ) : null}
             </div>
+          ) : null}
+          {fileNote ? (
+            <p id="filename-note" className="text-sm text-red-700" role="status">
+              {fileNote}
+            </p>
           ) : null}
           <ChoiceField
             label="Solvent"
@@ -403,12 +424,12 @@ export function RunForm({ title, details, rules, columns, solvents, onDetails, o
             onChange={(value) => setDetail("sampleConcentration", value)}
           />
           <ChoiceField
-            label="Ligand"
+            label="Coating"
             note={<DetailNote explained={runNotes.ligand} />}
             value={details.ligand}
-            placeholder="select a ligand"
-            options={columns.map((name) => ({ value: name, label: name }))}
-            onChange={(value) => setDetail("ligand", value)}
+            placeholder="select a coating"
+            options={coatingOptions}
+            onChange={(value) => setSize("coating", value)}
           />
           <ChoiceField
             label="Core shell"
@@ -424,13 +445,13 @@ export function RunForm({ title, details, rules, columns, solvents, onDetails, o
               setDetail("coreShell", value === "yes" || value === "no" ? value : "")
             }
           />
-          <TextField
+          <ChoiceField
             label="Pore size"
-            unit="Å"
             note={<DetailNote explained={runNotes.pore} />}
             value={details.poreSize}
-            onChange={(value) => setDetail("poreSize", value)}
-            inputMode="decimal"
+            placeholder="select a pore size"
+            options={poreOptions}
+            onChange={(value) => setSize("poreA", value)}
           />
           <TextField
             label="Carbon load"
@@ -440,29 +461,29 @@ export function RunForm({ title, details, rules, columns, solvents, onDetails, o
             onChange={(value) => setDetail("carbonLoad", value)}
             inputMode="decimal"
           />
-          <TextField
+          <ChoiceField
             label="Length"
-            unit="mm"
             note={<DetailNote explained={runNotes.length} />}
             value={details.lengthMm}
-            onChange={(value) => setDetail("lengthMm", value)}
-            inputMode="decimal"
+            placeholder="select a length"
+            options={lengthOptions}
+            onChange={(value) => setSize("lengthMm", value)}
           />
-          <TextField
+          <ChoiceField
             label="Diameter"
-            unit="mm"
             note={<DetailNote explained={runNotes.diameter} />}
             value={details.diameterMm}
-            onChange={(value) => setDetail("diameterMm", value)}
-            inputMode="decimal"
+            placeholder="select a diameter"
+            options={diameterOptions}
+            onChange={(value) => setSize("diameterMm", value)}
           />
-          <TextField
+          <ChoiceField
             label="Particle size"
-            unit="µm"
             note={<DetailNote explained={runNotes.particle} />}
             value={details.particleSize}
-            onChange={(value) => setDetail("particleSize", value)}
-            inputMode="decimal"
+            placeholder="select a particle size"
+            options={particleOptions}
+            onChange={(value) => setSize("particleUm", value)}
           />
           <TextField
             label="Temperature"
@@ -484,6 +505,16 @@ export function RunForm({ title, details, rules, columns, solvents, onDetails, o
       </Card>
     </div>
   );
+}
+
+function sizePick(details: RunDetails): SizePick {
+  return {
+    coating: details.ligand,
+    lengthMm: details.lengthMm,
+    diameterMm: details.diameterMm,
+    particleUm: details.particleSize,
+    poreA: details.poreSize,
+  };
 }
 
 function ChoiceField({

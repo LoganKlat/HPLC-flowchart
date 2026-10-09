@@ -254,10 +254,12 @@ export function decideRetention(
 
   if (samples.length >= 2) {
     const prior = decideRetention(samples.slice(0, -1), complete);
+    const ranLong =
+      current.lastPeakTimeMin != null && isPast(current.lastPeakTimeMin, complete.lastPeakTimeMin);
     if (
       prior.move === "calculated" &&
       prior.nextPercentB != null &&
-      nearly(current.percentB, prior.nextPercentB)
+      (nearly(current.percentB, prior.nextPercentB) || ranLong)
     ) {
       return afterCalculatedFile(samples, complete, choice);
     }

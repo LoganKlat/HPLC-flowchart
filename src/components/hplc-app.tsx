@@ -29,7 +29,8 @@ import {
   type RetentionDecision,
   type RetentionSample,
 } from "@/lib/retention";
-import { columnKey, SHEET_COLUMNS } from "@/lib/column-catalog";
+import { coatingsFromColumns, columnKey, parseColumnSpec, type ColumnSpec } from "@/lib/column-catalog";
+import { SHEET_COLUMNS } from "@/lib/sheet-columns";
 import { emptyRuleInputs, emptyRunDetails, type RuleInputs, type RunDetails } from "@/lib/run-details";
 import {
   findSolvent,
@@ -136,6 +137,21 @@ function inheritedRest(index: number, runs: RunState[], base: RunDetails): RestD
   const rest = pickRest(base);
   for (let i = 1; i < index; i++) applyRest(rest, runs[i]?.rest);
   return rest;
+}
+
+function columnMatches(details: RunDetails, spec: ColumnSpec): boolean {
+  const pore = spec.poreA == null ? "" : String(spec.poreA);
+  return (
+    details.ligand === spec.coating &&
+    details.lengthMm === String(spec.lengthMm) &&
+    details.diameterMm === String(spec.diameterMm) &&
+    details.particleSize === String(spec.particleUm) &&
+    details.poreSize === pore
+  );
+}
+
+function clearColumn(details: RunDetails): RunDetails {
+  return { ...details, ligand: "", lengthMm: "", diameterMm: "", particleSize: "", poreSize: "" };
 }
 
 function detailsForRun(index: number, runs: RunState[], base: RunDetails): RunDetails {
@@ -273,14 +289,15 @@ export function HplcApp() {
   const reportLinePercent = useCallback((percent: number | null) => {
     setLinePercent((current) => (current === percent ? current : percent));
   }, []);
-  const [columns, setColumns] = useState<string[]>(() => [...SHEET_COLUMNS]);
+  const [columns, setColumns] = useState<ColumnSpec[]>(() => [...SHEET_COLUMNS]);
   const [solvents, setSolvents] = useState<string[]>(() => [...MENU_SOLVENTS]);
   const [fillFromFileName, setFillFromFileName] = useState(false);
-  const [fileNameNote, setFileNameNote] = useState<string | null>(null);
+  const [fileNameNotes, setFileNameNotes] = useState<Record<number, string | null>>({});
   const detailsRef = useRef(details);
-  const fillFromFileNameRef = useRef(fillFromFileName);
+  const runsRef = useRef(runs);
   detailsRef.current = details;
-  fillFromFileNameRef.current = fillFromFileName;
+  runsRef.current = runs;
+  const columnCoatings = useMemo(() => coatingsFromColumns(columns), [columns]);
 
   const checks = useMemo(() => toRuleNumbers(rules), [rules]);
   const backwards = useMemo(() => backwardsOnPage(runs, details), [runs, details]);
@@ -309,7 +326,7 @@ export function HplcApp() {
     linePercent,
     pickedPercent,
     holdNext: backwards != null && backwardsChoice !== "continue",
-    ligands: columns,
+    ligands: columnCoatings,
   });
   if (syncedRuns !== runs) {
     setRuns(syncedRuns);
@@ -329,7 +346,7 @@ export function HplcApp() {
             choice,
             heat: heatChoice,
             continued: continuedSelectivity,
-            ligands: columns,
+            ligands: columnCoatings,
           }),
           fileName: run.fileName ?? `Run ${index + 1}`,
           points: run.read.chromatogram,
@@ -342,7 +359,7 @@ export function HplcApp() {
         },
       ];
     });
-  }, [syncedRuns, details, checks, choice, heatChoice, continuedSelectivity]);
+  }, [syncedRuns, details, checks, choice, heatChoice, continuedSelectivity, columnCoatings]);
   const shown = Math.min(active, Math.max(0, syncedRuns.length - 1));
 
   function onDetails(next: RunDetails) {
@@ -405,7 +422,7 @@ export function HplcApp() {
         {
           heat: heatChoice,
           continuePastEfficiency: selectivityFlags(count - 1, heatChoice, continuedSelectivity).continuePast,
-          ligands: columns,
+          ligands: columnCoatings,
         },
       );
       const choice = history.phase === "selectivity" ? history.plan.tempChoice : null;
@@ -440,7 +457,7 @@ export function HplcApp() {
         {
           heat: heatChoice,
           continuePastEfficiency: selectivityFlags(count - 1, heatChoice, continuedSelectivity).continuePast,
-          ligands: columns,
+          ligands: columnCoatings,
         },
       );
       const chart = findSolvent(solventLabel);
@@ -461,19 +478,32 @@ export function HplcApp() {
     });
   }
 
-  function addColumn(name: string) {
-    const trimmed = name.trim().replace(/\s+/g, " ");
-    if (!trimmed || columns.some((item) => columnKey(item) === columnKey(trimmed))) return false;
-    setColumns((current) => [trimmed, ...current]);
+  function addColumn(raw: string): boolean | "invalid" {
+    const parsed = parseColumnSpec(raw);
+    if (!parsed) return "invalid";
+    if (columns.some((item) => columnKey(item.label) === columnKey(parsed.label))) return false;
+    setColumns((current) => [parsed, ...current]);
     return true;
   }
 
-  function removeColumn(name: string) {
-    const key = columnKey(name);
-    setColumns((current) => current.filter((item) => columnKey(item) !== key));
-    setDetails((current) => (columnKey(current.ligand) === key ? { ...current, ligand: "" } : current));
+  function removeColumn(label: string) {
+    const key = columnKey(label);
+    const removed = columns.find((item) => columnKey(item.label) === key);
+    setColumns((current) => current.filter((item) => columnKey(item.label) !== key));
+    if (!removed) return;
+    setDetails((current) => (columnMatches(current, removed) ? clearColumn(current) : current));
     setRuns((current) =>
-      current.map((run) => (columnKey(run.ligand) === key ? { ...run, ligand: "" } : run)),
+      current.map((run, index) => {
+        const shownDetails = detailsForRun(index, current, detailsRef.current);
+        if (!columnMatches(shownDetails, removed)) return run;
+        if (index === 0) return { ...run, ligand: "", ligandEdited: true };
+        return {
+          ...run,
+          ligand: "",
+          ligandEdited: true,
+          rest: { ...run.rest, lengthMm: "", diameterMm: "", particleSize: "", poreSize: "" },
+        };
+      }),
     );
   }
 
@@ -501,28 +531,65 @@ export function HplcApp() {
     });
   }
 
-  function applyFileName(fileName: string) {
-    const next = detailsFromFileName(detailsRef.current, fileName);
+  function applyAddedFile(index: number, fileName: string) {
+    const base = index <= 0 ? detailsRef.current : detailsForRun(index, runsRef.current, detailsRef.current);
+    const next = detailsFromFileName(base, fileName);
     if (!next.ok) {
-      setFileNameNote(next.note);
+      setFileNameNotes((current) => ({ ...current, [index]: next.note }));
       return;
     }
-    setFileNameNote(null);
-    onDetails(next.details);
+    setFileNameNotes((current) => ({ ...current, [index]: null }));
+    if (index <= 0) {
+      onDetails(next.details);
+      setRuns((current) => {
+        const run = current[0];
+        if (!run) return current;
+        const copy = current.slice();
+        copy[0] = {
+          ...run,
+          percentB: next.details.percentB,
+          percentEdited: true,
+          temperature: next.details.temperature,
+          temperatureEdited: next.details.temperature.trim() !== "",
+          solvent: next.details.solvent,
+          solventEdited: next.details.solvent.trim() !== "",
+          ligand: next.details.ligand,
+          ligandEdited: next.details.ligand.trim() !== "",
+        };
+        return copy;
+      });
+      return;
+    }
     setRuns((current) => {
-      const run = current[0];
+      const run = current[index];
       if (!run) return current;
+      const rest: RestDetails = {
+        coreShell: next.details.coreShell,
+        poreSize: next.details.poreSize,
+        carbonLoad: next.details.carbonLoad,
+        lengthMm: next.details.lengthMm,
+        diameterMm: next.details.diameterMm,
+        particleSize: next.details.particleSize,
+        ph: next.details.ph,
+        method: next.details.method,
+        flowRate: next.details.flowRate,
+        injectionVolume: next.details.injectionVolume,
+        sampleType: next.details.sampleType,
+        sampleConcentration: next.details.sampleConcentration,
+        wavelength: next.details.wavelength,
+      };
       const copy = current.slice();
-      copy[0] = {
+      copy[index] = {
         ...run,
         percentB: next.details.percentB,
         percentEdited: true,
         temperature: next.details.temperature,
-        temperatureEdited: next.details.temperature.trim() !== "",
+        temperatureEdited: true,
         solvent: next.details.solvent,
-        solventEdited: next.details.solvent.trim() !== "",
+        solventEdited: true,
         ligand: next.details.ligand,
-        ligandEdited: next.details.ligand.trim() !== "",
+        ligandEdited: true,
+        rest,
       };
       return copy;
     });
@@ -531,11 +598,11 @@ export function HplcApp() {
   function onToggleFillFromFileName(checked: boolean) {
     setFillFromFileName(checked);
     if (!checked) {
-      setFileNameNote(null);
+      setFileNameNotes((current) => ({ ...current, 0: null }));
       return;
     }
     const name = runs[0]?.fileName;
-    if (name) applyFileName(name);
+    if (name) applyAddedFile(0, name);
   }
 
   function beginRead(index: number, fileName: string) {
@@ -543,7 +610,7 @@ export function HplcApp() {
   }
 
   async function acceptBuffer(index: number, fileName: string, buffer: ArrayBuffer) {
-    if (index === 0 && fillFromFileNameRef.current) applyFileName(fileName);
+    applyAddedFile(index, fileName);
     patchRun(index, { status: "reading", fileName, read: null, message: null });
     await new Promise((resolve) => setTimeout(resolve, 30));
     try {
@@ -610,12 +677,12 @@ export function HplcApp() {
       <Watermark />
       {section === "about" ? <AboutPanel onOpenNav={() => setNavOpen(true)} /> : null}
       {section === "equipment" ? (
-        <EquipmentPanel onOpenNav={() => setNavOpen(true)} columnRuns={columnRuns} ligands={columns} />
+        <EquipmentPanel onOpenNav={() => setNavOpen(true)} columnRuns={columnRuns} ligands={columnCoatings} />
       ) : null}
       {section === "settings" ? (
         <SettingsPanel
           onOpenNav={() => setNavOpen(true)}
-          columns={columns}
+          columns={columns.map((column) => column.label)}
           solvents={solvents}
           onAddColumn={addColumn}
           onRemoveColumn={removeColumn}
@@ -681,7 +748,7 @@ export function HplcApp() {
                   heat: heatChoice,
                   continuePastEfficiency: flags.continuePast,
                   continueToLook: flags.continueToLook,
-                  ligands: columns,
+                  ligands: columnCoatings,
                 });
                 const showsLook =
                   explanation?.kind === "retention" && explanation.decision.continueShowsLook === true;
@@ -708,7 +775,7 @@ export function HplcApp() {
                     heat: heatChoice,
                     continuePastEfficiency: flags.continuePast,
                     continueToLook: flags.continueToLook,
-                    ligands: columns,
+                    ligands: columnCoatings,
                   });
                   const look = explanation?.kind === "retention" ? explanation.decision.look : null;
                   if (look?.mode === "between") setEfficiencyChosen(true);
@@ -725,7 +792,7 @@ export function HplcApp() {
                   heat: heatChoice,
                   continuePastEfficiency: flags.continuePast,
                   continueToLook: true,
-                  ligands: columns,
+                  ligands: columnCoatings,
                 });
                 const decision = explanation?.kind === "retention" ? explanation.decision : null;
                 const used = syncedRuns
@@ -777,7 +844,7 @@ export function HplcApp() {
               backwardsChoice={backwardsChoice}
               onBackwardsContinue={() => setBackwardsChoice("continue")}
               onBackwardsRedo={() => setBackwardsChoice("redo")}
-              ligands={columns}
+              ligands={columnCoatings}
               solvents={solvents}
               runTabs={
                 index === shown ? (
@@ -800,7 +867,7 @@ export function HplcApp() {
                               choice,
                               heat: heatChoice,
                               continued: continuedSelectivity,
-                              ligands: columns,
+                              ligands: columnCoatings,
                             })}
                           </TabsTrigger>
                         ))}
@@ -825,7 +892,7 @@ export function HplcApp() {
             choice,
             heat: heatChoice,
             continued: continuedSelectivity,
-            ligands: columns,
+            ligands: columnCoatings,
           })}
           details={detailsForRun(shown, syncedRuns, details)}
           rules={rules}
@@ -837,11 +904,11 @@ export function HplcApp() {
             shown === 0
               ? {
                   checked: fillFromFileName,
-                  note: fileNameNote,
                   onToggle: onToggleFillFromFileName,
                 }
               : null
           }
+          fileNote={fileNameNotes[shown] ?? null}
         />
       </aside>
       </div>

@@ -1,0 +1,785 @@
+[
+  {
+    "coating": "C18",
+    "product": "Alltech",
+    "lengthMm": 53,
+    "diameterMm": 7,
+    "particleUm": 3,
+    "poreA": null,
+    "label": "Alltech C18, 53 × 7 mm, 3 µm"
+  },
+  {
+    "coating": "C18",
+    "product": "Altima",
+    "lengthMm": 250,
+    "diameterMm": 4.6,
+    "particleUm": 5,
+    "poreA": null,
+    "label": "Altima C18, 250 × 4.6 mm, 5 µm"
+  },
+  {
+    "coating": "C18",
+    "product": "C18 Luna",
+    "lengthMm": 150,
+    "diameterMm": 4.6,
+    "particleUm": 5,
+    "poreA": null,
+    "label": "C18 Luna C18, 150 × 4.6 mm, 5 µm"
+  },
+  {
+    "coating": "C18",
+    "product": "Force",
+    "lengthMm": 100,
+    "diameterMm": 4.6,
+    "particleUm": 3,
+    "poreA": null,
+    "label": "Force C18, 100 × 4.6 mm, 3 µm"
+  },
+  {
+    "coating": "C18",
+    "product": "Force",
+    "lengthMm": 100,
+    "diameterMm": 4.6,
+    "particleUm": 5,
+    "poreA": null,
+    "label": "Force C18, 100 × 4.6 mm, 5 µm"
+  },
+  {
+    "coating": "C18",
+    "product": "Force",
+    "lengthMm": 150,
+    "diameterMm": 3,
+    "particleUm": 3,
+    "poreA": null,
+    "label": "Force C18, 150 × 3 mm, 3 µm"
+  },
+  {
+    "coating": "C18",
+    "product": "Force",
+    "lengthMm": 150,
+    "diameterMm": 3,
+    "particleUm": 5,
+    "poreA": null,
+    "label": "Force C18, 150 × 3 mm, 5 µm"
+  },
+  {
+    "coating": "C18",
+    "product": "Force",
+    "lengthMm": 150,
+    "diameterMm": 4.6,
+    "particleUm": 3,
+    "poreA": null,
+    "label": "Force C18, 150 × 4.6 mm, 3 µm"
+  },
+  {
+    "coating": "C18",
+    "product": "Force",
+    "lengthMm": 150,
+    "diameterMm": 4.6,
+    "particleUm": 5,
+    "poreA": null,
+    "label": "Force C18, 150 × 4.6 mm, 5 µm"
+  },
+  {
+    "coating": "C18",
+    "product": "Force",
+    "lengthMm": 30,
+    "diameterMm": 2.1,
+    "particleUm": 1.8,
+    "poreA": null,
+    "label": "Force C18, 30 × 2.1 mm, 1.8 µm"
+  },
+  {
+    "coating": "C18",
+    "product": "Pinnacle DB",
+    "lengthMm": 100,
+    "diameterMm": 2.1,
+    "particleUm": 1.9,
+    "poreA": null,
+    "label": "Pinnacle DB C18, 100 × 2.1 mm, 1.9 µm"
+  },
+  {
+    "coating": "C18",
+    "product": "Pinnacle DB",
+    "lengthMm": 100,
+    "diameterMm": 2.1,
+    "particleUm": 3,
+    "poreA": null,
+    "label": "Pinnacle DB C18, 100 × 2.1 mm, 3 µm"
+  },
+  {
+    "coating": "C18",
+    "product": "Pinnacle DB",
+    "lengthMm": 100,
+    "diameterMm": 3.2,
+    "particleUm": 3,
+    "poreA": null,
+    "label": "Pinnacle DB C18, 100 × 3.2 mm, 3 µm"
+  },
+  {
+    "coating": "C18",
+    "product": "Pinnacle DB",
+    "lengthMm": 100,
+    "diameterMm": 3.2,
+    "particleUm": 5,
+    "poreA": null,
+    "label": "Pinnacle DB C18, 100 × 3.2 mm, 5 µm"
+  },
+  {
+    "coating": "C18",
+    "product": "Pinnacle DB",
+    "lengthMm": 100,
+    "diameterMm": 4.6,
+    "particleUm": 3,
+    "poreA": null,
+    "label": "Pinnacle DB C18, 100 × 4.6 mm, 3 µm"
+  },
+  {
+    "coating": "C18",
+    "product": "Pinnacle DB",
+    "lengthMm": 100,
+    "diameterMm": 4.6,
+    "particleUm": 5,
+    "poreA": null,
+    "label": "Pinnacle DB C18, 100 × 4.6 mm, 5 µm"
+  },
+  {
+    "coating": "C18",
+    "product": "Pinnacle DB",
+    "lengthMm": 150,
+    "diameterMm": 4.6,
+    "particleUm": 5,
+    "poreA": null,
+    "label": "Pinnacle DB C18, 150 × 4.6 mm, 5 µm"
+  },
+  {
+    "coating": "C18",
+    "product": "Pinnacle DB",
+    "lengthMm": 250,
+    "diameterMm": 4.6,
+    "particleUm": 5,
+    "poreA": null,
+    "label": "Pinnacle DB C18, 250 × 4.6 mm, 5 µm"
+  },
+  {
+    "coating": "C18",
+    "product": "Pinnacle DB",
+    "lengthMm": 30,
+    "diameterMm": 2.1,
+    "particleUm": 1.9,
+    "poreA": null,
+    "label": "Pinnacle DB C18, 30 × 2.1 mm, 1.9 µm"
+  },
+  {
+    "coating": "C18",
+    "product": "Pinnacle DB",
+    "lengthMm": 50,
+    "diameterMm": 2.1,
+    "particleUm": 1.9,
+    "poreA": null,
+    "label": "Pinnacle DB C18, 50 × 2.1 mm, 1.9 µm"
+  },
+  {
+    "coating": "C18",
+    "product": "Pursuit 100A",
+    "lengthMm": 150,
+    "diameterMm": 4.6,
+    "particleUm": 3,
+    "poreA": 100,
+    "label": "Pursuit 100A C18, 150 × 4.6 mm, 3 µm, 100 Å"
+  },
+  {
+    "coating": "C18",
+    "product": "Pursuit 100A",
+    "lengthMm": 150,
+    "diameterMm": 4.6,
+    "particleUm": 5,
+    "poreA": 100,
+    "label": "Pursuit 100A C18, 150 × 4.6 mm, 5 µm, 100 Å"
+  },
+  {
+    "coating": "C18",
+    "product": "Pursuit XR 200A",
+    "lengthMm": 150,
+    "diameterMm": 4.6,
+    "particleUm": 5,
+    "poreA": 200,
+    "label": "Pursuit XR 200A C18, 150 × 4.6 mm, 5 µm, 200 Å"
+  },
+  {
+    "coating": "C18",
+    "product": "Raptor",
+    "lengthMm": 100,
+    "diameterMm": 4.6,
+    "particleUm": 2.7,
+    "poreA": null,
+    "label": "Raptor C18, 100 × 4.6 mm, 2.7 µm"
+  },
+  {
+    "coating": "C18",
+    "product": "Raptor",
+    "lengthMm": 100,
+    "diameterMm": 4.6,
+    "particleUm": 5,
+    "poreA": null,
+    "label": "Raptor C18, 100 × 4.6 mm, 5 µm"
+  },
+  {
+    "coating": "C18",
+    "product": "Raptor",
+    "lengthMm": 150,
+    "diameterMm": 4.6,
+    "particleUm": 2.7,
+    "poreA": null,
+    "label": "Raptor C18, 150 × 4.6 mm, 2.7 µm"
+  },
+  {
+    "coating": "C18",
+    "product": "Raptor",
+    "lengthMm": 150,
+    "diameterMm": 4.6,
+    "particleUm": 5,
+    "poreA": null,
+    "label": "Raptor C18, 150 × 4.6 mm, 5 µm"
+  },
+  {
+    "coating": "C18",
+    "product": "Raptor",
+    "lengthMm": 30,
+    "diameterMm": 2.1,
+    "particleUm": 1.8,
+    "poreA": null,
+    "label": "Raptor C18, 30 × 2.1 mm, 1.8 µm"
+  },
+  {
+    "coating": "C18",
+    "product": "Raptor",
+    "lengthMm": 50,
+    "diameterMm": 4.6,
+    "particleUm": 5,
+    "poreA": null,
+    "label": "Raptor C18, 50 × 4.6 mm, 5 µm"
+  },
+  {
+    "coating": "C18",
+    "product": "Ultra",
+    "lengthMm": 100,
+    "diameterMm": 3,
+    "particleUm": 3,
+    "poreA": null,
+    "label": "Ultra C18, 100 × 3 mm, 3 µm"
+  },
+  {
+    "coating": "C18",
+    "product": "Ultra",
+    "lengthMm": 100,
+    "diameterMm": 3,
+    "particleUm": 5,
+    "poreA": null,
+    "label": "Ultra C18, 100 × 3 mm, 5 µm"
+  },
+  {
+    "coating": "C18",
+    "product": "Ultra",
+    "lengthMm": 100,
+    "diameterMm": 3.2,
+    "particleUm": 3,
+    "poreA": null,
+    "label": "Ultra C18, 100 × 3.2 mm, 3 µm"
+  },
+  {
+    "coating": "C18",
+    "product": "Ultra",
+    "lengthMm": 100,
+    "diameterMm": 4.6,
+    "particleUm": 3,
+    "poreA": null,
+    "label": "Ultra C18, 100 × 4.6 mm, 3 µm"
+  },
+  {
+    "coating": "C18",
+    "product": "Ultra",
+    "lengthMm": 100,
+    "diameterMm": 4.6,
+    "particleUm": 5,
+    "poreA": null,
+    "label": "Ultra C18, 100 × 4.6 mm, 5 µm"
+  },
+  {
+    "coating": "C18",
+    "product": "Ultra",
+    "lengthMm": 150,
+    "diameterMm": 3.2,
+    "particleUm": 3,
+    "poreA": null,
+    "label": "Ultra C18, 150 × 3.2 mm, 3 µm"
+  },
+  {
+    "coating": "C18",
+    "product": "Ultra",
+    "lengthMm": 150,
+    "diameterMm": 3.2,
+    "particleUm": 5,
+    "poreA": null,
+    "label": "Ultra C18, 150 × 3.2 mm, 5 µm"
+  },
+  {
+    "coating": "C18",
+    "product": "Ultra",
+    "lengthMm": 150,
+    "diameterMm": 4.6,
+    "particleUm": 3,
+    "poreA": null,
+    "label": "Ultra C18, 150 × 4.6 mm, 3 µm"
+  },
+  {
+    "coating": "C18",
+    "product": "Ultra",
+    "lengthMm": 150,
+    "diameterMm": 4.6,
+    "particleUm": 5,
+    "poreA": null,
+    "label": "Ultra C18, 150 × 4.6 mm, 5 µm"
+  },
+  {
+    "coating": "C18aq",
+    "product": "Pinnacle DB",
+    "lengthMm": 100,
+    "diameterMm": 4.6,
+    "particleUm": 5,
+    "poreA": null,
+    "label": "Pinnacle DB C18aq, 100 × 4.6 mm, 5 µm"
+  },
+  {
+    "coating": "C18aq",
+    "product": "Pinnacle DB",
+    "lengthMm": 150,
+    "diameterMm": 4.6,
+    "particleUm": 5,
+    "poreA": null,
+    "label": "Pinnacle DB C18aq, 150 × 4.6 mm, 5 µm"
+  },
+  {
+    "coating": "C18aq",
+    "product": "Ultra",
+    "lengthMm": 150,
+    "diameterMm": 4.6,
+    "particleUm": 3,
+    "poreA": null,
+    "label": "Ultra C18aq, 150 × 4.6 mm, 3 µm"
+  },
+  {
+    "coating": "C18aq",
+    "product": "Ultra",
+    "lengthMm": 150,
+    "diameterMm": 4.6,
+    "particleUm": 5,
+    "poreA": null,
+    "label": "Ultra C18aq, 150 × 4.6 mm, 5 µm"
+  },
+  {
+    "coating": "PFPP",
+    "product": "Force",
+    "lengthMm": 100,
+    "diameterMm": 4.6,
+    "particleUm": 5,
+    "poreA": null,
+    "label": "Force PFPP, 100 × 4.6 mm, 5 µm"
+  },
+  {
+    "coating": "PFPP",
+    "product": "Force",
+    "lengthMm": 150,
+    "diameterMm": 4.6,
+    "particleUm": 5,
+    "poreA": null,
+    "label": "Force PFPP, 150 × 4.6 mm, 5 µm"
+  },
+  {
+    "coating": "PFPP",
+    "product": "Pinnacle DB",
+    "lengthMm": 100,
+    "diameterMm": 4.6,
+    "particleUm": 3,
+    "poreA": null,
+    "label": "Pinnacle DB PFPP, 100 × 4.6 mm, 3 µm"
+  },
+  {
+    "coating": "PFPP",
+    "product": "Pinnacle DB",
+    "lengthMm": 100,
+    "diameterMm": 4.6,
+    "particleUm": 5,
+    "poreA": null,
+    "label": "Pinnacle DB PFPP, 100 × 4.6 mm, 5 µm"
+  },
+  {
+    "coating": "PFPP",
+    "product": "Pinnacle DB",
+    "lengthMm": 150,
+    "diameterMm": 4.6,
+    "particleUm": 3,
+    "poreA": null,
+    "label": "Pinnacle DB PFPP, 150 × 4.6 mm, 3 µm"
+  },
+  {
+    "coating": "PFPP",
+    "product": "Pinnacle DB",
+    "lengthMm": 150,
+    "diameterMm": 4.6,
+    "particleUm": 5,
+    "poreA": null,
+    "label": "Pinnacle DB PFPP, 150 × 4.6 mm, 5 µm"
+  },
+  {
+    "coating": "PFPP",
+    "product": "Pinnacle DB",
+    "lengthMm": 50,
+    "diameterMm": 4.6,
+    "particleUm": 3,
+    "poreA": null,
+    "label": "Pinnacle DB PFPP, 50 × 4.6 mm, 3 µm"
+  },
+  {
+    "coating": "PFPP",
+    "product": "Pinnacle DB",
+    "lengthMm": 50,
+    "diameterMm": 4.6,
+    "particleUm": 5,
+    "poreA": null,
+    "label": "Pinnacle DB PFPP, 50 × 4.6 mm, 5 µm"
+  },
+  {
+    "coating": "PFPP",
+    "product": "Raptor",
+    "lengthMm": 100,
+    "diameterMm": 4.6,
+    "particleUm": 2.7,
+    "poreA": null,
+    "label": "Raptor PFPP, 100 × 4.6 mm, 2.7 µm"
+  },
+  {
+    "coating": "PFPP",
+    "product": "Raptor",
+    "lengthMm": 150,
+    "diameterMm": 4.6,
+    "particleUm": 5,
+    "poreA": null,
+    "label": "Raptor PFPP, 150 × 4.6 mm, 5 µm"
+  },
+  {
+    "coating": "PFPP",
+    "product": "Ultra",
+    "lengthMm": 150,
+    "diameterMm": 4.6,
+    "particleUm": 5,
+    "poreA": null,
+    "label": "Ultra PFPP, 150 × 4.6 mm, 5 µm"
+  },
+  {
+    "coating": "C8",
+    "product": "Alitma",
+    "lengthMm": 250,
+    "diameterMm": 4.6,
+    "particleUm": 5,
+    "poreA": null,
+    "label": "Alitma C8, 250 × 4.6 mm, 5 µm"
+  },
+  {
+    "coating": "C8",
+    "product": "Pinnacle DB",
+    "lengthMm": 150,
+    "diameterMm": 4.6,
+    "particleUm": 5,
+    "poreA": null,
+    "label": "Pinnacle DB C8, 150 × 4.6 mm, 5 µm"
+  },
+  {
+    "coating": "C8",
+    "product": "Pursuit 3 200A",
+    "lengthMm": 150,
+    "diameterMm": 4.6,
+    "particleUm": 3,
+    "poreA": 200,
+    "label": "Pursuit 3 200A C8, 150 × 4.6 mm, 3 µm, 200 Å"
+  },
+  {
+    "coating": "C8",
+    "product": "Pursuit",
+    "lengthMm": 150,
+    "diameterMm": 4.6,
+    "particleUm": 5,
+    "poreA": null,
+    "label": "Pursuit C8, 150 × 4.6 mm, 5 µm"
+  },
+  {
+    "coating": "C8",
+    "product": "Pursuit XR 200A",
+    "lengthMm": 250,
+    "diameterMm": 4.6,
+    "particleUm": 5,
+    "poreA": 200,
+    "label": "Pursuit XR 200A C8, 250 × 4.6 mm, 5 µm, 200 Å"
+  },
+  {
+    "coating": "C8",
+    "product": "Ultra",
+    "lengthMm": 150,
+    "diameterMm": 4.6,
+    "particleUm": 5,
+    "poreA": null,
+    "label": "Ultra C8, 150 × 4.6 mm, 5 µm"
+  },
+  {
+    "coating": "biphenyl",
+    "product": "Force",
+    "lengthMm": 150,
+    "diameterMm": 4.6,
+    "particleUm": 5,
+    "poreA": null,
+    "label": "Force biphenyl, 150 × 4.6 mm, 5 µm"
+  },
+  {
+    "coating": "biphenyl",
+    "product": "Pinnacle DB",
+    "lengthMm": 100,
+    "diameterMm": 4.6,
+    "particleUm": 5,
+    "poreA": null,
+    "label": "Pinnacle DB biphenyl, 100 × 4.6 mm, 5 µm"
+  },
+  {
+    "coating": "biphenyl",
+    "product": "Pinnacle DB",
+    "lengthMm": 150,
+    "diameterMm": 4.6,
+    "particleUm": 5,
+    "poreA": null,
+    "label": "Pinnacle DB biphenyl, 150 × 4.6 mm, 5 µm"
+  },
+  {
+    "coating": "biphenyl",
+    "product": "Raptor",
+    "lengthMm": 150,
+    "diameterMm": 4.6,
+    "particleUm": 5,
+    "poreA": null,
+    "label": "Raptor biphenyl, 150 × 4.6 mm, 5 µm"
+  },
+  {
+    "coating": "biphenyl",
+    "product": "Ultra",
+    "lengthMm": 150,
+    "diameterMm": 4.6,
+    "particleUm": 5,
+    "poreA": null,
+    "label": "Ultra biphenyl, 150 × 4.6 mm, 5 µm"
+  },
+  {
+    "coating": "IBD",
+    "product": "Pinnacle DB",
+    "lengthMm": 100,
+    "diameterMm": 2.1,
+    "particleUm": 1.9,
+    "poreA": null,
+    "label": "Pinnacle DB IBD, 100 × 2.1 mm, 1.9 µm"
+  },
+  {
+    "coating": "IBD",
+    "product": "Pinnacle DB",
+    "lengthMm": 30,
+    "diameterMm": 2.1,
+    "particleUm": 1.9,
+    "poreA": null,
+    "label": "Pinnacle DB IBD, 30 × 2.1 mm, 1.9 µm"
+  },
+  {
+    "coating": "IBD",
+    "product": "Ultra",
+    "lengthMm": 100,
+    "diameterMm": 4.6,
+    "particleUm": 3,
+    "poreA": null,
+    "label": "Ultra IBD, 100 × 4.6 mm, 3 µm"
+  },
+  {
+    "coating": "IBD",
+    "product": "Ultra",
+    "lengthMm": 150,
+    "diameterMm": 4.6,
+    "particleUm": 3,
+    "poreA": null,
+    "label": "Ultra IBD, 150 × 4.6 mm, 3 µm"
+  },
+  {
+    "coating": "IBD",
+    "product": "Ultra",
+    "lengthMm": 150,
+    "diameterMm": 4.6,
+    "particleUm": 5,
+    "poreA": null,
+    "label": "Ultra IBD, 150 × 4.6 mm, 5 µm"
+  },
+  {
+    "coating": "CN",
+    "product": "Altima",
+    "lengthMm": 150,
+    "diameterMm": 4.6,
+    "particleUm": 5,
+    "poreA": null,
+    "label": "Altima CN, 150 × 4.6 mm, 5 µm"
+  },
+  {
+    "coating": "Phenyl",
+    "product": "Altima",
+    "lengthMm": 250,
+    "diameterMm": 4.6,
+    "particleUm": 5,
+    "poreA": null,
+    "label": "Altima Phenyl, 250 × 4.6 mm, 5 µm"
+  },
+  {
+    "coating": "C18 Nucleosil",
+    "product": "Macherey-Nagel",
+    "lengthMm": 250,
+    "diameterMm": 3,
+    "particleUm": 5,
+    "poreA": null,
+    "label": "Macherey-Nagel C18 Nucleosil, 250 × 3 mm, 5 µm"
+  },
+  {
+    "coating": "C18 Kinetex Polar",
+    "product": "Phenomenex",
+    "lengthMm": 150,
+    "diameterMm": 2.1,
+    "particleUm": 2.6,
+    "poreA": null,
+    "label": "Phenomenex C18 Kinetex Polar, 150 × 2.1 mm, 2.6 µm"
+  },
+  {
+    "coating": "C18 Luna",
+    "product": "Phenomenex",
+    "lengthMm": 150,
+    "diameterMm": 4.6,
+    "particleUm": 3,
+    "poreA": null,
+    "label": "Phenomenex C18 Luna, 150 × 4.6 mm, 3 µm"
+  },
+  {
+    "coating": "C18 Nucleosil",
+    "product": "Phenomenex",
+    "lengthMm": 250,
+    "diameterMm": 4,
+    "particleUm": 10,
+    "poreA": null,
+    "label": "Phenomenex C18 Nucleosil, 250 × 4 mm, 10 µm"
+  },
+  {
+    "coating": "C8 Inertsil",
+    "product": "Phenomenex",
+    "lengthMm": 250,
+    "diameterMm": 4.6,
+    "particleUm": 5,
+    "poreA": null,
+    "label": "Phenomenex C8 Inertsil, 250 × 4.6 mm, 5 µm"
+  },
+  {
+    "coating": "F5 Kinetex",
+    "product": "Phenomenex",
+    "lengthMm": 100,
+    "diameterMm": 2.1,
+    "particleUm": 1.7,
+    "poreA": null,
+    "label": "Phenomenex F5 Kinetex, 100 × 2.1 mm, 1.7 µm"
+  },
+  {
+    "coating": "APS-2-HYPERSIL",
+    "product": "Thermo Scientific",
+    "lengthMm": 250,
+    "diameterMm": 4.6,
+    "particleUm": 5,
+    "poreA": null,
+    "label": "Thermo Scientific APS-2-HYPERSIL, 250 × 4.6 mm, 5 µm"
+  },
+  {
+    "coating": "C18 Acquity BEH",
+    "product": "Waters",
+    "lengthMm": 100,
+    "diameterMm": 2.1,
+    "particleUm": 1.7,
+    "poreA": null,
+    "label": "Waters C18 Acquity BEH, 100 × 2.1 mm, 1.7 µm"
+  },
+  {
+    "coating": "C18 Acquity BEH",
+    "product": "Waters",
+    "lengthMm": 50,
+    "diameterMm": 2.1,
+    "particleUm": 1.7,
+    "poreA": null,
+    "label": "Waters C18 Acquity BEH, 50 × 2.1 mm, 1.7 µm"
+  },
+  {
+    "coating": "C18 Bondapak",
+    "product": "Waters",
+    "lengthMm": 300,
+    "diameterMm": 3.9,
+    "particleUm": 10,
+    "poreA": null,
+    "label": "Waters C18 Bondapak, 300 × 3.9 mm, 10 µm"
+  },
+  {
+    "coating": "C18 Nova-Pak",
+    "product": "Waters",
+    "lengthMm": 150,
+    "diameterMm": 3.9,
+    "particleUm": 4,
+    "poreA": null,
+    "label": "Waters C18 Nova-Pak, 150 × 3.9 mm, 4 µm"
+  },
+  {
+    "coating": "C18 Spherisorb 5 ODSi",
+    "product": "Waters",
+    "lengthMm": 250,
+    "diameterMm": 4.6,
+    "particleUm": 5,
+    "poreA": null,
+    "label": "Waters C18 Spherisorb 5 ODSi, 250 × 4.6 mm, 5 µm"
+  },
+  {
+    "coating": "C18 Spherisorb ODSi",
+    "product": "Waters",
+    "lengthMm": 250,
+    "diameterMm": 4.6,
+    "particleUm": 5,
+    "poreA": null,
+    "label": "Waters C18 Spherisorb ODSi, 250 × 4.6 mm, 5 µm"
+  },
+  {
+    "coating": "C18 Symmetry",
+    "product": "Waters",
+    "lengthMm": 150,
+    "diameterMm": 4.6,
+    "particleUm": 5,
+    "poreA": null,
+    "label": "Waters C18 Symmetry, 150 × 4.6 mm, 5 µm"
+  },
+  {
+    "coating": "C8 Symmetry",
+    "product": "Waters",
+    "lengthMm": 150,
+    "diameterMm": 3.9,
+    "particleUm": 5,
+    "poreA": null,
+    "label": "Waters C8 Symmetry, 150 × 3.9 mm, 5 µm"
+  },
+  {
+    "coating": "Spherisorb NH2",
+    "product": "Waters",
+    "lengthMm": 250,
+    "diameterMm": 4.6,
+    "particleUm": 5,
+    "poreA": null,
+    "label": "Waters Spherisorb NH2, 250 × 4.6 mm, 5 µm"
+  }
+]
