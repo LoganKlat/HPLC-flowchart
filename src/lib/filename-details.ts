@@ -80,6 +80,21 @@ export function detailsFromFileName(
   return { ok: true, details };
 }
 
+/**
+ * The autofill checkbox is the only switch for this.
+ * Off leaves the current details alone, including a recommended %B the name does not match.
+ */
+export function detailsFromFileNameIfEnabled(
+  current: RunDetails,
+  fileName: string,
+  enabled: boolean,
+): { apply: true; details: RunDetails; note: null } | { apply: false; details: RunDetails; note: string | null } {
+  if (!enabled) return { apply: false, details: current, note: null };
+  const parsed = detailsFromFileName(current, fileName);
+  if (!parsed.ok) return { apply: false, details: current, note: parsed.note };
+  return { apply: true, details: parsed.details, note: null };
+}
+
 function nameStems(fileName: string): string[] {
   const trimmed = fileName.trim();
   const base = trimmed.replace(/^.*[/\\]/, "");

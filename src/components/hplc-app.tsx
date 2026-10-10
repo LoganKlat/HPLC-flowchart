@@ -17,7 +17,7 @@ import { EquipmentPanel } from "@/components/equipment-panel";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { evaluateRun, parseUserCount, parseUserNumber, type RuleNumbers } from "@/lib/evaluate";
-import { copyableNextRunFileName, detailsFromFileName, parseRunFileName } from "@/lib/filename-details";
+import { copyableNextRunFileName, detailsFromFileNameIfEnabled, parseRunFileName } from "@/lib/filename-details";
 import { readLabFile, type LabFileRead } from "@/lib/lab-file";
 import {
   decideRetention,
@@ -364,7 +364,7 @@ export function HplcApp() {
     return syncedRuns.flatMap((run, index) => {
       if (run.status !== "ready" || !run.read?.chromatogram || run.read.chromatogramMissingMessage) return [];
       const info = detailsForRun(index, syncedRuns, details);
-      const parsed = run.fileName ? parseRunFileName(run.fileName) : null;
+      const parsed = fillFromFileName && run.fileName ? parseRunFileName(run.fileName) : null;
       const named = parsed?.ok ? parsed.fields : {};
       const lengthMm = parseUserNumber(info.lengthMm) ?? parseUserNumber(named.lengthMm ?? "") ?? 150;
       const widthMm = parseUserNumber(info.diameterMm) ?? parseUserNumber(named.diameterMm ?? "") ?? 4.6;
@@ -388,7 +388,7 @@ export function HplcApp() {
         },
       ];
     });
-  }, [syncedRuns, details, checks, choice, continueRetention, heatChoice, continuedSelectivity, columnCoatings]);
+  }, [syncedRuns, details, checks, choice, continueRetention, heatChoice, continuedSelectivity, columnCoatings, fillFromFileName]);
   const shown = Math.min(active, Math.max(0, syncedRuns.length - 1));
 
   function onDetails(next: RunDetails) {
@@ -562,11 +562,11 @@ export function HplcApp() {
     });
   }
 
-  function applyAddedFile(index: number, fileName: string) {
+  function applyAddedFile(index: number, fileName: string, enabled: boolean) {
     const base = index <= 0 ? detailsRef.current : detailsForRun(index, runsRef.current, detailsRef.current);
-    const parsed = detailsFromFileName(base, fileName);
-    const next = parsed.ok ? { ...parsed, details: withoutUltraColumn(parsed.details, columns) } : parsed;
-    if (!next.ok) {
+    const parsed = detailsFromFileNameIfEnabled(base, fileName, enabled);
+    const next = parsed.apply ? { ...parsed, details: withoutUltraColumn(parsed.details, columns) } : parsed;
+    if (!next.apply) {
       setFileNameNotes((current) => ({ ...current, [index]: next.note }));
       return;
     }
@@ -630,11 +630,12 @@ export function HplcApp() {
   function onToggleFillFromFileName(checked: boolean) {
     setFillFromFileName(checked);
     if (!checked) {
-      setFileNameNotes((current) => ({ ...current, 0: null }));
+      setFileNameNotes({});
       return;
     }
-    const name = runs[0]?.fileName;
-    if (name) applyAddedFile(0, name);
+    runs.forEach((run, index) => {
+      if (run.fileName) applyAddedFile(index, run.fileName, true);
+    });
   }
 
   function beginRead(index: number, fileName: string) {
@@ -642,7 +643,7 @@ export function HplcApp() {
   }
 
   async function acceptBuffer(index: number, fileName: string, buffer: ArrayBuffer) {
-    applyAddedFile(index, fileName);
+    applyAddedFile(index, fileName, fillFromFileName);
     patchRun(index, { status: "reading", fileName, read: null, message: null });
     await new Promise((resolve) => setTimeout(resolve, 30));
     try {

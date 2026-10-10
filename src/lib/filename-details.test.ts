@@ -7,6 +7,7 @@ import {
   FILE_NAME_MISMATCH,
   FILE_NAME_STRUCTURE_NOTE,
   detailsFromFileName,
+  detailsFromFileNameIfEnabled,
   copyableNextRunFileName,
   nextRunFileName,
   parseRunFileName,
@@ -339,6 +340,42 @@ describe("run file names", () => {
     if (kept.ok) return;
     expect(kept.note).toBe(FILE_NAME_MISMATCH);
     expect(kept.details.percentB).toBe("42");
+  });
+
+  it("leaves every run's details unchanged when autofill is off", () => {
+    const typed = {
+      ...emptyRunDetails(),
+      solvent: "MeOH",
+      percentB: "42",
+      temperature: "25",
+      ligand: "C8",
+      wavelength: "210",
+    };
+    const named = "GR09-16-4-ACN-3-ISO-35-1.5-20u-CP-0.1-C18aqP-150x4.6x5-T60-254.csv";
+    const first = detailsFromFileNameIfEnabled(typed, named, false);
+    expect(first.apply).toBe(false);
+    expect(first.note).toBeNull();
+    expect(first.details).toEqual(typed);
+
+    const again = detailsFromFileNameIfEnabled(first.details, named, false);
+    expect(again.details).toEqual(typed);
+
+    const shortName = detailsFromFileNameIfEnabled(typed, "GR41-09-40.csv", false);
+    expect(shortName.apply).toBe(false);
+    expect(shortName.details.percentB).toBe("42");
+    expect(shortName.details.temperature).toBe("25");
+
+    const mismatch = detailsFromFileNameIfEnabled(typed, "notes.csv", false);
+    expect(mismatch.apply).toBe(false);
+    expect(mismatch.note).toBeNull();
+    expect(mismatch.details).toEqual(typed);
+
+    const enabled = detailsFromFileNameIfEnabled(typed, named, true);
+    expect(enabled.apply).toBe(true);
+    if (!enabled.apply) return;
+    expect(enabled.details.percentB).toBe("35");
+    expect(enabled.details.solvent).toBe("ACN");
+    expect(enabled.details.temperature).toBe("60");
   });
 
   it("builds the next run file name from the latest identity and the next run’s details", () => {
