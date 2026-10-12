@@ -264,6 +264,49 @@ describe("run file names", () => {
     expect(spaced.fields.temperature).toBe("60");
   });
 
+  it("ignores a Windows copy suffix and still reads 20u, T40, and T60", () => {
+    const copies = [
+      "GR09-06-3-ACN-3-ISO-80-1.5-20-CP-0.1-C18aqP-150x4.6x5-amb-254 (1).xlsx",
+      "GR09-06-3-ACN-3-ISO-80-1.5-20-CP-0.1-C18aqP-150x4.6x5-amb-254_1__e160.xlsx",
+      "GR09-10-3-ACN-3-ISO-40-1.5-20-CP-0.1-C18aqP-150x4.6x5-amb-254_1__92a4.xlsx",
+      "GR09-15-4-ACN-3-ISO-35-1.5-20u-CP-0.1-C18aqP-150x4.6x5-T40-254_1__84c7.xlsx",
+      "GR09-16-4-ACN-3-ISO-35-1.5-20u-CP-0.1-C18aqP-150x4.6x5-T60-254.csv",
+    ];
+    const expected = [
+      { percentB: "80", temperature: "ambient", injectionVolume: "20" },
+      { percentB: "80", temperature: "ambient", injectionVolume: "20" },
+      { percentB: "40", temperature: "ambient", injectionVolume: "20" },
+      { percentB: "35", temperature: "40", injectionVolume: "20" },
+      { percentB: "35", temperature: "60", injectionVolume: "20" },
+    ];
+    copies.forEach((fileName, index) => {
+      const enabled = detailsFromFileNameIfEnabled(emptyRunDetails(), fileName, true);
+      expect(enabled.apply, fileName).toBe(true);
+      if (!enabled.apply) return;
+      expect(enabled.details).toMatchObject({
+        solvent: "ACN",
+        ligand: "C18aq",
+        ...expected[index],
+      });
+      const held = detailsFromFileNameIfEnabled(
+        { ...emptyRunDetails(), solvent: "MeOH", percentB: "12", temperature: "25" },
+        fileName,
+        false,
+      );
+      expect(held.apply).toBe(false);
+      expect(held.details.solvent).toBe("MeOH");
+      expect(held.details.percentB).toBe("12");
+      expect(held.details.temperature).toBe("25");
+    });
+    const next = nextRunFileName(copies[1], {
+      ...emptyRunDetails(),
+      solvent: "ACN",
+      percentB: "80",
+      temperature: "ambient",
+    });
+    expect(next.startsWith("GR09-07-3-")).toBe(true);
+  });
+
   it("replaces the details when autofill stays on and a second file is loaded", () => {
     const firstName = "GR09-05-3-ACN-3-ISO-90-1.5-20-CP-0.1-C18aqP-150x4.6x5-amb-254.csv";
     const secondName = "GR09-16-4-MeOH-3-ISO-35-1.5-20u-CP-0.1-C8-150x4.6x5-T60-254.csv";
@@ -449,18 +492,18 @@ describe("run file names", () => {
     expect(chart).toBeTruthy();
     const percentOf = (id: string) => chart!.find((row) => row.id === id)!.percentText;
     expect(percentOf("acetonitrile")).toBe("35.0");
-    expect(percentOf("methanol")).toBe("44.1");
-    expect(percentOf("tetrahydrofuran")).toBe("24.5");
+    expect(percentOf("methanol")).toBe("50.3");
+    expect(percentOf("tetrahydrofuran")).toBe("17.6");
 
     expect(
       copyableNextRunFileName(latest, { ...base, solvent: "MeOH", percentB: percentOf("methanol"), temperature: "25" }),
-    ).toBe("GR41-04-5-MeOH-3-ISO-44.1-1.5-20u-CP-0.1-C18-150x4.6x5-T25-254");
+    ).toBe("GR41-04-5-MeOH-3-ISO-50.3-1.5-20u-CP-0.1-C18-150x4.6x5-T25-254");
     expect(
       copyableNextRunFileName(latest, { ...base, solvent: "ACN", percentB: percentOf("acetonitrile"), temperature: "25" }),
     ).toBe("GR41-04-5-ACN-3-ISO-35-1.5-20u-CP-0.1-C18-150x4.6x5-T25-254");
     expect(
       copyableNextRunFileName(latest, { ...base, solvent: "THF", percentB: percentOf("tetrahydrofuran"), temperature: "25" }),
-    ).toBe("GR41-04-5-THF-3-ISO-24.5-1.5-20u-CP-0.1-C18-150x4.6x5-T25-254");
+    ).toBe("GR41-04-5-THF-3-ISO-17.6-1.5-20u-CP-0.1-C18-150x4.6x5-T25-254");
     expect(
       copyableNextRunFileName(latest, {
         ...base,
@@ -468,6 +511,6 @@ describe("run file names", () => {
         percentB: percentOf("methanol"),
         temperature: "ambient",
       }),
-    ).toBe("GR41-04-5-MeOH-3-ISO-44.1-1.5-20u-CP-0.1-C18-150x4.6x5-amb-254");
+    ).toBe("GR41-04-5-MeOH-3-ISO-50.3-1.5-20u-CP-0.1-C18-150x4.6x5-amb-254");
   });
 });

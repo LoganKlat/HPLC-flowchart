@@ -1,0 +1,20 @@
+[Header],,,,,,
+Application Name,LabSolutions,,,,,
+[Peak Table(PDA-Ch1)],,,,,,
+# of Peaks,3,,,,,
+Peak#,R.Time,I.Time,F.Time,Area,Height,Resolution
+1,1.19,0.96,1.28,25580093,3224581,0
+2,1.309,1.28,1.835,9158631,1756265,0.369
+3,2.01,1.835,3.061,2622149,390544,2.506
+[LC Status Trace(Pump A Pressure)],,,,,,
+Intensity Units,psi,,,,,
+Intensity Multiplier,14.2233,,,,,
+R.Time (min),Intensity,,,,,
+0,76.9,,,,,
+0.05,85.9,,,,,
+[PDA Multi Chromatogram(Ch1)],,,,,,
+Intensity Units,mAU,,,,,
+Intensity Multiplier,1,,,,,
+R.Time (min),Intensity,,,,,
+0,0,,,,,
+0.01067,12.5,,,,,

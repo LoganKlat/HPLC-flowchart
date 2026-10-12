@@ -16,27 +16,25 @@ export type Solvent = {
   aliases: string[];
   /** RP solvent strength parameter S. Null when the table gives no number. */
   strength: number | null;
-  /** %B that matches 50% ACN. A range in the table is stored as its midpoint. */
-  match50Acn: number;
+  /**
+   * Universal nomogram, relative to acetonitrile.
+   * % of this solvent = %ACN * slope + intercept.
+   * The other direction is %ACN = (% of this solvent - intercept) / slope.
+   */
+  slope: number;
+  intercept: number;
 };
 
-const MEOH_MATCH_50 = (61.5 + 64.4) / 2;
-const THF_MATCH_50 = (33 + 37) / 2;
-const BUTANOL_MATCH_50 = (20 + 25) / 2;
-
 export const SOLVENTS: readonly Solvent[] = [
-  { id: "acetonitrile", label: "ACN", name: "ACN", aliases: ["acn", "acetonitrile", "acetonitrile (acn)"], strength: 3.2, match50Acn: 50 },
-  { id: "methanol", label: "MeOH", name: "MeOH", aliases: ["meoh", "methanol", "methanol (meoh)"], strength: 2.6, match50Acn: MEOH_MATCH_50 },
-  { id: "tetrahydrofuran", label: "THF", name: "THF", aliases: ["thf", "tetrahydrofuran", "tetrahydrofuran (thf)"], strength: 4.5, match50Acn: THF_MATCH_50 },
-  { id: "ethanol", label: "Ethanol", name: "Ethanol", aliases: ["ethanol", "etoh"], strength: 3.6, match50Acn: 44 },
-  { id: "isopropanol", label: "IPA", name: "IPA", aliases: ["ipa", "isopropanol", "isopropanol (ipa)", "2-propanol"], strength: 4.2, match50Acn: 35 },
-  { id: "acetone", label: "Acetone", name: "Acetone", aliases: ["acetone"], strength: 3.4, match50Acn: 40 },
-  { id: "propanol", label: "Propanol", name: "Propanol", aliases: ["propanol", "n-propanol", "1-propanol"], strength: 4.0, match50Acn: 37 },
-  { id: "butanol", label: "Butanol", name: "Butanol", aliases: ["butanol", "n-butanol", "1-butanol"], strength: null, match50Acn: BUTANOL_MATCH_50 },
+  { id: "acetonitrile", label: "ACN", name: "ACN", aliases: ["acn", "acetonitrile", "acetonitrile (acn)"], strength: 3.2, slope: 1, intercept: 0 },
+  { id: "methanol", label: "MeOH", name: "MeOH", aliases: ["meoh", "methanol", "methanol (meoh)"], strength: 2.6, slope: 1.15, intercept: 10 },
+  { id: "tetrahydrofuran", label: "THF", name: "THF", aliases: ["thf", "tetrahydrofuran", "tetrahydrofuran (thf)"], strength: 4.5, slope: 0.73, intercept: -8 },
+  { id: "ethanol", label: "Ethanol", name: "Ethanol", aliases: ["ethanol", "etoh"], strength: 3.6, slope: 0.9, intercept: -3 },
+  { id: "isopropanol", label: "IPA", name: "IPA", aliases: ["ipa", "isopropanol", "isopropanol (ipa)", "2-propanol"], strength: 4.2, slope: 0.76, intercept: -6 },
+  { id: "acetone", label: "Acetone", name: "Acetone", aliases: ["acetone"], strength: 3.4, slope: 0.95, intercept: 2 },
+  { id: "propanol", label: "Propanol", name: "Propanol", aliases: ["propanol", "n-propanol", "1-propanol"], strength: 4.0, slope: 0.8, intercept: -5 },
+  { id: "butanol", label: "Butanol", name: "Butanol", aliases: ["butanol", "n-butanol", "1-butanol"], strength: null, slope: 0.71, intercept: -10 },
 ];
-
-/** Scale that lines up every solvent’s 50% ACN match on one vertical line. */
-const CHART_SCALE = 100;
 
 export const LIGANDS = ["C18", "C18aq", "PFPP", "C8", "biphenyl", "IBD"] as const;
 
@@ -155,22 +153,38 @@ export function formatMatchedPercent(percent: number, capped: boolean): string {
   return percent.toFixed(1);
 }
 
+/** %ACN that matches this solvent strength. Not rounded; only the final %B is. */
+function equivalentAcn(percent: number, solvent: Solvent): number {
+  return (percent - solvent.intercept) / solvent.slope;
+}
+
+function percentFromAcn(acnPercent: number, solvent: Solvent): number {
+  return acnPercent * solvent.slope + solvent.intercept;
+}
+
+/**
+ * Equivalent %B through acetonitrile, in either direction.
+ * The intermediate %ACN stays exact. The result is rounded to tenths, half away
+ * from zero, then held inside 0–100. Above 100 is marked capped and shown as 100,
+ * the same clamp the solvent recommendation already used.
+ */
 function isoeluotropicPercent(
   anchorPercent: number,
   from: Solvent,
   to: Solvent,
 ): { percent: number; capped: boolean } {
-  const raw = (anchorPercent * to.match50Acn) / from.match50Acn;
+  const raw = percentFromAcn(equivalentAcn(anchorPercent, from), to);
   if (raw > 100) return { percent: 100, capped: true };
   const percent = Math.min(100, Math.max(0, roundTenths(raw)));
   return { percent, capped: false };
 }
 
+/** Horizontal position for one solvent strength. Equal %ACN lines up across solvents. */
 export function chartX(solventId: string, percent: number): number | null {
   const solvent = solventById(solventId);
-  if (!solvent || !(solvent.match50Acn > 0)) return null;
+  if (!solvent || !(solvent.slope > 0)) return null;
   const clamped = Math.min(100, Math.max(0, percent));
-  return (clamped / solvent.match50Acn) * CHART_SCALE;
+  return equivalentAcn(clamped, solvent);
 }
 
 export function solventNomograph(oldPercent: number, oldSolvent: string): NomographEntry[] | null {
@@ -949,7 +963,7 @@ function solventPlan(args: {
     following: `After the solvent, try 40°C and then 60°C at the chart %B. ${SELECTIVITY_ORDER}`,
     why: [
       `Change the solvent and go back to ${back}. ${args.ambient.sentence}`,
-      `Pick ACN, MeOH, THF, Ethanol, IPA, Acetone, Propanol, or Butanol. The %B comes from the chart for the solvent you pick, matched to the retention minimum of ${minimum}% B. The chart does not choose the solvent.`,
+      `Pick ACN, MeOH, THF, Ethanol, IPA, Acetone, Propanol, or Butanol. The %B comes from the nomogram equation for the solvent you pick, through acetonitrile, matched to the retention minimum of ${minimum}% B. The equation does not choose the solvent.`,
     ].join("\n\n"),
     prefill: {
       percentB: "",

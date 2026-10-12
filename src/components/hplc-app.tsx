@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { Gauge, GitBranch, Info, Settings, type LucideIcon } from "lucide-react";
+import { ArrowRight, Gauge, GitBranch, Info, Settings, type LucideIcon } from "lucide-react";
 import { FileDrop } from "@/components/file-drop";
 import { AboutPanel } from "@/components/about-panel";
 import { SettingsPanel } from "@/components/settings-panel";
@@ -13,7 +13,6 @@ import { RunForm } from "@/components/run-form";
 import { SelectivityDecisionView } from "@/components/selectivity-decision";
 import { type ColumnRunTrace } from "@/components/column-diagram";
 import { EquipmentPanel } from "@/components/equipment-panel";
-import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { evaluateRun, parseUserCount, parseUserNumber, type RuleNumbers } from "@/lib/evaluate";
 import { detailsFromFileNameIfEnabled, parseRunFileName } from "@/lib/filename-details";
@@ -1157,18 +1156,6 @@ function RunPane({
                 )
               }
             />
-            {next && !ask && !leftSelectivity ? (
-              <div className="mt-auto flex flex-col gap-2">
-                <Button
-                  type="button"
-                  className="h-16 w-full text-lg font-semibold tracking-wide"
-                  onClick={() => onOpen(index + 1)}
-                >
-                  NEXT RUN
-                </Button>
-                <p className="text-center text-xs text-muted-foreground">{nextRunCaption(index + 2, next)}</p>
-              </div>
-            ) : null}
           </>
         ) : (
           <div aria-live="polite" className="flex flex-1 flex-col gap-4">
@@ -1265,11 +1252,14 @@ function RunSummary({
           <button
             type="button"
             id="next-run-change"
-            className="flex min-h-full w-full flex-1 cursor-pointer flex-col items-start gap-1 border-0 bg-[#0f6b56] px-4 py-3 text-left text-[#f7fffb] hover:bg-[#0c5948]"
+            className="flex min-h-full w-full flex-1 cursor-pointer items-center gap-3 border-0 bg-[#0f6b56] px-4 py-3 text-left text-[#f7fffb] hover:bg-[#0c5948]"
             onClick={onNext}
           >
-            <span className="text-xs font-medium tracking-[0.14em] uppercase">Next run</span>
-            <span className="text-base font-semibold">{nextLabel}</span>
+            <span className="flex min-w-0 flex-1 flex-col items-start gap-1">
+              <span className="text-xs font-medium tracking-[0.14em] uppercase">Next run</span>
+              <span className="text-base font-semibold">{nextLabel}</span>
+            </span>
+            <ArrowRight className="size-6 shrink-0" aria-hidden="true" />
           </button>
         ) : (
           <div id="next-run-change" className="px-4 py-3">
@@ -1649,17 +1639,6 @@ function toSelectivityRun(run: RunState, index: number, details: RunDetails): Se
     minResolutionExcludingFirst: run.read?.minResolutionExcludingFirst ?? null,
     maxBackPressurePsi: run.read?.maxBackPressurePsi ?? null,
   };
-}
-
-function nextRunCaption(runNumber: number, next: RunState): string {
-  const bits = [
-    shownTemperature(next.temperature),
-    next.percentB.trim() ? `${next.percentB}% B` : "",
-    next.solvent.trim(),
-    next.ligand.trim(),
-  ].filter(Boolean);
-  if (bits.length === 0) return `Run ${runNumber} is ready for a file.`;
-  return `Run ${runNumber} opens with ${bits.join(", ")} filled in.`;
 }
 
 function shownTemperature(value: string): string {

@@ -103,11 +103,11 @@ function nameStems(fileName: string): string[] {
 }
 
 function stemVariants(seed: string): string[] {
-  let stem = seed.replace(/\.(csv|txt|xlsx)$/i, "");
-  stem = stem.replace(/\s+\(\d+\)$/, "");
+  const stem = seed.replace(/\.(csv|txt|xlsx)$/i, "");
   const stems = [stem];
-  const withoutUploadSuffix = stem.replace(/_[A-Za-z0-9]+$/, "");
-  if (withoutUploadSuffix !== stem) stems.push(withoutUploadSuffix);
+  for (const peeled of peelNameSuffixes(stem)) {
+    if (!stems.includes(peeled)) stems.push(peeled);
+  }
   return stems.flatMap((value) => {
     const parts = splitPieces(value);
     if (parts.at(-1)?.toLowerCase() === "good" && parts.length > 1) {
@@ -115,6 +115,26 @@ function stemVariants(seed: string): string[] {
     }
     return [value];
   });
+}
+
+/**
+ * Drop an upload hash, then a Windows copy marker.
+ * `name (1).xlsx` and `name_1__ab12.xlsx` are the same run as `name`.
+ * The copy number is not the injection number.
+ */
+function peelNameSuffixes(stem: string): string[] {
+  const peeled: string[] = [];
+  let current = stem;
+  for (let i = 0; i < 4; i++) {
+    const next = current
+      .replace(/\s+\(\d+\)$/, "")
+      .replace(/_[A-Za-z0-9]+$/, "")
+      .replace(/_+\d+_+$/, "");
+    if (next === current) break;
+    peeled.push(next);
+    current = next;
+  }
+  return peeled;
 }
 
 function parseStem(stem: string): Partial<RunDetails> | null {

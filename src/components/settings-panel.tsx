@@ -46,7 +46,7 @@ export function SettingsPanel({
         <NameList
           id="settings-solvents"
           title="Solvents"
-          description="The solvent menu and the chart use this list. These eight are supported: ACN, MeOH, THF, Ethanol, IPA, Acetone, Propanol, and Butanol."
+          description="Equivalent %B uses the nomogram equations relative to acetonitrile, in either direction. These eight are supported: ACN, MeOH, THF, Ethanol, IPA, Acetone, Propanol, and Butanol."
           items={solvents.map((name) => ({ name }))}
           empty="No solvents yet. Add one to use it in Run details."
           addLabel="Add a solvent"

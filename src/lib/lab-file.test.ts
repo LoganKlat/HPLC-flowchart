@@ -294,6 +294,18 @@ R.Time (min),Intensity
     expect(read.chromatogramSectionName).toBe("LC Chromatogram(Detector A-Ch1)");
     expect(read.chromatogram?.[1]?.intensity).toBe(840);
   });
+
+  it("reads a PDA export whose section titles are padded with commas", () => {
+    const read = readLabFile(readFileSync(path.join(root, "fixtures/lab/pda-padded-sections.csv")));
+    expect(read.blockingMessage).toBeNull();
+    expect(read.peakCount).toBe(3);
+    expect(read.lastPeakTimeMin).toBeCloseTo(2.01, 5);
+    expect(read.minResolutionExcludingFirst).toBeCloseTo(0.369, 3);
+    expect(read.maxBackPressurePsi).toBeCloseTo(85.9 * 14.2233, 3);
+    expect(read.chromatogramSectionName).toBe("PDA Multi Chromatogram(Ch1)");
+    expect(read.chromatogram).toHaveLength(2);
+    expect(read.chromatogramYAxis).toBe("mAU");
+  });
 });
 
 function encodeUtf16(text: string, endian: "le" | "be"): Uint8Array {

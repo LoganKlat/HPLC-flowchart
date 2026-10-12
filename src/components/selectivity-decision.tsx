@@ -168,15 +168,17 @@ function NomographSketch({ oldSolvent, percentB }: { oldSolvent: string; percent
   const solvent = findSolvent(oldSolvent);
   const x = solvent ? chartX(solvent.id, percentB) : null;
   if (x == null) return null;
+  const starts = SOLVENTS.map((entry) => chartX(entry.id, 0) ?? 0);
   const ends = SOLVENTS.map((entry) => chartX(entry.id, 100) ?? 0);
-  const maxX = Math.max(x, ...ends);
-  if (!(maxX > 0)) return null;
+  const minX = Math.min(x, ...starts, ...ends);
+  const maxX = Math.max(x, ...starts, ...ends);
+  if (!(maxX > minX)) return null;
   const left = 72;
   const width = 256;
   const rowH = 22;
   const top = 16;
   const height = top + SOLVENTS.length * rowH;
-  const mapX = (value: number) => left + (Math.min(maxX, Math.max(0, value)) / maxX) * width;
+  const mapX = (value: number) => left + ((value - minX) / (maxX - minX)) * width;
   const lineX = mapX(x);
   return (
     <figure>
@@ -194,7 +196,7 @@ function NomographSketch({ oldSolvent, percentB }: { oldSolvent: string; percent
                 {entry.label}
               </text>
               <line
-                x1={left}
+                x1={mapX(starts[index])}
                 y1={y}
                 x2={mapX(ends[index])}
                 y2={y}

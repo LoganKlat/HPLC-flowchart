@@ -319,15 +319,24 @@ export function splitSections(text: string): Map<string, string[]> {
   const sections = new Map<string, string[]>();
   let current: string | null = null;
   for (const line of text.split(/\r?\n/)) {
-    const header = /^\[([^[\]]+)\]$/.exec(line.trim());
+    const header = sectionTitle(line);
     if (header) {
-      current = header[1].trim();
+      current = header;
       if (!sections.has(current)) sections.set(current, []);
       continue;
     }
     if (current) sections.get(current)!.push(line);
   }
   return sections;
+}
+
+/**
+ * A section title is `[Peak Table(Detector A)]` on its own line.
+ * Some LabSolutions CSVs put that title in the first cell and pad the rest of the row with commas.
+ */
+function sectionTitle(line: string): string | null {
+  const match = /^\[([^[\]]+)\](?:[,\t].*)?$/.exec(line.trim());
+  return match ? match[1].trim() : null;
 }
 
 type ParsedTable = {
@@ -356,7 +365,9 @@ function parseTable(lines: string[], delimiter: "," | "\t", anchors: string[]): 
     if (!lines[i].trim()) continue;
     const cells = splitRow(lines[i], delimiter);
     if (cells.length >= 2 && cells[0].trim()) {
-      meta[cells[0].trim()] = cells.slice(1).join(delimiter).trim();
+      const rest = cells.slice(1).map((cell) => cell.trim());
+      while (rest.length > 0 && rest[rest.length - 1] === "") rest.pop();
+      meta[cells[0].trim()] = rest.join(delimiter).trim();
     }
   }
 

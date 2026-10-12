@@ -48,16 +48,16 @@ function run(overrides: Partial<SelectivityRun> = {}): SelectivityRun {
 }
 
 describe("solvent nomograph", () => {
-  it("reads 20% acetonitrile from the eight-solvent equivalents", () => {
-    expect(percents(20)).toEqual(["20.0", "25.2", "14.0", "17.6", "14.0", "16.0", "14.8", "9.0"]);
+  it("reads 20% acetonitrile from the nomogram equations", () => {
+    expect(percents(20)).toEqual(["20.0", "33.0", "6.6", "15.0", "9.2", "21.0", "11.0", "4.2"]);
   });
 
-  it("reads 40% acetonitrile from the eight-solvent equivalents", () => {
-    expect(percents(40)).toEqual(["40.0", "50.4", "28.0", "35.2", "28.0", "32.0", "29.6", "18.0"]);
+  it("reads 40% acetonitrile from the nomogram equations", () => {
+    expect(percents(40)).toEqual(["40.0", "56.0", "21.2", "33.0", "24.4", "40.0", "27.0", "18.4"]);
   });
 
-  it("reads 50% acetonitrile as the table matches, using range midpoints", () => {
-    expect(percents(50)).toEqual(["50.0", "63.0", "35.0", "44.0", "35.0", "40.0", "37.0", "22.5"]);
+  it("reads 50% acetonitrile from the nomogram equations", () => {
+    expect(percents(50)).toEqual(["50.0", "67.5", "28.5", "42.0", "32.0", "49.5", "35.0", "25.5"]);
     expect(findSolvent("ACN")?.strength).toBe(3.2);
     expect(findSolvent("MeOH")?.strength).toBe(2.6);
     expect(findSolvent("THF")?.strength).toBe(4.5);
@@ -73,12 +73,12 @@ describe("solvent nomograph", () => {
     expect(rows?.map((row) => [row.label, row.percentText, row.capped])).toEqual([
       ["ACN", "100", false],
       ["MeOH", "100", true],
-      ["THF", "70.0", false],
-      ["Ethanol", "88.0", false],
+      ["THF", "65.0", false],
+      ["Ethanol", "87.0", false],
       ["IPA", "70.0", false],
-      ["Acetone", "80.0", false],
-      ["Propanol", "74.0", false],
-      ["Butanol", "45.0", false],
+      ["Acetone", "97.0", false],
+      ["Propanol", "75.0", false],
+      ["Butanol", "61.0", false],
     ]);
   });
 
@@ -91,13 +91,13 @@ describe("solvent nomograph", () => {
   });
 
   it("matches every supported solvent and does not invent one outside the list", () => {
-    expect(solventNomograph(50, "ethanol")?.find((row) => row.id === "acetonitrile")?.percentText).toBe("56.8");
+    expect(solventNomograph(50, "ethanol")?.find((row) => row.id === "acetonitrile")?.percentText).toBe("58.9");
     expect(solventNomograph(50, "acetone")).toBeTruthy();
     expect(solventNomograph(50, "n-propanol")).toBeTruthy();
     expect(solventNomograph(50, "isopropanol")).toBeTruthy();
     expect(solventNomograph(50, "n-butanol")?.find((row) => row.id === "butanol")?.percentText).toBe("50.0");
-    expect(solventChoicePercent(50, "acetonitrile", "ethanol")?.percentText).toBe("44.0");
-    expect(solventChoicePercent(50, "ethanol", "methanol")?.percentText).toBe("71.5");
+    expect(solventChoicePercent(50, "acetonitrile", "ethanol")?.percentText).toBe("42.0");
+    expect(solventChoicePercent(50, "ethanol", "methanol")?.percentText).toBe("77.7");
     expect(findSolvent("ACN")?.label).toBe("ACN");
     expect(findSolvent("MeOH")?.id).toBe("methanol");
     expect(findSolvent("THF")?.label).toBe("THF");
@@ -114,6 +114,9 @@ describe("solvent nomograph", () => {
     ]);
     expect(findSolvent("2-Propanol")?.id).toBe("isopropanol");
     expect(findSolvent("ethanol")?.id).toBe("ethanol");
+    expect(solventChoicePercent(50, "ACN", "methanol")?.percentText).toBe("67.5");
+    expect(solventChoicePercent(67.5, "MeOH", "acetonitrile")?.percentText).toBe("50.0");
+    expect(solventChoicePercent(50, "MeOH", "tetrahydrofuran")?.percentText).toBe("17.4");
     expect(findSolvent("hexane")).toBeNull();
     expect(findSolvent("ethyl acetate")).toBeNull();
     expect(recommendLigand(["C18", "C18aq", "PFPP", "C8", "biphenyl", "IBD"])).toBeNull();
