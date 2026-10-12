@@ -166,65 +166,94 @@ function isOtherStage(paragraph: string): boolean {
   return false;
 }
 
+function wholePercent(value: number): number {
+  return Math.min(100, Math.max(0, Math.round(value)));
+}
+
 export function PickOwnPercent({
   picked,
+  minimum,
   onPick,
 }: {
   picked: number | null;
+  /** %B on the minimum run that was just uploaded. No keeps this and goes to 40°C. */
+  minimum: number | null;
   onPick: (percent: number | null) => void;
 }) {
-  const hasPick = picked != null && Number.isFinite(picked);
-  const [asking, setAsking] = useState<"yes" | "no" | null>(hasPick ? "yes" : null);
-  const [draft, setDraft] = useState(hasPick ? String(picked) : "");
+  const minimumWhole = minimum != null && Number.isFinite(minimum) ? wholePercent(minimum) : null;
+  const pickedWhole = picked != null && Number.isFinite(picked) ? wholePercent(picked) : null;
+  const [asking, setAsking] = useState<"yes" | "no" | null>(pickedWhole != null ? "yes" : null);
+  const [value, setValue] = useState(pickedWhole ?? minimumWhole ?? 50);
+  const choiceClass = (selected: boolean) =>
+    "rounded-lg border px-3 py-2 text-left text-sm font-semibold " +
+    (selected
+      ? "border-[#0a5644] bg-[#0f6b56] text-[#f7fffb]"
+      : "border-[#0f6b56] bg-white text-[#144237]");
   return (
     <div id="own-percent-choice" className="mt-3 flex flex-col gap-2">
-      <p className="text-sm font-medium text-foreground">Select a %B of your choosing?</p>
+      <p className="text-sm font-medium text-foreground">Would you like to select an intermediate %B?</p>
       <div className="grid grid-cols-2 gap-2">
         <button
           type="button"
           id="choose-own-yes"
-          className="rounded-lg border border-[#0f6b56] bg-white px-3 py-2 text-left text-sm font-semibold text-[#144237]"
-          onClick={() => setAsking("yes")}
+          aria-pressed={asking === "yes"}
+          className={choiceClass(asking === "yes")}
+          onClick={() => {
+            const next = pickedWhole ?? minimumWhole ?? value;
+            setValue(next);
+            setAsking("yes");
+            onPick(next);
+          }}
         >
           Yes
         </button>
         <button
           type="button"
           id="choose-own-no"
-          className="rounded-lg border border-[#0f6b56] bg-white px-3 py-2 text-left text-sm font-semibold text-[#144237]"
+          aria-pressed={asking === "no"}
+          className={choiceClass(asking === "no")}
           onClick={() => {
             setAsking("no");
-            setDraft("");
-            onPick(null);
+            if (minimum != null && Number.isFinite(minimum)) onPick(minimum);
           }}
         >
           No
         </button>
       </div>
+      {asking === "no" && minimum != null && Number.isFinite(minimum) ? (
+        <p className="text-sm text-foreground">
+          Using {formatPercentB(minimum)}% B from this run, at 40°C.
+        </p>
+      ) : null}
       {asking === "yes" ? (
-        <label className="flex flex-col gap-1 text-sm" htmlFor="own-percent-b">
-          %B for the 40°C run
+        <div className="flex flex-col gap-2">
+          <div className="flex items-baseline justify-between gap-3">
+            <label className="text-sm text-foreground" htmlFor="own-percent-b">
+              %B for the 40°C run
+            </label>
+            <span id="own-percent-value" className="font-heading text-2xl text-foreground">
+              {formatPercentB(value)}% B
+            </span>
+          </div>
           <input
             id="own-percent-b"
-            type="number"
+            type="range"
             min={0}
             max={100}
-            step="any"
-            inputMode="decimal"
-            value={draft}
-            className="h-10 rounded-lg border border-input bg-white px-2.5 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+            step={1}
+            value={value}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={value}
+            aria-valuetext={`${formatPercentB(value)}% B`}
+            className="h-2 w-full cursor-pointer accent-[#0f6b56]"
             onChange={(event) => {
-              const text = event.target.value;
-              setDraft(text);
-              if (text.trim() === "") {
-                onPick(null);
-                return;
-              }
-              const value = Number(text);
-              if (Number.isFinite(value) && value >= 0 && value <= 100) onPick(value);
+              const next = wholePercent(Number(event.target.value));
+              setValue(next);
+              onPick(next);
             }}
           />
-        </label>
+        </div>
       ) : null}
     </div>
   );

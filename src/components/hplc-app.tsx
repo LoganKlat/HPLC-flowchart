@@ -1068,7 +1068,7 @@ function RunPane({
       : null;
   const ownPercent =
     retention?.pickOwnPercent && onPickPercent
-      ? { picked: pickedPercent ?? null, onPick: onPickPercent }
+      ? { picked: pickedPercent ?? null, minimum: parseUserNumber(run.percentB), onPick: onPickPercent }
       : null;
 
   return (
@@ -1229,10 +1229,12 @@ function RunSummary({
   } | null;
   ownPercent?: {
     picked: number | null;
+    minimum: number | null;
     onPick: (percent: number | null) => void;
   } | null;
 }) {
   const lines = index > 0 ? decisionChangeLines(index, runs, details) : [];
+  const withPicker = Boolean(secondMin || ownPercent);
   return (
     <section
       id="run-context"
@@ -1254,14 +1256,15 @@ function RunSummary({
           )}
         </div>
       </div>
-      <div className="flex h-full flex-col">
+      <div className={withPicker ? "flex flex-col" : "flex h-full flex-col"}>
         {onNext ? (
           <button
             type="button"
             id="next-run-change"
             disabled={nextLocked}
             className={
-              "flex min-h-full w-full flex-1 items-center gap-3 border-0 bg-[#0f6b56] px-4 py-3 text-left text-[#f7fffb] disabled:cursor-not-allowed disabled:opacity-50 " +
+              "flex w-full items-center gap-3 border-0 bg-[#0f6b56] px-4 py-3 text-left text-[#f7fffb] disabled:cursor-not-allowed disabled:opacity-50 " +
+              (withPicker ? "" : "min-h-full flex-1 ") +
               (nextLocked ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:bg-[#0c5948]")
             }
             onClick={() => {
@@ -1286,7 +1289,9 @@ function RunSummary({
             {secondMin ? (
               <SecondPercentChoice recommended={secondMin.recommended} picked={secondMin.picked} onPick={secondMin.onPick} />
             ) : null}
-            {ownPercent ? <PickOwnPercent picked={ownPercent.picked} onPick={ownPercent.onPick} /> : null}
+            {ownPercent ? (
+              <PickOwnPercent picked={ownPercent.picked} minimum={ownPercent.minimum} onPick={ownPercent.onPick} />
+            ) : null}
           </div>
         ) : null}
       </div>
