@@ -92,13 +92,13 @@ export function ChromatogramExplorer() {
                 {["t0", "retention"].includes(topic) && <line x1={x(t0)} x2={x(t0)} y1="50" y2="285" stroke={amber} strokeDasharray="6 4" strokeWidth="2" />}
                 {["last", "checks"].includes(topic) && <><line x1={x(12)} x2={x(12)} y1="45" y2="285" stroke="#be123c" strokeDasharray="6 4" /><text x={x(12) - 6} y="58" textAnchor="end" fontSize="12" fill="#be123c">12 min limit</text></>}
                 {["peaks", "retention", "last"].includes(topic) && <line x1={x(peak.time)} x2={x(peak.time)} y1={y(baseline + peak.height)} y2="285" stroke={amber} strokeDasharray="4 3" strokeWidth="2" />}
-                {topic === "height" && <><line x1={x(peak.time)} x2={x(peak.time)} y1={y(baseline)} y2={y(baseline + peak.height)} stroke={amber} strokeWidth="3" /><text x={x(peak.time) + 10} y={y(baseline + peak.height / 2)} fontSize="13" fill={amber}>h = {n(peak.height)} mAU</text></>}
+                {topic === "height" && <><line x1={x(peak.time)} x2={x(peak.time)} y1={y(baseline)} y2={y(baseline + peak.height)} stroke={amber} strokeWidth="3" /><text textAnchor={peak.time > 10 ? "end" : "start"} x={x(peak.time) + (peak.time > 10 ? -10 : 10)} y={y(baseline + peak.height / 2)} fontSize="13" fill={amber}>h = {n(peak.height)} mAU</text></>}
                 {showWidth && widthPeaks.map(p => {
                   const m = peakMetrics(p);
                   return <g key={p.label}>
                     <line x1={x(p.time - m.baselineWidth / 2)} x2={x(p.time + m.baselineWidth / 2)} y1={y(baseline)} y2={y(baseline)} stroke={amber} strokeWidth="4" />
-                    <text x={x(p.time)} y={y(baseline) - 10} textAnchor="middle" fontSize="12" fill={amber}>W {n(m.baselineWidth)}</text>
-                    {topic === "width" && <><line x1={x(p.time - m.fwhm / 2)} x2={x(p.time + m.fwhm / 2)} y1={y(baseline + p.height / 2)} y2={y(baseline + p.height / 2)} stroke={blue} strokeWidth="3" /><text x={x(p.time) + 12} y={y(baseline + p.height / 2) - 8} fontSize="12" fill={blue}>FWHM {n(m.fwhm)}</text></>}
+                    <text x={x(p.time)} y={y(baseline) - (topic === "resolution" && p.label === "C" ? 26 : 10)} textAnchor="middle" fontSize="12" fill={amber}>W {n(m.baselineWidth)}</text>
+                    {topic === "width" && <><line x1={x(p.time - m.fwhm / 2)} x2={x(p.time + m.fwhm / 2)} y1={y(baseline + p.height / 2)} y2={y(baseline + p.height / 2)} stroke={blue} strokeWidth="3" /><text textAnchor={p.time > 10 ? "end" : "start"} x={x(p.time) + (p.time > 10 ? -12 : 12)} y={y(baseline + p.height / 2) - 8} fontSize="12" fill={blue}>FWHM {n(m.fwhm)}</text></>}
                   </g>;
                 })}
                 {topic === "resolution" && <><line x1={x(6)} x2={x(6 + spacing)} y1="80" y2="80" stroke={amber} strokeWidth="2" /><text x={x(6 + spacing / 2)} y="68" textAnchor="middle" fontSize="13" fill={amber}>ΔtR = {n(spacing)} min</text></>}
