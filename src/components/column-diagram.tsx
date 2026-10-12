@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties } from "react";
+import { useState, type CSSProperties } from "react";
 import { ChromatogramChart } from "@/components/chromatogram-chart";
 import { FunctionNoteView, type FunctionNote } from "@/components/function-note";
+import { columnExampleTrace } from "@/lib/column-example";
 import {
   columnScale,
   formatColumnMultiple,
@@ -10,7 +11,7 @@ import {
   scalePressureTrace,
   scaledPeakTimes,
 } from "@/lib/column-shape";
-import { readLabFile, type ChromatogramPoint, type PressurePoint } from "@/lib/lab-file";
+import type { ChromatogramPoint, PressurePoint } from "@/lib/lab-file";
 
 const LENGTH_MIN = 50;
 const LENGTH_MAX = 250;
@@ -270,9 +271,16 @@ function traceFrame(points: readonly ChromatogramPoint[]) {
   return { minTime, maxTime, minY, maxY };
 }
 
+const EXAMPLE_TRACE: ColumnRunTrace = {
+  id: EXAMPLE_ID,
+  tabLabel: "Example",
+  fileName: COLUMN_EXAMPLE_NAME,
+  baselineLengthMm: 150,
+  baselineWidthMm: 4.6,
+  ...columnExampleTrace(),
+};
+
 export function ColumnDiagram({ runs }: { runs: ColumnRunTrace[] }) {
-  const [example, setExample] = useState<ColumnRunTrace | null>(null);
-  const [exampleError, setExampleError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState(EXAMPLE_ID);
   const [hoveredTab, setHoveredTab] = useState<string | null>(null);
   const [lengthMm, setLengthMm] = useState(150);
@@ -280,56 +288,7 @@ export function ColumnDiagram({ runs }: { runs: ColumnRunTrace[] }) {
   const [openId, setOpenId] = useState<NoteId | null>(null);
   const [pinnedId, setPinnedId] = useState<NoteId | null>(null);
 
-  useEffect(() => {
-    let cancel = false;
-    fetch(`/examples/${COLUMN_EXAMPLE_NAME}`)
-      .then((response) => {
-        if (!response.ok) throw new Error(String(response.status));
-        return response.arrayBuffer();
-      })
-      .then((buffer) => {
-        if (cancel) return;
-        const read = readLabFile(buffer);
-        if (read.blockingMessage || !read.chromatogram) {
-          setExampleError(read.blockingMessage ?? read.chromatogramMissingMessage ?? "The example chromatogram could not be read.");
-          return;
-        }
-        setExample({
-          id: EXAMPLE_ID,
-          tabLabel: "Example",
-          fileName: COLUMN_EXAMPLE_NAME,
-          points: read.chromatogram,
-          peakTimesMin: read.peakTimesMin,
-          yLabel: read.chromatogramYAxis,
-          pressurePoints: read.pressureTrace ?? [],
-          pressureUnit: read.pressureUnits,
-          baselineLengthMm: 150,
-          baselineWidthMm: 4.6,
-        });
-      })
-      .catch(() => {
-        if (!cancel) setExampleError("The example chromatogram could not be read.");
-      });
-    return () => {
-      cancel = true;
-    };
-  }, []);
-
-  const tabs: ColumnRunTrace[] = [
-    example ?? {
-      id: EXAMPLE_ID,
-      tabLabel: "Example",
-      fileName: COLUMN_EXAMPLE_NAME,
-      points: [],
-      peakTimesMin: [],
-      yLabel: "mAU",
-      pressurePoints: [],
-      pressureUnit: null,
-      baselineLengthMm: 150,
-      baselineWidthMm: 4.6,
-    },
-    ...runs,
-  ];
+  const tabs: ColumnRunTrace[] = [EXAMPLE_TRACE, ...runs];
   const selected = tabs.find((tab) => tab.id === selectedId) ?? tabs[0];
   const sliderKey = `${selected.id}|${selected.baselineLengthMm}|${selected.baselineWidthMm}`;
   const [trackedKey, setTrackedKey] = useState(sliderKey);
@@ -407,9 +366,7 @@ export function ColumnDiagram({ runs }: { runs: ColumnRunTrace[] }) {
             ) : (
               <div className="rounded-xl bg-[#f7fbf8] px-4 py-6 text-sm ring-1 ring-foreground/10" role="status">
                 <p className="font-medium text-foreground">{selected.fileName}</p>
-                <p className="mt-2 text-muted-foreground">
-                  {exampleError ?? "Reading the example chromatogram."}
-                </p>
+                <p className="mt-2 text-muted-foreground">This run has no chromatogram to draw.</p>
               </div>
             )}
           </div>

@@ -57,7 +57,7 @@ export type SelectivitySetup = {
   lastPeakTimeMin: number | null;
   minResolution: number | null;
   maxBackPressurePsi: number | null;
-  /** Null when the Run 1 temperature box is empty. 25°C is used in that case. */
+  /** Null when Run 1 is ambient: empty, amb, or the word ambient. A typed number is kept. */
   ambientTemperatureC: number | null;
   originalSolvent: string;
   originalLigand: string;
@@ -708,7 +708,7 @@ function walkSelectivity(args: {
             anchor: args.carry,
             anchorNumber: args.carryRunNumber,
             setup: args.setup,
-            ambient: temperatureBeforeOven(args.carry),
+            ambient: temperatureBeforeOven(args.carry, args.setup),
             ligandName: baseline.ligand || args.setup.originalLigand,
           }),
         };
@@ -940,20 +940,20 @@ function solventPlan(args: {
   const typed = args.anchor.solvent.trim() || args.setup.originalSolvent.trim();
   const recognized = findSolvent(typed);
   const nomograph = recognized ? solventNomograph(anchorPercent, recognized.name) : null;
-  const back = formatTemperature(args.ambient.celsius);
+  const back = temperaturePhrase(args.ambient.celsius);
   const minimum = formatPercentB(anchorPercent);
   return {
     status: "recommend",
     step: "solvent",
-    nextChange: `Change solvent, back at ${back}°C.`,
+    nextChange: `Change solvent, back at ${back}.`,
     following: `After the solvent, try 40°C and then 60°C at the chart %B. ${SELECTIVITY_ORDER}`,
     why: [
-      `Change the solvent and go back to ${back}°C. ${args.ambient.sentence}`,
+      `Change the solvent and go back to ${back}. ${args.ambient.sentence}`,
       `Pick ACN, MeOH, THF, Ethanol, IPA, Acetone, Propanol, or Butanol. The %B comes from the chart for the solvent you pick, matched to the retention minimum of ${minimum}% B. The chart does not choose the solvent.`,
     ].join("\n\n"),
     prefill: {
       percentB: "",
-      temperature: back,
+      temperature: temperatureField(args.ambient.celsius),
       solvent: "",
       ligand: args.ligandName,
     },
@@ -986,17 +986,17 @@ function ligandPlan(args: {
   return {
     status: "recommend",
     step: "ligand",
-    nextChange: `${pick} Go back to 100% B, ${args.ambient.celsius}°C, and ACN, then start the %B steps over.`,
+    nextChange: `${pick} Go back to 100% B, ${temperaturePhrase(args.ambient.celsius)}, and ACN, then start the %B steps over.`,
     following: `${COATING_SENTENCE} ${SELECTIVITY_ORDER}`,
     why: [
       "The coating is last. Temperature is tried first, then a new solvent, because a new coating means starting over. The temperature steps and the solvent change still do not meet the peak count and the resolution check. A new ligand is a selectivity change: peaks can pull apart or change order. It is the last one. You pick the coating.",
       `${pick} Already used: ${triedText}.`,
-      `The ladder starts again at 100% B with ACN, at ${args.ambient.celsius}°C. The previous solvent is not carried forward. A strong solvent brings the compounds off the new coating quickly, and the %B steps bring the last peak back toward the specified time.`,
+      `The ladder starts again at 100% B with ACN, at ${temperaturePhrase(args.ambient.celsius)}. The previous solvent is not carried forward. A strong solvent brings the compounds off the new coating quickly, and the %B steps bring the last peak back toward the specified time.`,
       args.ambient.sentence,
     ].join(" "),
     prefill: {
       percentB: "100",
-      temperature: String(args.ambient.celsius),
+      temperature: temperatureField(args.ambient.celsius),
       solvent: "ACN",
       ligand: "",
     },
@@ -1157,36 +1157,63 @@ function separationImproved(
   return { ok: peaksUp || resolutionUp, peaks: peaksUp, resolution: resolutionUp };
 }
 
-type Ambient = { celsius: number; assumed: boolean; sentence: string };
+type Ambient = { celsius: number | null; assumed: boolean; sentence: string };
 
-function temperatureBeforeOven(run: SelectivityRun): Ambient {
-  if (run.temperatureC == null || !Number.isFinite(run.temperatureC)) {
+/** The temperature to return to: the retention run, or Run 1 when that run has no number. */
+function temperatureBeforeOven(run: SelectivityRun, setup: SelectivitySetup): Ambient {
+  const fromRun = finiteCelsius(run.temperatureC);
+  if (fromRun != null) {
     return {
-      celsius: 25,
-      assumed: true,
-      sentence: "The temperature from before the oven was raised was blank, so 25°C is used.",
+      celsius: fromRun,
+      assumed: false,
+      sentence: `That is the temperature from before the oven was raised, ${formatTemperature(fromRun)}°C.`,
+    };
+  }
+  const fromStart = finiteCelsius(setup.ambientTemperatureC);
+  if (fromStart != null) {
+    return {
+      celsius: fromStart,
+      assumed: false,
+      sentence: `The starting temperature is ${formatTemperature(fromStart)}°C, from Run 1.`,
     };
   }
   return {
-    celsius: run.temperatureC,
-    assumed: false,
-    sentence: "That is the temperature from before the oven was raised.",
+    celsius: null,
+    assumed: true,
+    sentence: "The temperature from before the oven was raised is ambient.",
   };
 }
 
 function ambientOf(setup: SelectivitySetup): Ambient {
-  if (setup.ambientTemperatureC == null) {
+  const celsius = finiteCelsius(setup.ambientTemperatureC);
+  if (celsius == null) {
     return {
-      celsius: 25,
+      celsius: null,
       assumed: true,
-      sentence: "The temperature box on Run 1 is empty, so 25°C is used as the starting temperature.",
+      sentence: "The temperature on Run 1 is ambient.",
     };
   }
   return {
-    celsius: setup.ambientTemperatureC,
+    celsius,
     assumed: false,
-    sentence: `The starting temperature is ${formatTemperature(setup.ambientTemperatureC)}°C, from Run 1.`,
+    sentence: `The starting temperature is ${formatTemperature(celsius)}°C, from Run 1.`,
   };
+}
+
+function finiteCelsius(value: number | null): number | null {
+  return value != null && Number.isFinite(value) ? value : null;
+}
+
+/** Words for a decision sentence. Ambient stays a word; a number keeps °C. */
+function temperaturePhrase(celsius: number | null): string {
+  if (celsius == null || !Number.isFinite(celsius)) return "ambient";
+  return `${formatTemperature(celsius)}°C`;
+}
+
+/** Value written into the next run’s temperature box and file-name token. */
+function temperatureField(celsius: number | null): string {
+  if (celsius == null || !Number.isFinite(celsius)) return "ambient";
+  return formatTemperature(celsius);
 }
 
 function savedCelsius(run: SelectivityRun, fallback: number): number {

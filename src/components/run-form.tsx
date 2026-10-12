@@ -12,6 +12,10 @@ import { parseUserCount, parseUserNumber } from "@/lib/evaluate";
 import { FILE_NAME_CHECKBOX_LABEL, FILE_NAME_STRUCTURE_NOTE } from "@/lib/filename-details";
 import type { RuleInputs, RunDetails } from "@/lib/run-details";
 
+function ambientTemperature(value: string): boolean {
+  return /^(amb|ambient)$/i.test(value.trim().replace(/°\s*C$/i, ""));
+}
+
 type FileNameFill = {
   checked: boolean;
   onToggle: (checked: boolean) => void;
@@ -487,11 +491,11 @@ export function RunForm({ title, details, rules, columns, solvents, onDetails, o
           />
           <TextField
             label="Temperature"
-            unit="°C"
+            unit={ambientTemperature(details.temperature) ? undefined : "°C"}
             note={<DetailNote explained={runNotes.temperature} />}
             value={details.temperature}
             onChange={(value) => setDetail("temperature", value)}
-            inputMode="decimal"
+            inputMode={ambientTemperature(details.temperature) ? "text" : "decimal"}
           />
           <TextField
             label="Wavelength"

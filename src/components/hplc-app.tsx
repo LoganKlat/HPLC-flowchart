@@ -7,7 +7,6 @@ import { AboutPanel } from "@/components/about-panel";
 import { SettingsPanel } from "@/components/settings-panel";
 import { BackwardsRetentionView, EfficiencyChoiceView, LeaveSelectivityAsk, LeaveSelectivityDone } from "@/components/leave-selectivity";
 import { LookAtRuns } from "@/components/look-at-runs";
-import { NextFileNameLine } from "@/components/next-file-name";
 import { LaterChangeNote, PickOwnPercent, RetentionDecisionView, SecondPercentChoice, StartHighBNote } from "@/components/retention-decision";
 import { ResultsPanel } from "@/components/results-panel";
 import { RunForm } from "@/components/run-form";
@@ -17,7 +16,7 @@ import { EquipmentPanel } from "@/components/equipment-panel";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { evaluateRun, parseUserCount, parseUserNumber, type RuleNumbers } from "@/lib/evaluate";
-import { copyableNextRunFileName, detailsFromFileNameIfEnabled, parseRunFileName } from "@/lib/filename-details";
+import { detailsFromFileNameIfEnabled, parseRunFileName } from "@/lib/filename-details";
 import { readLabFile, type LabFileRead } from "@/lib/lab-file";
 import {
   decideRetention,
@@ -170,14 +169,6 @@ function withoutUltraColumn(details: RunDetails, list: readonly ColumnSpec[]): R
   return ultraOnlyPick(list, sizePickOf(details)) ? clearColumn(details) : details;
 }
 
-function latestIdentityFile(runs: RunState[], index: number): string | null {
-  for (let i = index; i >= 0; i--) {
-    const name = runs[i]?.fileName;
-    if (name) return name;
-  }
-  return null;
-}
-
 function detailsForRun(index: number, runs: RunState[], base: RunDetails): RunDetails {
   if (index <= 0) return base;
   const run = runs[index];
@@ -203,7 +194,9 @@ function percentWords(text: string): string {
 
 function degreeWords(text: string): string {
   const trimmed = text.trim().replace(/°\s*C$/i, "");
-  return trimmed ? `${trimmed}°C` : "°C";
+  if (!trimmed) return "°C";
+  if (/^(amb|ambient)$/i.test(trimmed)) return "ambient";
+  return `${trimmed}°C`;
 }
 
 /** Short name for the decision that opened this run. Run 1 is only its %B. */
@@ -689,16 +682,11 @@ export function HplcApp() {
   }
 
   return (
-    <div
-      className={
-        section === "decision-engine"
-          ? "flex h-dvh max-h-dvh w-full flex-none flex-col overflow-hidden"
-          : "flex min-h-dvh flex-1 flex-col"
-      }
-    >
+    <div className="flex h-dvh max-h-dvh w-full flex-none flex-col overflow-hidden">
       <SectionNav section={section} onSelect={setSection} />
       {section === "about" || section === "equipment" || section === "settings" ? (
-      <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 py-6 sm:px-6 sm:py-8">
+      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="mx-auto flex w-full max-w-6xl flex-col px-4 py-6 sm:px-6 sm:py-8">
       <Watermark />
       {section === "about" ? <AboutPanel /> : null}
       {section === "equipment" ? (
@@ -714,6 +702,7 @@ export function HplcApp() {
           onRemoveSolvent={removeSolvent}
         />
       ) : null}
+      </div>
       </div>
       ) : null}
 
@@ -917,7 +906,7 @@ function SectionNav({
 }) {
   const [hovered, setHovered] = useState<string | null>(null);
   return (
-    <nav aria-label="Sections" className="grid w-full shrink-0 grid-cols-4">
+    <nav aria-label="Sections" className="sticky top-0 z-40 grid w-full shrink-0 grid-cols-4 bg-background">
       {sections.map((item) => {
         const selected = item.id === section;
         return (
@@ -925,7 +914,7 @@ function SectionNav({
             key={item.id}
             type="button"
             aria-current={selected ? "page" : undefined}
-            className="flex min-h-16 flex-col items-center justify-center gap-1 border border-r-0 border-solid px-1 py-2 text-center text-xs leading-tight last:border-r sm:min-h-[4.5rem] sm:flex-row sm:gap-2 sm:px-3 sm:text-sm"
+            className="flex h-10 items-center justify-center gap-1.5 border border-r-0 border-solid px-2 text-center text-xs leading-none last:border-r sm:gap-2 sm:text-sm"
             style={sectionTabStyle(selected, hovered === item.id)}
             onMouseEnter={() => setHovered(item.id)}
             onMouseLeave={() => setHovered((current) => (current === item.id ? null : current))}
@@ -1044,10 +1033,6 @@ function RunPane({
   });
   const rows = run.read ? evaluateRun(run.read, checks) : null;
   const next = runs[index + 1];
-  const nextFileName =
-    next && run.status === "ready"
-      ? copyableNextRunFileName(latestIdentityFile(runs, index), detailsForRun(index + 1, runs, details))
-      : null;
   const selectivity = explanation?.kind === "selectivity" ? explanation.plan : null;
   const retention = explanation?.kind === "retention" ? explanation.decision : null;
   const ask =
@@ -1074,7 +1059,6 @@ function RunPane({
     linePercent: linePercent ?? null,
     pickedPercent: pickedPercent ?? null,
   });
-  const showNextFile = Boolean(nextFileName) && run.status === "ready" && !holdingBack && !leftSelectivity && !ask && !choosingEfficiency && !looking;
   const secondMin =
     retention?.choosePercent && retention.nextPercentB != null && onPickPercent
       ? { recommended: retention.nextPercentB, picked: pickedPercent ?? null, onPick: onPickPercent }
@@ -1098,7 +1082,7 @@ function RunPane({
             runs={runs}
             details={details}
             nextLabel={nextLabel}
-            nextFileName={showNextFile ? nextFileName : null}
+            onNext={next && !ask && !leftSelectivity ? () => onOpen(index + 1) : undefined}
             secondMin={secondMin}
             ownPercent={ownPercent}
           />
@@ -1235,7 +1219,7 @@ function RunSummary({
   runs,
   details,
   nextLabel,
-  nextFileName = null,
+  onNext,
   secondMin = null,
   ownPercent = null,
 }: {
@@ -1243,7 +1227,7 @@ function RunSummary({
   runs: RunState[];
   details: RunDetails;
   nextLabel: string;
-  nextFileName?: string | null;
+  onNext?: () => void;
   secondMin?: {
     recommended: number;
     picked: number | null;
@@ -1276,14 +1260,31 @@ function RunSummary({
           )}
         </div>
       </div>
-      <div id="next-run-change" className="px-4 py-3">
-        <h2 className="text-xs font-medium tracking-[0.14em] text-muted-foreground uppercase">Next run's change</h2>
-        <p className="mt-1 text-base font-semibold text-foreground">{nextLabel}</p>
-        {nextFileName ? <NextFileNameLine name={nextFileName} /> : null}
-        {secondMin ? (
-          <SecondPercentChoice recommended={secondMin.recommended} picked={secondMin.picked} onPick={secondMin.onPick} />
+      <div className="flex h-full flex-col">
+        {onNext ? (
+          <button
+            type="button"
+            id="next-run-change"
+            className="flex min-h-full w-full flex-1 cursor-pointer flex-col items-start gap-1 border-0 bg-[#0f6b56] px-4 py-3 text-left text-[#f7fffb] hover:bg-[#0c5948]"
+            onClick={onNext}
+          >
+            <span className="text-xs font-medium tracking-[0.14em] uppercase">Next run</span>
+            <span className="text-base font-semibold">{nextLabel}</span>
+          </button>
+        ) : (
+          <div id="next-run-change" className="px-4 py-3">
+            <h2 className="text-xs font-medium tracking-[0.14em] text-muted-foreground uppercase">Next run's change</h2>
+            <p className="mt-1 text-base font-medium text-foreground">{nextLabel}</p>
+          </div>
+        )}
+        {secondMin || ownPercent ? (
+          <div className="px-4 py-3">
+            {secondMin ? (
+              <SecondPercentChoice recommended={secondMin.recommended} picked={secondMin.picked} onPick={secondMin.onPick} />
+            ) : null}
+            {ownPercent ? <PickOwnPercent picked={ownPercent.picked} onPick={ownPercent.onPick} /> : null}
+          </div>
         ) : null}
-        {ownPercent ? <PickOwnPercent picked={ownPercent.picked} onPick={ownPercent.onPick} /> : null}
       </div>
     </section>
   );
@@ -1652,7 +1653,7 @@ function toSelectivityRun(run: RunState, index: number, details: RunDetails): Se
 
 function nextRunCaption(runNumber: number, next: RunState): string {
   const bits = [
-    next.temperature.trim() ? `${next.temperature}°C` : "",
+    shownTemperature(next.temperature),
     next.percentB.trim() ? `${next.percentB}% B` : "",
     next.solvent.trim(),
     next.ligand.trim(),
@@ -1661,9 +1662,15 @@ function nextRunCaption(runNumber: number, next: RunState): string {
   return `Run ${runNumber} opens with ${bits.join(", ")} filled in.`;
 }
 
+function shownTemperature(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  return degreeWords(trimmed);
+}
+
 function runSettingLine(run: RunState): string {
   return [
-    run.temperature.trim() ? `${run.temperature}°C` : "",
+    shownTemperature(run.temperature),
     run.percentB.trim() ? `${run.percentB}% B` : "",
     run.solvent.trim(),
     run.ligand.trim(),

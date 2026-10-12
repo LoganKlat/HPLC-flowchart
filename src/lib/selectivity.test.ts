@@ -4,6 +4,8 @@ import { describe, expect, it } from "vitest";
 import { evaluateRun, resolutionForDecision } from "@/lib/evaluate";
 import { readLabFile } from "@/lib/lab-file";
 import { selectivityChangeLabel } from "@/lib/change-label";
+import { nextRunFileName } from "@/lib/filename-details";
+import { emptyRunDetails } from "@/lib/run-details";
 import { carryForwardIndex, decideRetention, formatPercentB } from "@/lib/retention";
 import {
   adjustedPercentB,
@@ -498,15 +500,16 @@ describe("selectivity plan", () => {
     expect(history.plan.step).toBe("ligand");
     expect(history.plan.prefill).toMatchObject({
       percentB: "100",
-      temperature: "25",
+      temperature: "ambient",
       solvent: "ACN",
       ligand: "",
     });
-    expect(history.plan.nextChange).toContain("100% B");
-    expect(history.plan.nextChange).toContain("ACN");
+    expect(history.plan.nextChange).toContain("100% B, ambient, and ACN");
+    expect(history.plan.nextChange).not.toContain("25°C");
     expect(history.plan.nextChange).not.toContain("MeOH");
     expect(history.plan.why).toContain("The previous solvent is not carried forward.");
-    expect(history.plan.why).toContain("The temperature box on Run 1 is empty, so 25°C is used as the starting temperature.");
+    expect(history.plan.why).toContain("The temperature on Run 1 is ambient.");
+    expect(history.plan.why).not.toContain("25°C");
   });
 
   it("says every coating was already used and does not invent another", () => {
@@ -715,19 +718,40 @@ describe("selectivity plan", () => {
     expect(history.phase).toBe("selectivity");
     if (history.phase !== "selectivity") return;
     expect(history.plan.step).toBe("solvent");
-    expect(selectivityChangeLabel(history.plan)).toBe("Change solvent, back at 25°C");
+    expect(selectivityChangeLabel(history.plan)).toBe("Change solvent, back at ambient");
     expect(selectivityChangeLabel(history.plan)).not.toBe("Run at 60% B");
-    expect(history.plan.nextChange).toBe("Change solvent, back at 25°C.");
+    expect(history.plan.nextChange).toBe("Change solvent, back at ambient.");
     expect(history.plan.anchorPercentB).toBe(35);
     expect(history.plan.recommendedSolventId).toBeNull();
     expect(history.plan.showSolventChoices).toBe(true);
-    expect(history.plan.why).toContain("blank, so 25°C is used");
+    expect(history.plan.why).toContain("go back to ambient");
+    expect(history.plan.why).toContain("is ambient");
+    expect(history.plan.why).not.toContain("25°C");
     expect(history.plan.why).toContain("retention minimum of 35% B");
     expect(history.plan.why).toContain("ACN, MeOH, THF, Ethanol, IPA, Acetone, Propanol, or Butanol");
     expect(history.plan.why).not.toContain("40°C");
     expect(history.plan.why).not.toContain("60%");
     expect(history.plan.why.toLowerCase()).not.toContain("intermediate");
-    expect(history.plan.prefill).toMatchObject({ temperature: "25", solvent: "", percentB: "" });
+    expect(history.plan.prefill).toMatchObject({ temperature: "ambient", solvent: "", percentB: "" });
+    const suggested = nextRunFileName("GR41-03-5-ACN-3-ISO-60-1.5-20u-CP-0.1-C18-150x4.6x5-T60-254.csv", {
+      ...emptyRunDetails(),
+      solvent: "MeOH",
+      ph: "3",
+      method: "ISO",
+      percentB: "44.1",
+      flowRate: "1.5",
+      injectionVolume: "20",
+      sampleType: "CP",
+      sampleConcentration: "0.1",
+      ligand: "C18",
+      lengthMm: "150",
+      diameterMm: "4.6",
+      particleSize: "5",
+      temperature: history.plan.prefill?.temperature ?? "",
+      wavelength: "254",
+    });
+    expect(suggested).toContain("-amb-");
+    expect(suggested).not.toContain("T25");
 
     const matched = solventNomograph(35, "ACN")?.find((row) => row.id === "methanol");
     expect(matched).toBeTruthy();
@@ -776,15 +800,73 @@ describe("selectivity plan", () => {
     });
   });
 
-  it("uses 25°C when Run 1 has no temperature", () => {
+  it("keeps an ambient Run 1 as ambient instead of 25°C", () => {
     const history = withHeat([run({ peakCount: 4, temperatureC: null, minResolutionExcludingFirst: 0.4 })], {
       ...setup,
       ambientTemperatureC: null,
     });
     expect(history.phase).toBe("selectivity");
     if (history.phase !== "selectivity") return;
-    expect(history.plan.why).toContain("empty");
-    expect(history.plan.why).toContain("25°C");
+    expect(history.plan.why).toContain("The temperature on Run 1 is ambient.");
+    expect(history.plan.why).not.toContain("25°C");
+  });
+
+  it("returns to a typed retention temperature when changing solvent", () => {
+    const rules: SelectivitySetup = { ...setup, ambientTemperatureC: 30, lastPeakTimeMin: 15 };
+    const cold = run({
+      percentB: 35,
+      temperatureC: 30,
+      peakCount: 6,
+      minResolutionExcludingFirst: 0.4,
+      lastPeakTimeMin: 12,
+    });
+    const at40 = run({
+      percentB: 35,
+      temperatureC: 40,
+      peakCount: 6,
+      minResolutionExcludingFirst: 0.4,
+      lastPeakTimeMin: 8,
+    });
+    const at60 = run({
+      percentB: 60,
+      temperatureC: 60,
+      peakCount: 6,
+      minResolutionExcludingFirst: 0.3,
+      lastPeakTimeMin: 6,
+    });
+    const history = planHistory([cold, at40, at60], rules);
+    expect(history.phase).toBe("selectivity");
+    if (history.phase !== "selectivity") return;
+    expect(history.plan.step).toBe("solvent");
+    expect(selectivityChangeLabel(history.plan)).toBe("Change solvent, back at 30°C");
+    expect(history.plan.nextChange).toBe("Change solvent, back at 30°C.");
+    expect(history.plan.why).toContain("go back to 30°C");
+    expect(history.plan.why).toContain("30°C");
+    expect(history.plan.prefill).toMatchObject({ temperature: "30", solvent: "", percentB: "" });
+    const suggested = nextRunFileName("GR41-03-5-ACN-3-ISO-60-1.5-20u-CP-0.1-C18-150x4.6x5-T60-254.csv", {
+      ...emptyRunDetails(),
+      solvent: "MeOH",
+      percentB: "44.1",
+      temperature: history.plan.prefill?.temperature ?? "",
+    });
+    expect(suggested).toContain("-T30-");
+  });
+
+  it("uses Run 1 when the carried run has no temperature number", () => {
+    const rules: SelectivitySetup = { ...setup, ambientTemperatureC: 30, lastPeakTimeMin: 15 };
+    const history = planHistory(
+      [
+        run({ percentB: 35, temperatureC: null, peakCount: 6, minResolutionExcludingFirst: 0.4, lastPeakTimeMin: 12 }),
+        run({ percentB: 35, temperatureC: 40, peakCount: 6, minResolutionExcludingFirst: 0.4, lastPeakTimeMin: 8 }),
+        run({ percentB: 60, temperatureC: 60, peakCount: 6, minResolutionExcludingFirst: 0.3, lastPeakTimeMin: 6 }),
+      ],
+      rules,
+    );
+    expect(history.phase).toBe("selectivity");
+    if (history.phase !== "selectivity") return;
+    expect(history.plan.step).toBe("solvent");
+    expect(history.plan.prefill).toMatchObject({ temperature: "30" });
+    expect(history.plan.nextChange).toBe("Change solvent, back at 30°C.");
   });
 
   it("starts selectivity at the typed %B after staying in retention", () => {

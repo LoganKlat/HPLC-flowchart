@@ -47,6 +47,18 @@ describe("next change wording", () => {
         { solvent: "MeOH" },
       ),
     ).toBe("Change solvent, back at 25°C");
+    expect(
+      selectivityChangeLabel({ ...plan, prefill: { percentB: "", temperature: "ambient", solvent: "", ligand: "" } }),
+    ).toBe("Change solvent, back at ambient");
+    expect(
+      selectivityChangeLabel({ ...plan, prefill: { percentB: "", temperature: "amb", solvent: "", ligand: "" } }),
+    ).toBe("Change solvent, back at ambient");
+    expect(
+      selectivityChangeLabel({ ...plan, prefill: { percentB: "", temperature: "", solvent: "", ligand: "" } }),
+    ).toBe("Change solvent, back at ambient");
+    expect(
+      selectivityChangeLabel({ ...plan, prefill: { percentB: "", temperature: "30", solvent: "", ligand: "" } }),
+    ).toBe("Change solvent, back at 30°C");
     expect(selectivityChangeLabel({ ...plan, step: "ligand" }, { ligand: "C8" })).toBe("Run with C8");
     expect(selectivityChangeLabel({ ...plan, step: "temp-40" })).toBe("Run at 40°C");
   });
