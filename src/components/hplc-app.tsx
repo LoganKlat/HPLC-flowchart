@@ -53,7 +53,6 @@ import { methodStageFromLatest, type MethodStage } from "@/lib/method-stage";
 
 import { DECISION_EXAMPLE_FILES, EXAMPLE_RULES } from "@/lib/decision-example";
 
-import { duplicateRunIndex } from "@/lib/duplicate-run";
 import { readLabFileAsync } from "@/lib/read-lab-file-async";
 
 type RestKey = Exclude<keyof RunDetails, "percentB" | "temperature" | "solvent" | "ligand">;
@@ -1201,7 +1200,6 @@ function RunPane({
   const nextLabel = next?.status === "ready"
     ? `Review Run ${index + 2}: ${runSettingLine(next)}`
     : recommendedNextLabel;
-  const duplicateIndex = duplicateRunIndex(run.read, runs.slice(0, index).map(item => item.read));
   const canOpenNext = Boolean(next) && !ask && !leftSelectivity;
   const currentLigand = (index === 0 ? details.ligand : run.ligand.trim() || details.ligand).trim();
   const nextLocked =
@@ -1308,13 +1306,6 @@ function RunPane({
         >
         {run.status === "ready" && run.read && rows && run.fileName ? (
           <>
-            {duplicateIndex != null ? (
-              <p className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950" role="status">
-                This export has identical detector, pressure, and peak-table data to Run {duplicateIndex + 1}.
-                Check that the correct export was uploaded, especially if the run conditions changed.
-                Treat these as duplicate data until verified.
-              </p>
-            ) : null}
             <ResultsPanel
               fileName={run.fileName}
               onRemove={() => onRemove(index)}
