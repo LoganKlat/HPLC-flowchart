@@ -28,6 +28,20 @@ describe("next change wording", () => {
     expect(retentionChangeLabel(retention({ nextPercentB: 80 }), 40)).toBe("Run at 40% B");
   });
 
+  it("names efficiency when peaks already match the specification", () => {
+    expect(
+      retentionChangeLabel(
+        retention({
+          status: "efficiency",
+          reason: "efficiency",
+          move: null,
+          nextPercentB: null,
+          nextChange: "Move on to efficiency. This is recommended because the peak count equals the specification.",
+        }),
+      ),
+    ).toBe("Move on to efficiency");
+  });
+
   it("names temperature, solvent, and ligand the same way", () => {
     expect(retentionChangeLabel(retention({ nextTemperature: "40", nextPercentB: 60 }))).toBe("Run at 40°C");
     expect(

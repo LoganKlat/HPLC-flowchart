@@ -207,7 +207,7 @@ describe("selectivity checks", () => {
     })).toBeNull();
   });
 
-  it("recommends Run at 40°C when the peak count matches and resolution is under the specification", () => {
+  it("moves on to efficiency when the peak count matches and resolution is under the specification", () => {
     const ambient = readLabFile(readFileSync(path.join(process.cwd(), "fixtures/selectivity/GR41-09-40-ambient.csv")));
     expect(ambient.peakCount).toBe(7);
     expect(ambient.minResolutionExcludingFirst).toBeCloseTo(0.324, 3);
@@ -232,20 +232,21 @@ describe("selectivity checks", () => {
       originalLigand: "C18",
     };
     const decision = decideRetention([sample], rules);
-    expect(decision.status).not.toBe("ask");
+    expect(decision.status).toBe("efficiency");
+    expect(decision.reason).toBe("efficiency");
+    expect(decision.nextChange).toContain("Move on to efficiency");
+    expect(decision.efficiencyChoice?.recommendedSentence).toContain("peak count equals the specification");
+    expect(decision.why).toContain("Peaks: 7. The specification is 7. Met.");
+    expect(decision.why).toContain("Minimum resolution: 0.324. Under the specification of 1.000.");
+    expect(decision.why).toContain("Efficiency is next for the resolution.");
     expect(decision.efficiencyNow ?? null).toBeNull();
+    expect(decision.nextPercentB).toBeNull();
     const history = planHistory([sample], rules);
-    expect(history.phase).toBe("selectivity");
-    if (history.phase !== "selectivity") return;
-    expect(history.plan.step).toBe("temp-40");
-    expect(selectivityChangeLabel(history.plan)).toBe("Run at 40°C");
-    expect(history.plan.why).toContain("The peaks are there and the worst pair is still under the specification.");
-    expect(history.plan.why).toContain("Peaks: 7. The specification is 7.");
-    expect(history.plan.why.split("Peaks:").length - 1).toBe(1);
-    expect(history.plan.why.split("Minimum resolution:").length - 1).toBe(1);
-    expect(history.plan.why).not.toMatch(/then 60/i);
-    expect(history.plan.why.toLowerCase()).not.toContain("coating");
-    expect(history.plan.why.toLowerCase()).not.toContain("other solvent");
+    expect(history.phase).toBe("retention");
+    const continued = planHistory([sample], rules, { continuePastEfficiency: true });
+    expect(continued.phase).toBe("selectivity");
+    if (continued.phase !== "selectivity") return;
+    expect(continued.plan.step).toBe("temp-40");
   });
 
   it("does not ask just because a short run has 7 peaks", () => {
@@ -677,7 +678,8 @@ describe("selectivity plan", () => {
       run({ ...coating, percentB: 100, peakCount: 4, lastPeakTimeMin: 1.5 }),
       run({ ...coating, percentB: 90, peakCount: 5, lastPeakTimeMin: 2.2 }),
       run({ ...coating, percentB: 80, peakCount: 6, lastPeakTimeMin: 3.4 }),
-      run({ ...coating, percentB: 70, peakCount: 8, lastPeakTimeMin: 7.4, minResolutionExcludingFirst: 0.4 }),
+      // Keep peaks under the specification so this coating still calculates a minimum %B.
+      run({ ...coating, percentB: 70, peakCount: 7, lastPeakTimeMin: 7.4, minResolutionExcludingFirst: 0.4 }),
     ];
     const history = planHistory(runs, setup);
     expect(history.phase).toBe("retention");

@@ -374,37 +374,43 @@ describe("retention stops and keeps going", () => {
     expect(decision.move).not.toBe("drop-10");
   });
 
-  it("does not keep dropping 10 points when the peak count matches and resolution is still under", () => {
+  it("moves on to efficiency when the peak count matches and resolution is still under", () => {
     expect(reads[1].minResolutionExcludingFirst!).toBeCloseTo(0.625, 3);
     expect(reads[2].minResolutionExcludingFirst!).toBeGreaterThan(reads[1].minResolutionExcludingFirst!);
     const decision = decideRetention(
       [sampleFromRead(60, reads[1]), sampleFromRead(50, reads[2])],
       { requiredPeaks: 6, lastPeakTimeMin: 10, minResolution: 2, maxBackPressurePsi: 2000 },
     );
-    expect(decision.status).not.toBe("ask");
+    expect(decision.status).toBe("efficiency");
+    expect(decision.reason).toBe("efficiency");
+    expect(decision.nextChange).toContain("Move on to efficiency");
     expect(decision.efficiencyNow ?? null).toBeNull();
     expect(decision.move).not.toBe("drop-10");
+    expect(decision.nextPercentB).toBeNull();
+    expect(decision.why).toContain("Efficiency is next for the resolution.");
+    expect(retentionChangeLabel(decision)).toBe("Move on to efficiency");
+    const rules = {
+      requiredPeaks: 6,
+      lastPeakTimeMin: 10,
+      minResolution: 2,
+      maxBackPressurePsi: 2000,
+      ambientTemperatureC: 25,
+      originalSolvent: "ACN",
+      originalLigand: "C18",
+    };
     const history = planHistory(
-      [
-        selectivityRun(60, reads[1]),
-        selectivityRun(50, reads[2]),
-      ],
-      {
-        requiredPeaks: 6,
-        lastPeakTimeMin: 10,
-        minResolution: 2,
-        maxBackPressurePsi: 2000,
-        ambientTemperatureC: 25,
-        originalSolvent: "ACN",
-        originalLigand: "C18",
-      },
+      [selectivityRun(60, reads[1]), selectivityRun(50, reads[2])],
+      rules,
     );
-    expect(history.phase).toBe("selectivity");
-    if (history.phase !== "selectivity") return;
-    expect(history.plan.step).toBe("temp-40");
-    expect(history.plan.why).not.toMatch(/then 60/i);
-    expect(history.plan.why.toLowerCase()).not.toContain("coating");
-    expect(history.plan.why.toLowerCase()).not.toContain("other solvent");
+    expect(history.phase).toBe("retention");
+    const continued = planHistory(
+      [selectivityRun(60, reads[1]), selectivityRun(50, reads[2])],
+      rules,
+      { continuePastEfficiency: true },
+    );
+    expect(continued.phase).toBe("selectivity");
+    if (continued.phase !== "selectivity") return;
+    expect(continued.plan.step).toBe("temp-40");
   });
 
   it("does not keep going just because resolution rose after the peak count matches", () => {
@@ -1007,6 +1013,8 @@ describe("which run to carry forward after the calculated %B", () => {
     minResolution: 1.4,
     maxBackPressurePsi: 4000,
   };
+  // Ask for 8 peaks so the 7-peak 40% file still calculates a minimum %B.
+  const shortRules: RetentionRules = { ...rules, requiredPeaks: 8 };
   const seriesFiles = [
     { percentB: 90, name: "GR41-04-90.csv" },
     { percentB: 70, name: "GR41-06-70-good.csv" },
@@ -1020,13 +1028,14 @@ describe("which run to carry forward after the calculated %B", () => {
   const read40 = readLabFile(readFileSync(path.join(fixtureDir, "GR41-09-40-good.csv")));
   const read37 = readLabFile(readFileSync(path.join(fixtureDir, "GR41-10-37.csv")));
 
-  it("uses the real 37% and 40% times, and carries forward the 40% run", () => {
+  it("uses the real 37% and 40% times, and moves on to efficiency once peaks match", () => {
     expect(read37.lastPeakTimeMin).toBeCloseTo(1.602, 3);
     expect(read37.minResolutionExcludingFirst).toBeCloseTo(0, 3);
     expect(read40.lastPeakTimeMin).toBeCloseTo(11.593, 3);
     expect(read40.minResolutionExcludingFirst).toBeCloseTo(0.324, 3);
     expect(read40.lastPeakTimeMin!).toBeLessThanOrEqual(15);
     expect(read40.minResolutionExcludingFirst!).toBeGreaterThan(read37.minResolutionExcludingFirst!);
+    expect(read40.peakCount).toBe(7);
 
     const check = {
       requiredPeaks: 7,
@@ -1042,13 +1051,22 @@ describe("which run to carry forward after the calculated %B", () => {
     expect(past.find((row) => row.id === "last-peak")?.measured).toBe("18.258 min");
     expect(past.find((row) => row.id === "last-peak")?.status).toBe("not-met");
 
-    const calculated = decideRetention(series, rules);
+    // With 7 peaks required, the 40% file already matches — efficiency, not another %B.
+    const matched = decideRetention(series, rules);
+    expect(matched.status).toBe("efficiency");
+    expect(matched.nextPercentB).toBeNull();
+    expect(matched.nextChange).toContain("Move on to efficiency");
+    expect(retentionChangeLabel(matched)).toBe("Move on to efficiency");
+    expect(matched.why).toContain("Peaks: 7. The specification is 7. Met.");
+    expect(matched.why).toContain("Efficiency is next for the resolution.");
+
+    // With peaks still short, the same series still calculates a minimum %B.
+    const calculated = decideRetention(series, shortRules);
     expect(calculated.move).toBe("calculated");
     expect(calculated.nextPercentB).toBe(36);
-    expect(calculated.nextPercentB).not.toBeNull();
     const followed = decideRetention(
       [...series, sampleFromRead(calculated.nextPercentB!, read37)],
-      rules,
+      shortRules,
     );
     expect(followed.status).toBe("recommend");
     expect(followed.reason).toBe("choose-percent");
@@ -1088,7 +1106,7 @@ describe("which run to carry forward after the calculated %B", () => {
   });
 
   it("still recommends a second minimum when the recommended file's last peak is past the time", () => {
-    const calculated = decideRetention(series, rules);
+    const calculated = decideRetention(series, shortRules);
     expect(calculated.nextPercentB).toBe(36);
     const followed = decideRetention(
       [
@@ -1100,7 +1118,7 @@ describe("which run to carry forward after the calculated %B", () => {
           minResolutionExcludingFirst: 2,
         },
       ],
-      rules,
+      shortRules,
     );
     expect(followed.reason).toBe("choose-percent");
     expect(followed.move).toBeNull();

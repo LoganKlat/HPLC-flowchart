@@ -9,6 +9,9 @@ export function retentionChangeLabel(
   decision: RetentionDecision,
   percentB?: number | null,
 ): string {
+  if (decision.status === "efficiency" || decision.reason === "efficiency") {
+    return "Move on to efficiency";
+  }
   if (decision.reason === "second-minimum" || decision.reason === "choose-percent") {
     const percent = percentB ?? decision.nextPercentB;
     if (percent != null) return `Run at 40°C at ${formatPercentB(percent)}% B`;

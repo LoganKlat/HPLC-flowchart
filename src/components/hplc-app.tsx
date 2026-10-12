@@ -1383,7 +1383,10 @@ function describeNextChange(input: {
       ? "Retention and selectivity are finished. Efficiency is next. That stage is not built yet."
       : "Selectivity is finished. Efficiency is next. That stage is not built yet.";
   }
-  if (input.asking || input.choosingEfficiency) return NO_CHANGE_YET;
+  if (input.asking) return NO_CHANGE_YET;
+  if (input.choosingEfficiency && input.retention) {
+    return retentionChangeLabel(input.retention);
+  }
   if (input.looking && input.retention) return input.retention.nextChange;
   if (input.retention) {
     return retentionChangeLabel(

@@ -40,4 +40,15 @@ describe("method development stage", () => {
     ).toBe("Efficiency");
     expect(methodStageFromLatest({ leftSelectivity: true, phase: "selectivity" })).toBe("Efficiency");
   });
+
+  it("shows Efficiency when peaks already match and the engine leaves retention", () => {
+    expect(
+      methodStageFromLatest({
+        leftSelectivity: false,
+        phase: "retention",
+        retentionStatus: "efficiency",
+        retentionReason: "efficiency",
+      }),
+    ).toBe("Efficiency");
+  });
 });

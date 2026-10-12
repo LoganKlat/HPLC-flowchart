@@ -471,11 +471,11 @@ function equalPeakCount(
 ): RetentionDecision {
   const current = samples[samples.length - 1];
   const judged = judgeEqualPeaks(current, rules);
+  // Peaks already match the specification: leave retention. Specs-met stops
+  // everything; otherwise efficiency is next (not another %B, not selectivity).
   if (judged.resolutionMeets && !judged.timeLate) return specsMet(current, rules, judged);
   if (choice?.continueRetention) return chooseOwnPercentDecision(current, rules);
-  if (judged.timeLate && judged.resolutionPositive) return efficiencyStop(current, rules, judged);
-  if (judged.timeLate) return holdLate(current, rules, judged);
-  return minimumPercentOnce(samples, rules, choice);
+  return efficiencyStop(current, rules, judged);
 }
 
 type EqualJudgment = {
@@ -562,50 +562,6 @@ function efficiencyStop(
     },
     continueShowsLook,
   };
-}
-
-function holdLate(sample: RetentionSample, rules: CompleteRules, judged: EqualJudgment): RetentionDecision {
-  return {
-    status: "blocked",
-    reason: "efficiency",
-    move: null,
-    nextPercentB: null,
-    nextChange: "Do not change %B, temperature, solvent, or the column.",
-    why: [
-      ...ruleLines(sample, rules, judged),
-      "The minimum resolution is not above 0, so the peaks are not really separated. The last peak is later than the specification, so the run is already too long. Lowering %B would hold the compounds even longer. This run stays here.",
-    ].join("\n\n"),
-    fit: null,
-  };
-}
-
-function minimumPercentOnce(
-  samples: RetentionSample[],
-  rules: CompleteRules,
-  _choice: RetentionChoice | undefined,
-): RetentionDecision {
-  const current = samples[samples.length - 1];
-  const calculated = calculatePercentB(samples, rules, "equal");
-  const unusable =
-    calculated.move === "drop-5" || calculated.reason === "fit-unavailable" || calculated.nextPercentB == null;
-  let decision: RetentionDecision;
-  if (unusable) {
-    decision = {
-      status: "blocked",
-      reason: "cannot-calculate",
-      move: null,
-      nextPercentB: null,
-      nextChange: "The minimum %B cannot be calculated yet. Do not change %B, temperature, solvent, or the column.",
-      why: [
-        ...ruleLines(current, rules, judgeEqualPeaks(current, rules)),
-        "There are not enough runs to calculate the minimum %B. The peak count matches the specification, so %B is not dropped by 10%. The next %B has to come from more than one chromatogram, and this series does not have enough usable runs yet. Lowering %B would raise retention. That is not the next step until more runs can show the %B for the specified time.",
-      ].join("\n\n"),
-      fit: null,
-    };
-  } else {
-    decision = calculated;
-  }
-  return decision;
 }
 
 function ruleLines(sample: RetentionSample, rules: CompleteRules, judged: EqualJudgment): string[] {
@@ -864,19 +820,12 @@ function resolutionChangeSentence(previous: number | null, current: number | nul
   return `Minimum resolution went from ${formatResolution(previous)} to ${formatResolution(current)}.`;
 }
 
-function calculatePercentB(
-  samples: RetentionSample[],
-  rules: CompleteRules,
-  mode: "ladder" | "equal" = "ladder",
-): RetentionDecision {
+function calculatePercentB(samples: RetentionSample[], rules: CompleteRules): RetentionDecision {
   const current = samples[samples.length - 1];
-  const intro =
-    mode === "equal"
-      ? equalIntro(samples, rules)
-      : [
-          ...situationSentences(samples, rules),
-          closeToSpecSentence(current.lastPeakTimeMin!, rules.lastPeakTimeMin),
-        ];
+  const intro = [
+    ...situationSentences(samples, rules),
+    closeToSpecSentence(current.lastPeakTimeMin!, rules.lastPeakTimeMin),
+  ];
 
   if (!isBelow(current.lastPeakTimeMin!, rules.lastPeakTimeMin)) {
     intro.push(
@@ -1062,41 +1011,6 @@ function situationSentences(samples: RetentionSample[], rules: CompleteRules): s
   return lines;
 }
 
-function equalIntro(samples: RetentionSample[], rules: CompleteRules): string[] {
-  const current = samples[samples.length - 1];
-  const judged = judgeEqualPeaks(current, rules);
-  const lines = ruleLines(current, rules, judged);
-  const line = retentionLine(rules.lastPeakTimeMin);
-  if (!isBelow(current.lastPeakTimeMin!, line)) {
-    lines.push(
-      closeToSpecSentence(current.lastPeakTimeMin!, rules.lastPeakTimeMin),
-    );
-  } else {
-    lines.push(
-      "The peak count matches the specification, so %B is not lowered by 10%. The peaks are there. The next %B is calculated for the specified run time. That calculation sets retention so the last peak lands on the specified time. It does not change selectivity or efficiency.",
-    );
-  }
-  return lines;
-}
-
-function resolutionStopWhy(samples: RetentionSample[], rules: CompleteRules): string {
-  const current = samples[samples.length - 1];
-  const previous = samples[samples.length - 2];
-  const previousResolution = usableResolution(previous, rules.requiredPeaks);
-  const currentResolution = usableResolution(current, rules.requiredPeaks);
-  const peakText = `This run already has ${formatCount(current.peakCount!)} peaks, which meets the specification of ${formatCount(rules.requiredPeaks)}.`;
-
-  if (previousResolution == null && currentResolution == null) {
-    return `${peakText} The previous run had no usable resolution, and this run does not have one either, so resolution did not go up.`;
-  }
-  if (previousResolution != null && currentResolution == null) {
-    return `${peakText} Minimum resolution on the previous run was ${formatResolution(previousResolution)}. This run does not have a resolution number, so it is not higher.`;
-  }
-  if (previousResolution == null || currentResolution == null) {
-    return `${peakText} Minimum resolution did not go up from the previous run.`;
-  }
-  return `${peakText} Minimum resolution is ${formatResolution(currentResolution)}, which is not higher than ${formatResolution(previousResolution)} on the previous run.`;
-}
 
 function fitMembershipSentence(
   samples: RetentionSample[],

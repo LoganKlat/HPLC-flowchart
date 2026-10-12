@@ -82,9 +82,9 @@ export function AboutPanel() {
             mg/mL reference injection.
           </p>
           <p>
-            If the expected peak count is reached and resolution is above zero, choose either to proceed to efficiency
-            (not yet available) or to continue selectivity. A long runtime does not prevent this choice. When all four
-            specifications pass, the page reports success.
+            Once the peak count matches the specification, the page moves on to efficiency (not yet available). You can
+            still choose selectivity instead. Low resolution does not keep the page in retention or send it to
+            selectivity by itself. When all four specifications pass, the page reports success.
           </p>
         </GuideSection>
 

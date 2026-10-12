@@ -497,9 +497,9 @@ export function planHistory(
   if (restartAt > 0 && coatingStillInRetention(runs.slice(restartAt))) {
     return { phase: "retention", segmentStart: restartAt };
   }
-  const latest = runs[runs.length - 1];
-  const autoShort = latest != null && resolutionStillShort(latest, setup);
-  const continuePast = options?.continuePastEfficiency === true || autoShort;
+  // Peaks matching the specification stay in retention (efficiency next). Do not
+  // auto-jump to selectivity just because resolution is still short.
+  const continuePast = options?.continuePastEfficiency === true;
 
   let start = 0;
   let forced: { finishedOffset: number; carryIndex: number } | null = null;
@@ -515,10 +515,6 @@ export function planHistory(
   ) {
     forced = { finishedOffset: heat.seriesLength - 1, carryIndex: heat.carryIndex };
     explicitHeat = true;
-  }
-  if (!forced && autoShort) {
-    const anchor = selectivityAnchor(runs, setup);
-    if (anchor >= 0) forced = { finishedOffset: anchor, carryIndex: anchor };
   }
   while (start < runs.length) {
     const segment = runs.slice(start);
@@ -629,38 +625,6 @@ function peaksMatchSpec(run: SelectivityRun | undefined, setup: SelectivitySetup
     run.peakCount != null &&
     run.peakCount === setup.requiredPeaks
   );
-}
-
-/** Where selectivity starts. Extra %B runs at the same temperature stay in front of the 40°C step. */
-function selectivityAnchor(runs: SelectivityRun[], setup: SelectivitySetup): number {
-  const first = runs.findIndex((run) => resolutionStillShort(run, setup));
-  if (first < 0) return -1;
-  const changed = runs.slice(first + 1).some((run, offset) => selectivityConditionsChanged(runs[first + offset], run));
-  return changed ? first : runs.length - 1;
-}
-
-function selectivityConditionsChanged(previous: SelectivityRun, next: SelectivityRun): boolean {
-  if (
-    previous.temperatureC != null &&
-    next.temperatureC != null &&
-    Math.abs(next.temperatureC - previous.temperatureC) > 0.5
-  ) {
-    return true;
-  }
-  if ((previous.solvent || "").trim().toLowerCase() !== (next.solvent || "").trim().toLowerCase()) return true;
-  if ((previous.ligand || "").trim().toLowerCase() !== (next.ligand || "").trim().toLowerCase()) return true;
-  return false;
-}
-
-/** Peaks match and the worst pair is still under the specification, with the last peak still inside the set time. */
-function resolutionStillShort(run: SelectivityRun, setup: SelectivitySetup): boolean {
-  if (!peaksMatchSpec(run, setup)) return false;
-  if (setup.minResolution == null || !(setup.minResolution > 0)) return false;
-  if (setup.lastPeakTimeMin != null && run.lastPeakTimeMin != null && isLater(run.lastPeakTimeMin, setup.lastPeakTimeMin)) {
-    return false;
-  }
-  const resolution = resolutionForDecision(run.peakCount, run.minResolutionExcludingFirst, setup.requiredPeaks);
-  return resolution == null || !Number.isFinite(resolution) || resolution + 1e-9 < setup.minResolution;
 }
 
 type WalkResult = { kind: "plan"; plan: SelectivityPlan } | { kind: "restart"; ligandRunOffset: number };
