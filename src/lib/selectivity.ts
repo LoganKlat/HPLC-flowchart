@@ -491,6 +491,12 @@ export function planHistory(
   const ligands = options?.ligands ?? LIGANDS;
   const tried: string[] = [];
   if (setup.originalLigand.trim()) tried.push(setup.originalLigand);
+  const restartAt = lastLigandChangeIndex(runs);
+  // A new coating starts retention over. The previous cycle's minimum and the
+  // "peaks match, so heat" shortcut must not skip this coating's own minimum.
+  if (restartAt > 0 && coatingStillInRetention(runs.slice(restartAt))) {
+    return { phase: "retention", segmentStart: restartAt };
+  }
   const latest = runs[runs.length - 1];
   const autoShort = latest != null && resolutionStillShort(latest, setup);
   const continuePast = options?.continuePastEfficiency === true || autoShort;
@@ -581,24 +587,13 @@ export function planHistory(
     const restart = later[outcome.ligandRunOffset];
     if (restart?.ligand.trim()) tried.push(restart.ligand);
     const nextStart = start + finishedOffset + 1 + outcome.ligandRunOffset;
-    const nextSegment = runs.slice(nextStart);
-    const first = nextSegment[0];
-    const second = nextSegment[1];
-    const looksLikeHeat =
-      first?.temperatureC != null &&
-      second?.temperatureC != null &&
-      second.temperatureC > first.temperatureC + 0.5;
-    if (
-      nextSegment.length > 1 &&
-      looksLikeHeat &&
-      (continuePast || !peaksMatchSpec(nextSegment[nextSegment.length - 1], setup))
-    ) {
-      forced = { finishedOffset: 0, carryIndex: 0 };
-      start = nextStart;
-      continue;
+    if (nextStart <= start || nextStart >= runs.length) {
+      return { phase: "retention", segmentStart: Math.min(nextStart, runs.length - 1) };
     }
-    if (continuePast) return heatLatest(runs, setup, tried, ligands);
-    return { phase: "retention", segmentStart: nextStart };
+    start = nextStart;
+    forced = null;
+    explicitHeat = false;
+    continue;
   }
   return { phase: "retention", segmentStart: start };
 }
@@ -1273,6 +1268,22 @@ function percentsOf(runs: SelectivityRun[]): number[] {
 
 function ligandKey(value: string): string {
   return value.trim().toLowerCase().replace(/[\s_-]+/g, "");
+}
+
+/** Index of the latest run whose coating differs from the run before it. */
+function lastLigandChangeIndex(runs: SelectivityRun[]): number {
+  let index = -1;
+  for (let i = 1; i < runs.length; i++) {
+    const next = ligandKey(runs[i].ligand);
+    if (!next || next === ligandKey(runs[i - 1].ligand)) continue;
+    index = i;
+  }
+  return index;
+}
+
+/** True until this coating has a 40°C or 60°C run. The %B ladder stays in retention. */
+function coatingStillInRetention(segment: SelectivityRun[]): boolean {
+  return !segment.some((run) => isForty(run) || isSixty(run));
 }
 
 function uniqueLabels(values: string[]): string {

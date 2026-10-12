@@ -664,6 +664,42 @@ describe("selectivity plan", () => {
     expect(history.plan.prefill).toMatchObject({ percentB: "100" });
   });
 
+  it("calculates a new minimum %B on the ligand restart ladder", () => {
+    const coating = { ligand: "C8", solvent: "ACN", temperatureC: 25 };
+    const runs = [
+      run({ percentB: 70, peakCount: 4, lastPeakTimeMin: 2.2 }),
+      run({ percentB: 40, peakCount: 4, lastPeakTimeMin: 11 }),
+      run({ percentB: 42, temperatureC: 40, peakCount: 4, lastPeakTimeMin: 6 }),
+      run({ percentB: 42, temperatureC: 60, peakCount: 4, lastPeakTimeMin: 5 }),
+      run({ percentB: 90, solvent: "MeOH", temperatureC: 25, peakCount: 4, lastPeakTimeMin: 3 }),
+      run({ percentB: 90, solvent: "MeOH", temperatureC: 40, peakCount: 4, lastPeakTimeMin: 6 }),
+      run({ percentB: 90, solvent: "MeOH", temperatureC: 60, peakCount: 4, lastPeakTimeMin: 5 }),
+      run({ ...coating, percentB: 100, peakCount: 4, lastPeakTimeMin: 1.5 }),
+      run({ ...coating, percentB: 90, peakCount: 5, lastPeakTimeMin: 2.2 }),
+      run({ ...coating, percentB: 80, peakCount: 6, lastPeakTimeMin: 3.4 }),
+      run({ ...coating, percentB: 70, peakCount: 8, lastPeakTimeMin: 7.4, minResolutionExcludingFirst: 0.4 }),
+    ];
+    const history = planHistory(runs, setup);
+    expect(history.phase).toBe("retention");
+    if (history.phase !== "retention") return;
+    expect(history.segmentStart).toBe(7);
+    const decision = decideRetention(
+      runs.slice(history.segmentStart).map((item) => ({
+        percentB: item.percentB,
+        peakCount: item.peakCount,
+        lastPeakTimeMin: item.lastPeakTimeMin,
+        firstPeakTimeMin: item.firstPeakTimeMin,
+        minResolutionExcludingFirst: item.minResolutionExcludingFirst,
+        maxBackPressurePsi: item.maxBackPressurePsi,
+      })),
+      setup,
+    );
+    expect(decision.move).toBe("calculated");
+    expect(decision.fit).not.toBeNull();
+    expect(decision.nextTemperature).toBeUndefined();
+    expect(decision.nextPercentB).not.toBeNull();
+  });
+
   it("continues selectivity at 40°C when that choice is taken before heat", () => {
     const rules = { ...setup, requiredPeaks: 8, lastPeakTimeMin: 10 };
     const runs = [run({ peakCount: 8, percentB: 35, minResolutionExcludingFirst: 1.2, lastPeakTimeMin: 14 })];
