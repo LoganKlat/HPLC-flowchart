@@ -72,3 +72,42 @@ export function nextRunLockedForSolvent(
   const percent = parseUserNumber(next.percentB);
   return percent == null || percent < 0 || percent > 100;
 }
+
+/**
+ * “Run with a new ligand” cannot advance until the next run’s coating is filled
+ * in and is not the coating already on this run. Other steps stay open.
+ */
+export function nextRunLockedForLigand(
+  plan: {
+    step: SelectivityPlan["step"];
+    status: SelectivityPlan["status"];
+    tempChoice?: { other?: "solvent" | "ligand" } | null;
+  } | null,
+  options: {
+    tempPath?: TempPath | null;
+    nextLigand?: string | null;
+    currentLigand?: string | null;
+  } | null,
+): boolean {
+  if (!plan || plan.status !== "recommend") return false;
+  if (!ligandStepNeedsPick(plan, options?.tempPath ?? null)) return false;
+  if (!options) return true;
+  return !isNewLigand(options.nextLigand ?? "", options.currentLigand ?? "");
+}
+
+function ligandStepNeedsPick(
+  plan: { step: SelectivityPlan["step"]; tempChoice?: { other?: "solvent" | "ligand" } | null },
+  tempPath: TempPath | null,
+): boolean {
+  if (plan.step === "ligand") return true;
+  if (plan.step !== "temp-choice") return false;
+  if (tempPath === "ligand") return true;
+  return tempPath == null && plan.tempChoice?.other === "ligand";
+}
+
+function isNewLigand(nextLigand: string, currentLigand: string): boolean {
+  const next = nextLigand.trim().toLowerCase();
+  if (!next) return false;
+  const current = currentLigand.trim().toLowerCase();
+  return !current || next !== current;
+}

@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { nextRunLockedForSolvent, NO_CHANGE_YET, retentionChangeLabel, selectivityChangeLabel } from "@/lib/change-label";
+import {
+  nextRunLockedForLigand,
+  nextRunLockedForSolvent,
+  NO_CHANGE_YET,
+  retentionChangeLabel,
+  selectivityChangeLabel,
+} from "@/lib/change-label";
 import type { RetentionDecision } from "@/lib/retention";
 import type { SelectivityPlan } from "@/lib/selectivity";
 
@@ -81,6 +87,37 @@ describe("next change wording", () => {
     expect(nextRunLockedForSolvent({ status: "recommend", step: "temp-choice" }, { solvent: "", percentB: "" })).toBe(
       false,
     );
+  });
+
+  it("locks a new ligand until the next coating is different from this run", () => {
+    const ligand = { status: "recommend" as const, step: "ligand" as const, tempChoice: null };
+    expect(nextRunLockedForLigand(ligand, { nextLigand: "", currentLigand: "C18" })).toBe(true);
+    expect(nextRunLockedForLigand(ligand, { nextLigand: "C18", currentLigand: "C18" })).toBe(true);
+    expect(nextRunLockedForLigand(ligand, { nextLigand: "c18", currentLigand: "C18" })).toBe(true);
+    expect(nextRunLockedForLigand(ligand, { nextLigand: "C8", currentLigand: "C18" })).toBe(false);
+    expect(nextRunLockedForLigand(ligand, { nextLigand: "C8", currentLigand: "" })).toBe(false);
+    expect(nextRunLockedForLigand(ligand, null)).toBe(true);
+    expect(nextRunLockedForLigand({ status: "recommend", step: "solvent", tempChoice: null }, { nextLigand: "" })).toBe(
+      false,
+    );
+    expect(nextRunLockedForLigand({ status: "recommend", step: "temp-40", tempChoice: null }, { nextLigand: "" })).toBe(
+      false,
+    );
+    expect(nextRunLockedForLigand({ status: "recommend", step: "temp-60", tempChoice: null }, null)).toBe(false);
+    const choice = {
+      status: "recommend" as const,
+      step: "temp-choice" as const,
+      tempChoice: { other: "ligand" as const },
+    };
+    expect(nextRunLockedForLigand(choice, { tempPath: null, nextLigand: "", currentLigand: "C18" })).toBe(true);
+    expect(nextRunLockedForLigand(choice, { tempPath: "heat", nextLigand: "", currentLigand: "C18" })).toBe(false);
+    expect(nextRunLockedForLigand(choice, { tempPath: "ligand", nextLigand: "C8", currentLigand: "C18" })).toBe(false);
+    expect(
+      nextRunLockedForLigand(
+        { status: "recommend", step: "temp-choice", tempChoice: { other: "solvent" } },
+        { tempPath: null, nextLigand: "", currentLigand: "C18" },
+      ),
+    ).toBe(false);
   });
 
   it("says nothing is changing when no next run is recommended", () => {

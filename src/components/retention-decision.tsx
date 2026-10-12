@@ -46,25 +46,6 @@ export function RetentionDecisionView({
   return (
     <div className="contents" id="retention-decision">
       <section id="min-b-note" className="rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10">
-        {decision.bChoices && decision.bChoices.length > 1 ? (
-          <div id="percent-choices" className="mb-3 flex flex-col gap-2">
-            {decision.bChoices.map((choice) => {
-              const preferred =
-                decision.nextPercentB != null && Math.abs(choice.percentB - decision.nextPercentB) < 1e-6;
-              return (
-                <button
-                  key={choice.id}
-                  type="button"
-                  className="flex flex-col items-start gap-1 rounded-lg border border-[#0f6b56] bg-white px-3 py-2 text-left text-sm font-semibold text-[#144237]"
-                  onClick={() => onPickPercent?.(choice.percentB)}
-                >
-                  {preferred ? <RecommendedMark /> : null}
-                  <span>{`%B ${formatPercentB(choice.percentB)}`}</span>
-                </button>
-              );
-            })}
-          </div>
-        ) : null}
         {fit ? (
           <MinimumPercentFit
             fit={fit}
@@ -139,6 +120,36 @@ export function LaterChangeNote({ decision }: { decision: RetentionDecision | nu
           ))}
         </div>
       </section>
+    </div>
+  );
+}
+
+export function PercentChoiceButtons({
+  choices,
+  recommended,
+  onPick,
+}: {
+  choices: { id: string; percentB: number }[];
+  recommended: number | null;
+  onPick?: (percent: number | null) => void;
+}) {
+  if (choices.length < 2) return null;
+  return (
+    <div id="percent-choices" className="flex flex-col gap-2">
+      {choices.map((choice) => {
+        const preferred = recommended != null && Math.abs(choice.percentB - recommended) < 1e-6;
+        return (
+          <button
+            key={choice.id}
+            type="button"
+            className="flex flex-col items-start gap-1 rounded-lg border border-[#0f6b56] bg-white px-3 py-2 text-left text-sm font-semibold text-[#144237]"
+            onClick={() => onPick?.(choice.percentB)}
+          >
+            {preferred ? <RecommendedMark /> : null}
+            <span>{`%B ${formatPercentB(choice.percentB)}`}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }

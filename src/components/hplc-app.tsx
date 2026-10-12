@@ -5,12 +5,13 @@ import { ArrowRight, Gauge, GitBranch, Info, Settings, type LucideIcon } from "l
 import { FileDrop } from "@/components/file-drop";
 import { AboutPanel } from "@/components/about-panel";
 import { SettingsPanel } from "@/components/settings-panel";
-import { BackwardsRetentionView, EfficiencyChoiceView, LeaveSelectivityAsk, LeaveSelectivityDone } from "@/components/leave-selectivity";
+import { BackwardsChoiceButtons, BackwardsRetentionView, EfficiencyChoiceButtons, EfficiencyChoiceView, LeaveSelectivityAsk, LeaveSelectivityButtons, LeaveSelectivityDone } from "@/components/leave-selectivity";
 import { LookAtRuns } from "@/components/look-at-runs";
-import { LaterChangeNote, PickOwnPercent, RetentionDecisionView, SecondPercentChoice, StartHighBNote } from "@/components/retention-decision";
+import { MethodProgress } from "@/components/method-progress";
+import { LaterChangeNote, PercentChoiceButtons, PickOwnPercent, RetentionDecisionView, SecondPercentChoice, StartHighBNote } from "@/components/retention-decision";
 import { ResultsPanel } from "@/components/results-panel";
 import { RunForm } from "@/components/run-form";
-import { SelectivityDecisionView } from "@/components/selectivity-decision";
+import { SelectivityDecisionView, SelectivityNextControls, selectivityShowsChoices } from "@/components/selectivity-decision";
 import { type ColumnRunTrace } from "@/components/column-diagram";
 import { EquipmentPanel } from "@/components/equipment-panel";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -40,8 +41,15 @@ import {
   type SelectivityRun,
   type TempPath,
 } from "@/lib/selectivity";
-import { nextRunLockedForSolvent, NO_CHANGE_YET, retentionChangeLabel, selectivityChangeLabel } from "@/lib/change-label";
+import {
+  nextRunLockedForLigand,
+  nextRunLockedForSolvent,
+  NO_CHANGE_YET,
+  retentionChangeLabel,
+  selectivityChangeLabel,
+} from "@/lib/change-label";
 import { MENU_SOLVENTS, solventKey } from "@/lib/solvent-menu";
+import { methodStageFromLatest, type MethodStage } from "@/lib/method-stage";
 
 type RestKey = Exclude<keyof RunDetails, "percentB" | "temperature" | "solvent" | "ligand">;
 type RestDetails = Pick<RunDetails, RestKey>;
@@ -680,6 +688,15 @@ export function HplcApp() {
     });
   }
 
+  const sessionStage = sessionMethodStage(syncedRuns, details, checks, {
+    leftSelectivity: leftSelectivity || efficiencyChosen,
+    choice: { ...choice, continueToLook: latestFlags.continueToLook, continueRetention },
+    heat: heatChoice,
+    continuePastEfficiency: latestFlags.continuePast,
+    continueToLook: latestFlags.continueToLook,
+    ligands: columnCoatings,
+  });
+
   return (
     <div className="flex h-dvh max-h-dvh w-full flex-none flex-col overflow-hidden">
       <SectionNav section={section} onSelect={setSection} />
@@ -732,6 +749,7 @@ export function HplcApp() {
           <TabsContent key={index} value={String(index)} className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
             <RunPane
               index={index}
+              stage={sessionStage}
               run={run}
               runs={syncedRuns}
               details={details}
@@ -824,7 +842,7 @@ export function HplcApp() {
       </footer>
       <aside
         id="setup-column"
-        className="order-1 flex min-h-0 w-full shrink-0 flex-col overflow-y-auto overscroll-y-contain max-lg:max-h-[40vh] lg:col-start-1 lg:row-start-2 lg:h-full lg:max-h-full lg:w-auto"
+        className="order-1 flex min-h-0 w-full shrink-0 flex-col overflow-y-auto overscroll-y-contain max-lg:max-h-[40vh] lg:col-start-1 lg:row-start-2 lg:w-auto lg:self-stretch"
       >
         <RunForm
           title={runTabLabel(shown, syncedRuns, details, checks, {
@@ -964,8 +982,10 @@ function RunPane({
   ligands,
   solvents,
   runTabs,
+  stage,
 }: {
   index: number;
+  stage: MethodStage;
   run: RunState;
   runs: RunState[];
   details: RunDetails;
@@ -1009,6 +1029,7 @@ function RunPane({
       : "Retention is finished. The next kind of change is not built yet.";
     return (
       <>
+        <MethodProgress stage={stage} />
         <div className="shrink-0">
           <RunSummary index={index} runs={runs} details={details} nextLabel={nextLabel} />
         </div>
@@ -1059,9 +1080,43 @@ function RunPane({
     pickedPercent: pickedPercent ?? null,
   });
   const canOpenNext = Boolean(next) && !ask && !leftSelectivity;
+  const currentLigand = (index === 0 ? details.ligand : run.ligand.trim() || details.ligand).trim();
   const nextLocked =
     canOpenNext &&
-    nextRunLockedForSolvent(selectivity, next ? { solvent: next.solvent, percentB: next.percentB } : null);
+    (nextRunLockedForSolvent(selectivity, next ? { solvent: next.solvent, percentB: next.percentB } : null) ||
+      nextRunLockedForLigand(selectivity, {
+        tempPath,
+        nextLigand: next?.ligand ?? "",
+        currentLigand,
+      }));
+  const showSelectivityChoices = Boolean(
+    selectivity &&
+      selectivityShowsChoices(selectivity, tempPath) &&
+      !holdingBack &&
+      !leftSelectivity &&
+      !ask &&
+      !choosingEfficiency &&
+      !looking,
+  );
+  const actionChoices = holdingBack ? (
+    <BackwardsChoiceButtons onContinue={onBackwardsContinue} onRedo={onBackwardsRedo} />
+  ) : ask ? (
+    <LeaveSelectivityButtons onYes={onLeave} onNo={() => onDeclineEfficiency()} />
+  ) : choosingEfficiency && retention?.efficiencyChoice ? (
+    <EfficiencyChoiceButtons
+      onEfficiency={onLeave}
+      onContinue={onContinueSelectivity}
+      onContinueRetention={onContinueRetention}
+    />
+  ) : null;
+  const percentChoices =
+    !actionChoices && retention?.bChoices && retention.bChoices.length > 1 && onPickPercent ? (
+      <PercentChoiceButtons
+        choices={retention.bChoices}
+        recommended={retention.nextPercentB}
+        onPick={onPickPercent}
+      />
+    ) : null;
   const secondMin =
     retention?.choosePercent && retention.nextPercentB != null && onPickPercent
       ? { recommended: retention.nextPercentB, picked: pickedPercent ?? null, onPick: onPickPercent }
@@ -1071,6 +1126,29 @@ function RunPane({
       ? { picked: pickedPercent ?? null, minimum: parseUserNumber(run.percentB), onPick: onPickPercent }
       : null;
 
+  const selectivityChoices =
+    showSelectivityChoices && selectivity ? (
+      <SelectivityNextControls
+        plan={selectivity}
+        solventId={next?.solvent || ""}
+        ligand={next?.ligand || ""}
+        solvents={solvents}
+        ligands={ligands}
+        onSolvent={onChooseSolvent}
+        onLigand={onChooseLigand}
+        tempPath={tempPath}
+        onTempPath={onTempPath}
+      />
+    ) : null;
+  const nextChoices =
+    actionChoices || percentChoices || selectivityChoices ? (
+      <>
+        {actionChoices}
+        {percentChoices}
+        {selectivityChoices}
+      </>
+    ) : null;
+
   return (
     <>
       {index === 0 && run.status === "empty" ? (
@@ -1078,6 +1156,7 @@ function RunPane({
           <StartHighBNote />
         </div>
       ) : null}
+      {index > 0 || run.status === "ready" ? <MethodProgress stage={stage} /> : null}
       {index > 0 || run.status === "ready" ? (
         <div className="shrink-0">
           <RunSummary
@@ -1089,6 +1168,7 @@ function RunPane({
             nextLocked={nextLocked}
             secondMin={secondMin}
             ownPercent={ownPercent}
+            choices={nextChoices}
           />
         </div>
       ) : null}
@@ -1115,24 +1195,13 @@ function RunPane({
                   <BackwardsRetentionView
                     pair={backwards}
                     choice={backwardsChoice === "redo" ? "redo" : null}
-                    onContinue={onBackwardsContinue}
-                    onRedo={onBackwardsRedo}
                   />
                 ) : leftSelectivity ? (
                   <LeaveSelectivityDone duringRetention={explanation?.kind === "retention"} />
                 ) : ask ? (
-                  <LeaveSelectivityAsk
-                    ask={ask}
-                    onYes={onLeave}
-                    onNo={() => onDeclineEfficiency()}
-                  />
+                  <LeaveSelectivityAsk ask={ask} />
                 ) : retention?.status === "efficiency" && retention.efficiencyChoice && !efficiencyContinued ? (
-                  <EfficiencyChoiceView
-                    why={retention.why}
-                    onEfficiency={onLeave}
-                    onContinue={onContinueSelectivity}
-                    onContinueRetention={onContinueRetention}
-                  />
+                  <EfficiencyChoiceView why={retention.why} />
                 ) : retention?.status === "look" && retention.look && !heat ? (
                   <LookAtRuns look={retention.look} onPickRun={onPickRun} />
                 ) : (
@@ -1144,19 +1213,7 @@ function RunPane({
                         onPickPercent={onPickPercent}
                       />
                     ) : null}
-                    {selectivity ? (
-                      <SelectivityDecisionView
-                        plan={selectivity}
-                        solventId={next?.solvent || ""}
-                        ligand={next?.ligand || selectivity.recommendedLigand || ""}
-                        solvents={solvents}
-                        ligands={ligands}
-                        onSolvent={onChooseSolvent}
-                        onLigand={onChooseLigand}
-                        tempPath={tempPath}
-                        onTempPath={onTempPath}
-                      />
-                    ) : null}
+                    {selectivity ? <SelectivityDecisionView plan={selectivity} tempPath={tempPath} /> : null}
                   </>
                 )
               }
@@ -1215,6 +1272,7 @@ function RunSummary({
   nextLocked = false,
   secondMin = null,
   ownPercent = null,
+  choices = null,
 }: {
   index: number;
   runs: RunState[];
@@ -1232,9 +1290,10 @@ function RunSummary({
     minimum: number | null;
     onPick: (percent: number | null) => void;
   } | null;
+  choices?: ReactNode;
 }) {
   const lines = index > 0 ? decisionChangeLines(index, runs, details) : [];
-  const withPicker = Boolean(secondMin || ownPercent);
+  const withPicker = Boolean(secondMin || ownPercent || choices);
   return (
     <section
       id="run-context"
@@ -1284,14 +1343,15 @@ function RunSummary({
             <p className="mt-1 text-base font-medium text-foreground">{nextLabel}</p>
           </div>
         )}
-        {secondMin || ownPercent ? (
-          <div className="px-4 py-3">
+        {secondMin || ownPercent || choices ? (
+          <div className="flex flex-col gap-3 border-t border-foreground/10 px-4 py-3">
             {secondMin ? (
               <SecondPercentChoice recommended={secondMin.recommended} picked={secondMin.picked} onPick={secondMin.onPick} />
             ) : null}
             {ownPercent ? (
               <PickOwnPercent picked={ownPercent.picked} minimum={ownPercent.minimum} onPick={ownPercent.onPick} />
             ) : null}
+            {choices}
           </div>
         ) : null}
       </div>
@@ -1441,6 +1501,44 @@ function backwardsOnPage(runs: RunState[], details: RunDetails): BackwardsPair |
 type Explanation =
   | { kind: "retention"; decision: RetentionDecision }
   | { kind: "selectivity"; plan: SelectivityPlan };
+
+function sessionMethodStage(
+  runs: RunState[],
+  details: RunDetails,
+  checks: RuleNumbers,
+  options: {
+    leftSelectivity: boolean;
+    choice: RetentionChoice;
+    heat: HeatStart | null;
+    continuePastEfficiency?: boolean;
+    continueToLook?: boolean;
+    ligands?: readonly string[];
+  },
+): MethodStage {
+  const index = readyPrefix(runs) - 1;
+  const explanation =
+    index >= 0
+      ? explainRun(runs, index, details, checks, {
+          choice: options.choice,
+          heat: options.heat,
+          continuePastEfficiency: options.continuePastEfficiency,
+          continueToLook: options.continueToLook,
+          ligands: options.ligands,
+        })
+      : null;
+  if (!explanation) {
+    return methodStageFromLatest({ leftSelectivity: options.leftSelectivity, phase: null });
+  }
+  if (explanation.kind === "selectivity") {
+    return methodStageFromLatest({ leftSelectivity: options.leftSelectivity, phase: "selectivity" });
+  }
+  return methodStageFromLatest({
+    leftSelectivity: options.leftSelectivity,
+    phase: "retention",
+    retentionStatus: explanation.decision.status,
+    retentionReason: explanation.decision.reason,
+  });
+}
 
 function explainRun(
   runs: RunState[],

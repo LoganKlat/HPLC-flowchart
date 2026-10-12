@@ -4,61 +4,64 @@ import { BACKWARDS_REDO, backwardsWhy, EFFICIENCY_CONTINUE, EFFICIENCY_MOVE_ON, 
 const choiceClass =
   "flex h-10 min-w-0 cursor-pointer items-center justify-center rounded-lg border px-3 text-sm font-medium";
 
-export function EfficiencyChoiceView({
-  why,
+export function EfficiencyChoiceButtons({
   onEfficiency,
   onContinue,
   onContinueRetention,
 }: {
-  why: string;
   onEfficiency: () => void;
   onContinue: () => void;
   onContinueRetention?: () => void;
 }) {
   return (
+    <div id="efficiency-or-selectivity" className="flex flex-col gap-2">
+      <Button
+        type="button"
+        id="choose-efficiency"
+        className="h-auto w-full flex-col items-start gap-1 whitespace-normal px-4 py-3 text-left"
+        style={{
+          height: "auto",
+          whiteSpace: "normal",
+          backgroundColor: "#0f6b56",
+          color: "#f7fffb",
+          borderColor: "#0f6b56",
+        }}
+        onClick={onEfficiency}
+      >
+        <span className="text-xs tracking-[0.14em] uppercase">Recommended</span>
+        <span>{EFFICIENCY_MOVE_ON}</span>
+      </Button>
+      <Button
+        type="button"
+        id="choose-continue"
+        variant="outline"
+        className="h-auto w-full whitespace-normal px-4 py-3 text-left"
+        style={{ height: "auto", whiteSpace: "normal" }}
+        onClick={onContinue}
+      >
+        {EFFICIENCY_CONTINUE}
+      </Button>
+      {onContinueRetention ? (
+        <Button
+          type="button"
+          id="continue-retention"
+          variant="outline"
+          className="h-auto w-full whitespace-normal px-4 py-3 text-left"
+          style={{ height: "auto", whiteSpace: "normal" }}
+          onClick={onContinueRetention}
+        >
+          Stay in retention
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+export function EfficiencyChoiceView({ why }: { why: string }) {
+  return (
     <div className="contents" id="efficiency-choice">
       <section className="rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10">
         <h2 className="font-heading text-base">Why</h2>
-        <div id="efficiency-or-selectivity" className="mt-3 flex flex-col gap-2">
-          <Button
-            type="button"
-            id="choose-efficiency"
-            className="h-auto w-full flex-col items-start gap-1 whitespace-normal px-4 py-3 text-left"
-            style={{
-              height: "auto",
-              whiteSpace: "normal",
-              backgroundColor: "#0f6b56",
-              color: "#f7fffb",
-              borderColor: "#0f6b56",
-            }}
-            onClick={onEfficiency}
-          >
-            <span className="text-xs tracking-[0.14em] uppercase">Recommended</span>
-            <span>{EFFICIENCY_MOVE_ON}</span>
-          </Button>
-          <Button
-            type="button"
-            id="choose-continue"
-            variant="outline"
-            className="h-auto w-full whitespace-normal px-4 py-3 text-left"
-            style={{ height: "auto", whiteSpace: "normal" }}
-            onClick={onContinue}
-          >
-            {EFFICIENCY_CONTINUE}
-          </Button>
-          {onContinueRetention ? (
-            <Button
-              type="button"
-              id="continue-retention"
-              variant="outline"
-              className="h-auto w-full whitespace-normal px-4 py-3 text-left"
-              style={{ height: "auto", whiteSpace: "normal" }}
-              onClick={onContinueRetention}
-            >
-            Stay in retention
-          </Button>
-          ) : null}
-        </div>
         <div className="mt-3 flex flex-col gap-2 text-sm leading-relaxed text-foreground">
           {why.split("\n\n").map((paragraph, index) => (
             <p key={index}>{paragraph}</p>
@@ -69,31 +72,33 @@ export function EfficiencyChoiceView({
   );
 }
 
+export function LeaveSelectivityButtons({ onYes, onNo }: { onYes: () => void; onNo: () => void }) {
+  return (
+    <div id="leave-selectivity-buttons" className="grid grid-cols-2 gap-2">
+      <button type="button" id="leave-selectivity-yes" className={`${choiceClass} border-primary bg-accent text-foreground`} onClick={onYes}>
+        Yes
+      </button>
+      <button
+        type="button"
+        id="leave-selectivity-no"
+        className={`${choiceClass} border-input bg-background text-foreground`}
+        onClick={onNo}
+      >
+        No
+      </button>
+    </div>
+  );
+}
+
 export function LeaveSelectivityAsk({
   ask,
-  onYes,
-  onNo,
 }: {
   ask: { question: string; why: string; steps?: string[] };
-  onYes: () => void;
-  onNo: () => void;
 }) {
   return (
     <div className="contents" id="leave-selectivity-ask">
       <section className="rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10">
         <h2 className="font-heading text-base">Why</h2>
-        <div className="mt-3 grid grid-cols-2 gap-2">
-          <button type="button" className={`${choiceClass} border-primary bg-accent text-foreground`} onClick={onYes}>
-            Yes
-          </button>
-          <button
-            type="button"
-            className={`${choiceClass} border-input bg-background text-foreground`}
-            onClick={onNo}
-          >
-            No
-          </button>
-        </div>
         <div className="mt-3 flex flex-col gap-2 text-sm leading-relaxed text-foreground">
           <p>{ask.question}</p>
           {ask.steps && ask.steps.length > 0 ? (
@@ -112,43 +117,50 @@ export function LeaveSelectivityAsk({
   );
 }
 
-export function BackwardsRetentionView({
-  pair,
-  choice,
+export function BackwardsChoiceButtons({
   onContinue,
   onRedo,
 }: {
-  pair: BackwardsPair;
-  choice: "redo" | null;
   onContinue: () => void;
   onRedo: () => void;
+}) {
+  return (
+    <div id="backwards-choices" className="flex flex-col gap-2">
+      <Button
+        type="button"
+        id="backwards-continue"
+        className="h-auto w-full whitespace-normal px-4 py-3 text-left"
+        style={{ height: "auto", whiteSpace: "normal", backgroundColor: "#0f6b56", color: "#f7fffb", borderColor: "#0f6b56" }}
+        onClick={onContinue}
+      >
+        Continue with the normal steps
+      </Button>
+      <Button
+        type="button"
+        id="backwards-redo"
+        variant="outline"
+        className="h-auto w-full whitespace-normal px-4 py-3 text-left"
+        style={{ height: "auto", whiteSpace: "normal" }}
+        onClick={onRedo}
+      >
+        Re-do the runs
+      </Button>
+    </div>
+  );
+}
+
+export function BackwardsRetentionView({
+  pair,
+  choice,
+}: {
+  pair: BackwardsPair;
+  choice: "redo" | null;
 }) {
   const warning = backwardsWhy(pair);
   return (
     <div className="contents" id="backwards-retention">
       <section className="rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10">
         <h2 className="font-heading text-base">Why</h2>
-        <div id="backwards-choices" className="mt-3 flex flex-col gap-2">
-          <Button
-            type="button"
-            id="backwards-continue"
-            className="h-auto w-full whitespace-normal px-4 py-3 text-left"
-            style={{ height: "auto", whiteSpace: "normal", backgroundColor: "#0f6b56", color: "#f7fffb", borderColor: "#0f6b56" }}
-            onClick={onContinue}
-          >
-            Continue with the normal steps
-          </Button>
-          <Button
-            type="button"
-            id="backwards-redo"
-            variant="outline"
-            className="h-auto w-full whitespace-normal px-4 py-3 text-left"
-            style={{ height: "auto", whiteSpace: "normal" }}
-            onClick={onRedo}
-          >
-            Re-do the runs
-          </Button>
-        </div>
         <div className="mt-3 flex flex-col gap-2 text-sm leading-relaxed text-foreground">
           <p>{warning}</p>
           {choice === "redo" ? <p>{BACKWARDS_REDO}</p> : null}

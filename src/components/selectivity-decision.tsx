@@ -8,76 +8,15 @@ const fieldClass =
 
 export function SelectivityDecisionView({
   plan,
-  solventId,
-  ligand,
-  solvents,
-  ligands,
-  onSolvent,
-  onLigand,
   tempPath,
-  onTempPath,
 }: {
   plan: SelectivityPlan;
-  solventId: string;
-  ligand: string;
-  solvents: readonly string[];
-  ligands: readonly string[];
-  onSolvent: (id: string) => void;
-  onLigand: (name: string) => void;
   tempPath: TempPath | null;
-  onTempPath: (path: TempPath) => void;
 }) {
-  const ligandChoices = [...ligands];
-  const solventChoices =
-    plan.step === "solvent" ? solvents.filter((name) => findSolvent(name)) : [...solvents];
-  const choice = plan.tempChoice;
-  const recommendedPath = choice?.other ?? "solvent";
-  const showSolvent = plan.showSolventChoices || (choice != null && tempPath === "solvent");
-  const showLigand = plan.showLigandChoices || (choice != null && tempPath === "ligand");
-  const chartSolvent = findSolvent(solventId);
-
   return (
     <div className="contents" id="selectivity-decision">
       <section className="rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10">
         <h2 className="font-heading text-base">Why</h2>
-        {choice ? (
-          <div id="temp-choice" className="mt-3 flex flex-col gap-2">
-            <Button
-              type="button"
-              id={recommendedPath === "ligand" ? "choose-ligand" : "choose-solvent"}
-              aria-pressed={tempPath === recommendedPath}
-              className="h-auto w-full flex-col items-start gap-1 whitespace-normal px-4 py-3 text-left"
-              style={{
-                height: "auto",
-                whiteSpace: "normal",
-                ...(tempPath === recommendedPath
-                  ? { backgroundColor: "#0a5644", color: "#f7fffb", borderColor: "#144237" }
-                  : { backgroundColor: "#0f6b56", color: "#f7fffb", borderColor: "#0f6b56" }),
-              }}
-              onClick={() => onTempPath(recommendedPath)}
-            >
-              <span className="text-xs tracking-[0.14em] uppercase">Recommended</span>
-              <span>{recommendedPath === "ligand" ? "Ligand" : "Solvent"}</span>
-            </Button>
-            <Button
-              type="button"
-              id="choose-60"
-              variant="outline"
-              aria-pressed={tempPath === "heat"}
-              className="h-auto w-full whitespace-normal px-4 py-3 text-left"
-              style={{
-                height: "auto",
-                whiteSpace: "normal",
-                ...(tempPath === "heat"
-                  ? { backgroundColor: "#efe6c4", borderColor: "#b0893e", color: "#3d3416" }
-                  : {}),
-              }}
-              onClick={() => onTempPath("heat")}
-            >
-              Temperature 60°C
-            </Button>
-          </div>
-        ) : null}
         <div className="mt-1 flex flex-col gap-2 text-sm leading-relaxed text-foreground">
           {stepParagraphs(plan.why).map((paragraph, index) => (
             <p key={index}>{paragraph}</p>
@@ -101,48 +40,129 @@ export function SelectivityDecisionView({
             </div>
           </div>
         ) : null}
-        {showSolvent ? (
-          <label className="mt-4 flex flex-col gap-1.5 text-sm" htmlFor="solvent-choice">
-            New solvent
-            <select
-              id="solvent-choice"
-              className={fieldClass}
-              value={solventChoices.includes(solventId) ? solventId : ""}
-              onChange={(event) => onSolvent(event.target.value)}
-            >
-              <option value="">Choose a solvent</option>
-              {solventChoices.map((solvent) => (
-                <option key={solvent} value={solvent}>
-                  {solvent}
-                </option>
-              ))}
-            </select>
-            {solventId.trim() && !chartSolvent ? (
-              <p id="solvent-chart-note" className="text-sm leading-snug text-[#144237]">
-                {CHART_SOLVENT_NOTE}
-              </p>
-            ) : null}
-          </label>
-        ) : null}
-        {showLigand ? (
-          <label className="mt-4 flex flex-col gap-1.5 text-sm" htmlFor="ligand-choice">
-            Column coating
-            <select
-              id="ligand-choice"
-              className={fieldClass}
-              value={ligandChoices.includes(ligand) ? ligand : ""}
-              onChange={(event) => onLigand(event.target.value)}
-            >
-              <option value="">select a ligand</option>
-              {ligandChoices.map((name) => (
-                <option key={name} value={name}>
-                  {name}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : null}
       </section>
+    </div>
+  );
+}
+
+/** True when Next run should show a solvent, coating, or temperature-path picker. */
+export function selectivityShowsChoices(plan: SelectivityPlan, tempPath: TempPath | null): boolean {
+  const choice = plan.tempChoice;
+  const showSolvent = plan.showSolventChoices || (choice != null && tempPath === "solvent");
+  const showLigand = plan.showLigandChoices || (choice != null && tempPath === "ligand");
+  return Boolean(choice || showSolvent || showLigand);
+}
+
+/** Solvent, coating, and temperature-path choices. These sit with Next run, not in Why. */
+export function SelectivityNextControls({
+  plan,
+  solventId,
+  ligand,
+  solvents,
+  ligands,
+  onSolvent,
+  onLigand,
+  tempPath,
+  onTempPath,
+}: {
+  plan: SelectivityPlan;
+  solventId: string;
+  ligand: string;
+  solvents: readonly string[];
+  ligands: readonly string[];
+  onSolvent: (id: string) => void;
+  onLigand: (name: string) => void;
+  tempPath: TempPath | null;
+  onTempPath: (path: TempPath) => void;
+}) {
+  const ligandChoices = [...ligands];
+  const solventChoices = plan.step === "solvent" ? solvents.filter((name) => findSolvent(name)) : [...solvents];
+  const choice = plan.tempChoice;
+  const recommendedPath = choice?.other ?? "solvent";
+  const showSolvent = plan.showSolventChoices || (choice != null && tempPath === "solvent");
+  const showLigand = plan.showLigandChoices || (choice != null && tempPath === "ligand");
+  const chartSolvent = findSolvent(solventId);
+  if (!selectivityShowsChoices(plan, tempPath)) return null;
+
+  return (
+    <div id="selectivity-next-controls" className="flex flex-col gap-3">
+      {choice ? (
+        <div id="temp-choice" className="flex flex-col gap-2">
+          <Button
+            type="button"
+            id={recommendedPath === "ligand" ? "choose-ligand" : "choose-solvent"}
+            aria-pressed={tempPath === recommendedPath}
+            className="h-auto w-full flex-col items-start gap-1 whitespace-normal px-4 py-3 text-left"
+            style={{
+              height: "auto",
+              whiteSpace: "normal",
+              ...(tempPath === recommendedPath
+                ? { backgroundColor: "#0a5644", color: "#f7fffb", borderColor: "#144237" }
+                : { backgroundColor: "#0f6b56", color: "#f7fffb", borderColor: "#0f6b56" }),
+            }}
+            onClick={() => onTempPath(recommendedPath)}
+          >
+            <span className="text-xs tracking-[0.14em] uppercase">Recommended</span>
+            <span>{recommendedPath === "ligand" ? "Ligand" : "Solvent"}</span>
+          </Button>
+          <Button
+            type="button"
+            id="choose-60"
+            variant="outline"
+            aria-pressed={tempPath === "heat"}
+            className="h-auto w-full whitespace-normal px-4 py-3 text-left"
+            style={{
+              height: "auto",
+              whiteSpace: "normal",
+              ...(tempPath === "heat" ? { backgroundColor: "#efe6c4", borderColor: "#b0893e", color: "#3d3416" } : {}),
+            }}
+            onClick={() => onTempPath("heat")}
+          >
+            Temperature 60°C
+          </Button>
+        </div>
+      ) : null}
+      {showSolvent ? (
+        <label className="flex flex-col gap-1.5 text-sm" htmlFor="solvent-choice">
+          New solvent
+          <select
+            id="solvent-choice"
+            className={fieldClass}
+            value={solventChoices.includes(solventId) ? solventId : ""}
+            onChange={(event) => onSolvent(event.target.value)}
+          >
+            <option value="">Choose a solvent</option>
+            {solventChoices.map((solvent) => (
+              <option key={solvent} value={solvent}>
+                {solvent}
+              </option>
+            ))}
+          </select>
+          {solventId.trim() && !chartSolvent ? (
+            <p id="solvent-chart-note" className="text-sm leading-snug text-[#144237]">
+              {CHART_SOLVENT_NOTE}
+            </p>
+          ) : null}
+        </label>
+      ) : null}
+      {showLigand ? (
+        <label className="flex flex-col gap-1.5 text-sm" htmlFor="ligand-choice">
+          Column coating
+          <select
+            id="ligand-choice"
+            className={fieldClass}
+            value={ligandChoices.includes(ligand) ? ligand : ""}
+            onChange={(event) => onLigand(event.target.value)}
+          >
+            <option value="">select a ligand</option>
+            {ligandChoices.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
     </div>
   );
 }

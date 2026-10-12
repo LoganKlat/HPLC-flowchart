@@ -258,7 +258,7 @@ export function RunForm({ title, details, rules, columns, solvents, onDetails, o
   }
 
   return (
-    <div id="setup-boxes" className="flex min-h-full flex-col gap-2">
+    <div id="setup-boxes" className="flex shrink-0 flex-col gap-2">
       <Card size="sm" className="shrink-0" style={{ ["--card-spacing" as string]: "0.5rem" }}>
         <CardHeader className="pb-2">
           <CardTitle className={cardTitleClass}>Rules to meet</CardTitle>
