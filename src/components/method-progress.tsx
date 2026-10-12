@@ -8,23 +8,18 @@ export function MethodProgress({ stage }: { stage: MethodStage }) {
     <nav
       id="method-progress"
       aria-label="Method development"
-      className="shrink-0 overflow-x-auto rounded-lg bg-card px-2 py-1.5 ring-1 ring-foreground/10"
+      className="shrink-0 border-b border-foreground/10 bg-card px-2 py-1.5"
     >
-      <ol className="flex w-max min-w-full items-center gap-1">
-        {METHOD_STAGES.map((name, index) => {
+      <ol className="flex w-full items-stretch gap-1">
+        {METHOD_STAGES.flatMap((name, index) => {
           const done = index < current;
           const active = index === current;
-          return (
-            <li key={name} className="flex items-center gap-1">
-              {index > 0 ? (
-                <span aria-hidden="true" className="px-0.5 text-[10px] leading-none text-muted-foreground">
-                  →
-                </span>
-              ) : null}
+          const chip = (
+            <li key={name} className="flex min-w-0 flex-1">
               <span
                 aria-current={active ? "step" : undefined}
                 className={
-                  "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap " +
+                  "flex w-full min-w-0 items-center justify-center gap-1 rounded-md px-2 py-1 text-xs font-medium whitespace-nowrap " +
                   (active
                     ? "bg-[#0f6b56] text-[#f7fffb]"
                     : done
@@ -37,6 +32,17 @@ export function MethodProgress({ stage }: { stage: MethodStage }) {
               </span>
             </li>
           );
+          if (index === 0) return [chip];
+          return [
+            <li
+              key={`${name}-next`}
+              aria-hidden="true"
+              className="flex shrink-0 items-center text-[10px] leading-none text-muted-foreground"
+            >
+              →
+            </li>,
+            chip,
+          ];
         })}
       </ol>
     </nav>

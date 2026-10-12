@@ -1029,8 +1029,8 @@ function RunPane({
       : "Retention is finished. The next kind of change is not built yet.";
     return (
       <>
-        <MethodProgress stage={stage} />
-        <div className="shrink-0">
+        <div id="decision-bar" className="shrink-0 overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10">
+          <MethodProgress stage={stage} />
           <RunSummary index={index} runs={runs} details={details} nextLabel={nextLabel} />
         </div>
         <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border-2 border-solid border-border bg-card lg:flex-row lg:items-stretch">
@@ -1156,9 +1156,9 @@ function RunPane({
           <StartHighBNote />
         </div>
       ) : null}
-      {index > 0 || run.status === "ready" ? <MethodProgress stage={stage} /> : null}
       {index > 0 || run.status === "ready" ? (
-        <div className="shrink-0">
+        <div id="decision-bar" className="shrink-0 overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10">
+          <MethodProgress stage={stage} />
           <RunSummary
             index={index}
             runs={runs}
@@ -1297,7 +1297,7 @@ function RunSummary({
   return (
     <section
       id="run-context"
-      className="grid grid-cols-1 overflow-hidden rounded-xl bg-card ring-1 ring-foreground/10 sm:grid-cols-2"
+      className="grid grid-cols-1 overflow-hidden bg-card sm:grid-cols-2"
     >
       <div id="this-run-change" className="border-b border-foreground/10 px-4 py-3 sm:border-r sm:border-b-0">
         <h2 className="text-xs font-medium tracking-[0.14em] text-muted-foreground uppercase">This run's change</h2>
