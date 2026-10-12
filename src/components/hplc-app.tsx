@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { ArrowRight, Gauge, GitBranch, Info, Settings, type LucideIcon } from "lucide-react";
 import { FileDrop } from "@/components/file-drop";
 import { AboutPanel } from "@/components/about-panel";
@@ -50,6 +50,8 @@ import {
 } from "@/lib/change-label";
 import { MENU_SOLVENTS, solventKey } from "@/lib/solvent-menu";
 import { methodStageFromLatest, type MethodStage } from "@/lib/method-stage";
+
+import { DECISION_EXAMPLE_FILES, EXAMPLE_RULES } from "@/lib/decision-example";
 
 type RestKey = Exclude<keyof RunDetails, "percentB" | "temperature" | "solvent" | "ligand">;
 type RestDetails = Pick<RunDetails, RestKey>;
@@ -222,6 +224,7 @@ function runTabLabel(
   if (index <= 0) {
     return `Run 1: ${percentWords(details.percentB || runs[0]?.percentB || "")}`;
   }
+  if (runs[index]?.status === "ready") return `Run ${index + 1}: ${openedRunFallback(index, runs, details)}`;
   const flags = selectivityFlags(index - 1, options.heat, options.continued);
   const explanation = explainRun(runs, index - 1, details, checks, {
     choice: options.choice,
@@ -294,6 +297,11 @@ function runTabStyle(selected: boolean, hovered: boolean): CSSProperties {
 }
 
 export function HplcApp() {
+  const [exampleStatus, setExampleStatus] = useState<"loading" | "loaded" | "fresh" | "error">("loading");
+  const [exampleError, setExampleError] = useState<string | null>(null);
+  const exampleAbort = useRef<AbortController | null>(null);
+  const readGeneration = useRef(0);
+
   const [active, setActive] = useState(0);
   const [section, setSection] = useState<(typeof sections)[number]["id"]>("decision-engine");
   const [details, setDetails] = useState<RunDetails>(emptyRunDetails);
@@ -322,6 +330,67 @@ export function HplcApp() {
   detailsRef.current = details;
   runsRef.current = runs;
   const columnCoatings = useMemo(() => coatingsFromColumns(columns), [columns]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    exampleAbort.current = controller;
+    async function loadExample() {
+      try {
+        // These results are generated with readLabFile from the bundled originals.
+        // Avoid parsing large Excel workbooks on the UI thread during startup.
+        const response = await fetch("/decision-example/results.json", { signal: controller.signal });
+        if (!response.ok) throw new Error("Could not load the example. Start fresh to upload your own files.");
+        const results: { fileName: string; read: LabFileRead }[] = await response.json();
+        const loaded = DECISION_EXAMPLE_FILES.map((fileName) => {
+          const read = results.find((item) => item.fileName === fileName)?.read;
+          if (!read) throw new Error(`Missing example results for ${fileName}.`);
+          if (read.blockingMessage) throw new Error(`${fileName}: ${read.blockingMessage}`);
+          const parsed = parseRunFileName(fileName);
+          if (!parsed.ok) throw new Error(`Could not read conditions from ${fileName}.`);
+          const info = { ...emptyRunDetails(), ...parsed.fields };
+          return { info, run: {
+            ...emptyRun(), percentB: info.percentB, temperature: info.temperature,
+            solvent: info.solvent, ligand: info.ligand, rest: pickRest(info),
+            percentEdited: true, temperatureEdited: true, solventEdited: true, ligandEdited: true,
+            status: "ready" as const, fileName, read,
+          } };
+        });
+        if (controller.signal.aborted) return;
+        setDetails(loaded[0].info);
+        setRules({ ...EXAMPLE_RULES });
+        setRuns(loaded.map((item) => item.run));
+        setFillFromFileName(true);
+        setExampleStatus("loaded");
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        setExampleError(error instanceof Error ? error.message : "Could not load the example.");
+        setExampleStatus("error");
+      }
+    }
+    void loadExample();
+    return () => controller.abort();
+  }, []);
+
+  function startFresh() {
+    exampleAbort.current?.abort();
+    readGeneration.current += 1;
+    setExampleStatus("fresh");
+    setExampleError(null);
+    setActive(0);
+    setRuns([{ ...emptyRun(), percentB: details.percentB }]);
+    setDeclinedEfficiencyNow(false);
+    setRetentionContinuedAt(null);
+    setEfficiencyChosen(false);
+    setContinuedSelectivity({});
+    setHeatChoice(null);
+    setBackwardsChoice(null);
+    setLeftSelectivity(false);
+    setTempPathByRun({});
+    setHoveredRun(null);
+    setLinePercent(null);
+    setPickedPercent(null);
+    setFileNameNotes({});
+  }
 
   const checks = useMemo(() => toRuleNumbers(rules), [rules]);
   const backwards = useMemo(() => backwardsOnPage(runs, details), [runs, details]);
@@ -643,9 +712,11 @@ export function HplcApp() {
   }
 
   async function acceptBuffer(index: number, fileName: string, buffer: ArrayBuffer) {
+    const generation = readGeneration.current;
     applyAddedFile(index, fileName, fillFromFileName);
     patchRun(index, { status: "reading", fileName, read: null, message: null });
     await new Promise((resolve) => setTimeout(resolve, 30));
+    if (generation !== readGeneration.current) return;
     try {
       const read = readLabFile(buffer);
       if (read.blockingMessage) {
@@ -700,6 +771,18 @@ export function HplcApp() {
   return (
     <div className="flex h-dvh max-h-dvh w-full flex-none flex-col overflow-hidden">
       <SectionNav section={section} onSelect={setSection} />
+      {section === "decision-engine" ? (
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border bg-[#e7f3ee] px-4 py-2">
+          <p className="text-sm" role="status">
+            {exampleStatus === "loading" ? "Loading 18 example runs…" : exampleStatus === "loaded"
+              ? `Example session: ${readyCount} loaded runs. Starting specifications: 7 peaks, Rs ≥ 1.5, ≤ 15 min, < 4000 psi. Edit them in the setup panel.`
+              : exampleStatus === "error" ? exampleError : "Ready for your files. Run 1 specifications and conditions have been kept."}
+          </p>
+          <button type="button" onClick={startFresh} className="shrink-0 rounded-md border border-[#0f6b56] bg-background px-3 py-2 text-sm font-semibold hover:bg-accent">
+            Remove all files / Start fresh
+          </button>
+        </div>
+      ) : null}
       {section === "about" || section === "equipment" || section === "settings" ? (
       <div className="min-h-0 flex-1 overflow-y-auto">
       <div className="mx-auto flex w-full max-w-6xl flex-col px-4 py-6 sm:px-6 sm:py-8">
@@ -722,7 +805,7 @@ export function HplcApp() {
       </div>
       ) : null}
 
-      {section === "decision-engine" ? (
+      {section === "decision-engine" && exampleStatus !== "loading" ? (
       <Tabs
         value={String(shown)}
         onValueChange={(value) => {

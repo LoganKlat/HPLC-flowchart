@@ -20,3 +20,24 @@ Work for Logan Klat.
 ```bash
 npm test
 ```
+
+## Decision engine example
+
+The decision engine automatically loads the 18 original LabSolutions exports in
+`public/decision-example/`, ordered by retention, temperature, solvent, and ligand
+changes. The example starts with editable specifications of 7 peaks, Rs ≥ 1.5,
+15 minutes, and 4000 psi. These are demonstration settings, not file metadata.
+
+**Remove all files / Start fresh** cancels loading and clears runs, results, and
+workflow choices while preserving Run 1 specifications and conditions. Reloading
+the page starts the example again.
+
+`results.json` is generated with the same parser used for uploads so startup does
+not block the browser while parsing Excel. After changing the originals or parser,
+regenerate it with:
+
+```sh
+npx vite-node --config vitest.config.ts scripts/generate-decision-example.ts
+```
+
+`src/lib/decision-example.test.ts` checks all originals against the cached results.
