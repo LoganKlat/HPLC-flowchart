@@ -13,6 +13,7 @@ type Topic = typeof topics[number][0];
 const green = "#0f6b56", amber = "#b36a13", blue = "#2563a6";
 const x = (time: number) => 80 + time / 13 * 730;
 const y = (signal: number) => 285 - signal / 150 * 225;
+const pressureY = (psi: number) => 285 - psi / 5500 * 225;
 const n = (value: number) => value.toFixed(2);
 
 export function ChromatogramExplorer() {
@@ -42,10 +43,10 @@ export function ChromatogramExplorer() {
   const pressureCurve = Array.from({ length: 131 }, (_, i) => {
     const time = i / 10;
     const value = pressure - 160 + 80 * (1 + Math.cos((time - 4) * Math.PI / 7));
-    return `${i ? "L" : "M"}${x(time)},${408 - value / 5500 * 58}`;
+    return `${i ? "L" : "M"}${x(time)},${pressureY(value)}`;
   }).join(" ");
   const descriptions: Record<Topic, { title: string; body: string; formula?: string; app: string }> = {
-    axes: { title: "Time and detector response", body: "The X axis is time after injection, in minutes. The Y axis is the detector signal; this UV example uses mAU (milli-absorbance units). A higher signal is not a longer retention time. Pressure uses its own scale below.", app: "The app takes the time, detector signal, and units from the export. Wavelength affects how strongly a compound appears." },
+    axes: { title: "Time and detector response", body: "The X axis is time after injection, in minutes. The Y axis is the detector signal; this UV example uses mAU (milli-absorbance units). A higher signal is not a longer retention time. The blue pressure trace shares the time axis and uses the right Y axis, in psi. Read UV signal from the left axis and pressure from the right.", app: "The app takes the time, detector signal, and units from the export. Wavelength affects how strongly a compound appears." },
     peaks: { title: "Peaks and retention time (tR)", body: `Choose a peak on the graph or below it. ${peak.label} has tR = ${n(peak.time)} min. Retention time is measured from injection to the peak apex. Overlapping compounds can appear as one peak; an extra peak can also be an impurity.`, app: "The decision engine uses the export’s peak table for peak count and retention times. It does not identify compounds from their order alone." },
     t0: { title: "Dead time (t₀)", body: "The marker elutes at 1.00 min. It represents material that is not retained by the stationary phase. The injection is time zero; t₀ is the later marker retention time. In the class, uracil is used to measure it.", formula: "t₀ = 1.00 min; marker k = 0", app: "The app assumes the first peak-table peak is the unretained marker. Check that assignment before relying on calculated k or log k." },
     retention: { title: "Retention factor k", body: `${peak.label}: k = ${n(metric.k)}. k describes retention relative to the time spent passing through the column. The marker has k = 0, so log₁₀(k) is undefined for it.`, formula: `k = (tR − t₀) / t₀ = (${n(peak.time)} − 1.00) / 1.00; log₁₀(k) = ${metric.k > 0 ? n(Math.log10(metric.k)) : "undefined for marker"}`, app: "The app uses the marker and retained peaks to support isocratic %B decisions and retention fitting. Only k > 0 can be plotted as log k." },
@@ -55,7 +56,7 @@ export function ChromatogramExplorer() {
     width: { title: "Baseline width and half-height width", body: `${peak.label}: W = ${n(metric.baselineWidth)} min; FWHM = ${n(metric.fwhm)} min. FWHM is the distance between half-height crossings. For this ideal Gaussian, the baseline width uses the inflection-point tangents (W = 4σ); the curve itself approaches the baseline gradually.`, formula: "W = 4σ; FWHM = 2√(2 ln 2)σ ≈ 2.355σ", app: "Width describes peak broadening. An integration window is not automatically a baseline width. The engine uses the export’s reported resolution rather than these teaching widths." },
     resolution: { title: "Resolution between adjacent peaks", body: `B and C have Rs = ${n(resolution)}. Move C closer or widen both peaks: Rs falls as overlap increases. In this example the worst adjacent retained pair has Rs = ${n(worst)}. Rs ≈ 1.5 is a common reference for Gaussian peaks; use the required specification.`, formula: `Rs = 2(tR₂ − tR₁) / (W₁ + W₂) = 2 × ${n(spacing)} / (${n(peakMetrics(peaks[2]).baselineWidth)} + ${n(peakMetrics(peaks[3]).baselineWidth)})`, app: "The app takes the lowest reported resolution after the marker. If the detected peak count is below the required count, decision resolution is set to zero. A half-height formula is Rs = 1.18ΔtR / (FWHM₁ + FWHM₂); do not mix width conventions." },
     last: { title: "Last peak and runtime limit", body: `D is the last peak at ${n(last.time)} min. The dashed line at 12 min is this example’s maximum last-peak time. The trace continues to 13 min, showing that last-peak time and total acquisition time are different.`, app: "The app checks the latest peak-table retention time against your maximum last-peak time. A compound that has not yet eluted cannot be counted as a detected peak." },
-    pressure: { title: "Pump back-pressure", body: `The separate blue trace has a maximum of ${pressure} psi. The red line is the example limit of 4000 psi. Pressure comes from flow resistance, not from UV absorbance. Flow, solvent viscosity, temperature, and column dimensions can affect it.`, app: "The app finds the maximum pump-pressure trace value and checks that it is below your limit. The pressure slider is an independent teaching control, not a prediction of how the other sliders change pressure." },
+    pressure: { title: "Pump back-pressure", body: `The overlaid blue trace, read against the right axis, has a maximum of ${pressure} psi. The red line is the example limit of 4000 psi. Pressure comes from flow resistance, not from UV absorbance. Flow, solvent viscosity, temperature, and column dimensions can affect it.`, app: "The app finds the maximum pump-pressure trace value and checks that it is below your limit. The pressure slider is an independent teaching control, not a prediction of how the other sliders change pressure." },
     checks: { title: "How these measurements guide the app", body: "This example requires 5 peak-table entries including the marker, minimum Rs 1.5, last peak at or before 12 min, and pressure below 4000 psi. The cards below respond to your controls. The synthetic example knows all five components; it does not simulate peak detection when peaks merge.", app: "Upload checks use reported peak count, worst resolution, last-peak time, and pressure. Missing or extra peaks need attention. Retention changes %B; selectivity tests temperature, solvent, then ligand. Efficiency and gradient are not yet implemented." },
   };
   const note = descriptions[topic];
@@ -75,9 +76,9 @@ export function ChromatogramExplorer() {
       <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_21rem]">
         <div className="min-w-0 rounded-xl border border-border bg-card p-3 sm:p-5">
           <div className="overflow-x-auto">
-            <svg viewBox="0 0 900 450" className="w-full min-w-[600px]" role="img" aria-labelledby={`${id}-title ${id}-desc`}>
+            <svg viewBox="0 0 900 365" className="w-full min-w-[600px]" role="img" aria-labelledby={`${id}-title ${id}-desc`}>
               <title id={`${id}-title`}>Interactive UV chromatogram and pump-pressure trace</title>
-              <desc id={`${id}-desc`}>Five components: marker at 1 minute, A at 3, B at 6, C at {n(6 + spacing)}, D at {n(last.time)}. Select a peak to inspect it. The lower plot shows pressure in psi.</desc>
+              <desc id={`${id}-desc`}>Five components: marker at 1 minute, A at 3, B at 6, C at {n(6 + spacing)}, D at {n(last.time)}. Select a peak to inspect it. The blue overlay shows pressure in psi on the right Y axis.</desc>
               <defs><clipPath id={`${id}-clip`}><rect x="80" y="45" width="730" height="250" /></clipPath></defs>
               {[0, 50, 100, 150].map(v => <g key={v}><line x1="80" x2="810" y1={y(v)} y2={y(v)} stroke="#e5e7eb" /><text x="68" y={y(v) + 4} textAnchor="end" fontSize="12" fill="#475569">{v}</text></g>)}
               <line x1="80" x2="80" y1="45" y2="285" stroke={green} strokeWidth={topic === "axes" ? 3 : 1} />
@@ -108,17 +109,23 @@ export function ChromatogramExplorer() {
                 <circle cx={x(p.time)} cy={y(signal(p.time))} r={selected === i ? 5 : 3} fill={selected === i ? amber : green} />
                 <text x={x(p.time)} y={y(signal(p.time)) - 14 - (i === 3 && spacing < 0.65 ? 18 : 0)} textAnchor="middle" fontSize="13" fontWeight="600" fill={selected === i ? amber : green}>{p.label}</text>
               </g>)}
-              <text x="80" y="355" fontSize="13" fontWeight="600" fill={blue}>Pump pressure · same time axis</text>
-              <line x1="80" x2="810" y1="408" y2="408" stroke="#94a3b8" />
-              <line x1="80" x2="80" y1="350" y2="408" stroke="#94a3b8" />
-              <text x="68" y="411" textAnchor="end" fontSize="11" fill={blue}>0</text>
-              <text x="68" y="360" textAnchor="end" fontSize="11" fill={blue}>5000</text>
-              <text x="22" y="391" fontSize="12" fill={blue}>psi</text>
-              <path d={pressureCurve} fill="none" stroke={blue} strokeWidth={topic === "pressure" ? 3 : 2} />
-              <line x1="80" x2="810" y1={408 - 4000 / 5500 * 58} y2={408 - 4000 / 5500 * 58} stroke="#be123c" strokeDasharray="5 4" />
-              <text x="818" y={408 - 4000 / 5500 * 58 + 4} fontSize="11" fill="#be123c">4000 limit</text>
-              <text x={x(4)} y={408 - pressure / 5500 * 58 - 7} textAnchor="middle" fontSize="12" fill={blue}>max {pressure} psi</text>
-              <text x="80" y="435" fontSize="11" fill="#64748b">Illustrative signals; pressure and UV response have separate units.</text>
+              <line x1="810" x2="810" y1="45" y2="285" stroke={blue} strokeWidth={topic === "pressure" || topic === "axes" ? 3 : 1} />
+              {[0, 1000, 2000, 3000, 4000, 5000].map(value => <g key={value}>
+                <line x1="810" x2="816" y1={pressureY(value)} y2={pressureY(value)} stroke={blue} />
+                <text x="823" y={pressureY(value) + 4} fontSize="12" fill={blue}>{value}</text>
+              </g>)}
+              <text transform="translate(888 170) rotate(90)" textAnchor="middle" fontSize="14" fill={blue}>Back-pressure (psi)</text>
+              <g clipPath={`url(#${id}-clip)`}>
+                <path d={pressureCurve} fill="none" stroke={blue} strokeWidth={topic === "pressure" ? 3 : 2} />
+                <line x1="80" x2="810" y1={pressureY(4000)} y2={pressureY(4000)} stroke="#be123c" strokeDasharray="5 4" opacity="0.75" />
+                <text x="800" y={pressureY(4000) - 7} textAnchor="end" fontSize="12" fill="#be123c">Pressure limit: 4000 psi</text>
+                {topic === "pressure" && <text x={x(4)} y={pressureY(pressure) - 9} textAnchor="middle" fontSize="12" fill={blue}>max {pressure} psi</text>}
+              </g>
+              <line x1="80" x2="100" y1="25" y2="25" stroke={green} strokeWidth="3" />
+              <text x="108" y="29" fontSize="12" fill={green}>UV signal · left axis</text>
+              <line x1="320" x2="340" y1="25" y2="25" stroke={blue} strokeWidth="3" />
+              <text x="348" y="29" fontSize="12" fill={blue}>Pump pressure · right axis</text>
+              <text x="80" y="357" fontSize="11" fill="#64748b">Same time axis; UV response and pressure use independent Y scales.</text>
             </svg>
           </div>
           <div className="flex flex-wrap gap-2" aria-label="Choose a peak">
