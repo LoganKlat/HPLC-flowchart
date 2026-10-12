@@ -1416,7 +1416,7 @@ describe("extra peaks and the in-between choice", () => {
     expect(decision.nextChange).toContain("Investigate");
     expect(decision.nextChange).not.toContain("40°C");
     expect(decision.why).toContain("more peaks than the specification");
-    expect(decision.why).toContain("You decide.");
+    expect(decision.why).toContain("size alone cannot identify a peak");
     expect(decision.why).toContain("0.1 mg/mL");
     expect(decision.why).toContain("Retention time 1.095 min");
     expect(decision.why).toContain("Retention time 11.593 min");

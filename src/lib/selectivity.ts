@@ -345,7 +345,7 @@ function efficiencyWhy(input: {
     !isOver(input.maxBackPressurePsi, input.maxBackPressureSpec!);
   const requiredPeaks = input.requiredPeaks;
   const peaksChecked = requiredPeaks != null;
-  const peaksMet = requiredPeaks != null && input.peakCount != null && input.peakCount >= requiredPeaks;
+  const peaksMet = requiredPeaks != null && input.peakCount != null && input.peakCount === requiredPeaks;
   const everySpecificationMet =
     (!peaksChecked || peaksMet) &&
     resolutionMet &&

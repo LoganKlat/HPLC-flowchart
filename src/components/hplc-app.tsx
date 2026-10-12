@@ -53,6 +53,7 @@ import { methodStageFromLatest, type MethodStage } from "@/lib/method-stage";
 
 import { DECISION_EXAMPLE_FILES, EXAMPLE_RULES } from "@/lib/decision-example";
 
+import { duplicateRunIndex } from "@/lib/duplicate-run";
 import { readLabFileAsync } from "@/lib/read-lab-file-async";
 
 type RestKey = Exclude<keyof RunDetails, "percentB" | "temperature" | "solvent" | "ligand">;
@@ -273,9 +274,11 @@ function openedRunFallback(index: number, runs: RunState[], details: RunDetails)
   const prevTemp = (index === 1 ? details.temperature : prev?.temperature || details.temperature).trim();
   const prevSolvent = (index === 1 ? details.solvent : prev?.solvent || details.solvent).trim();
   const prevLigand = (index === 1 ? details.ligand : prev?.ligand || details.ligand).trim();
-  if (run.temperature.trim() && run.temperature.trim() !== prevTemp) return degreeWords(run.temperature);
-  if (run.solvent.trim() && run.solvent.trim() !== prevSolvent) return run.solvent.trim();
-  if (run.ligand.trim() && run.ligand.trim() !== prevLigand) return "new coating";
+  const changes: string[] = [];
+  if (run.ligand.trim() && run.ligand.trim() !== prevLigand) changes.push(run.ligand.trim());
+  if (run.solvent.trim() && run.solvent.trim() !== prevSolvent) changes.push(run.solvent.trim());
+  if (run.temperature.trim() && run.temperature.trim() !== prevTemp) changes.push(degreeWords(run.temperature));
+  if (changes.length) return [percentWords(run.percentB), ...changes].join(" · ");
   if (run.percentB.trim()) return percentWords(run.percentB);
   return "%B";
 }
@@ -931,7 +934,7 @@ export function HplcApp() {
                           <TabsTrigger
                             key={tabIndex}
                             value={String(tabIndex)}
-                            className="h-10! w-auto! flex-none! rounded-none! border-0! border-r border-solid px-3 text-sm shadow-none! transition-none! after:hidden! last:border-r-0 lg:w-full! lg:border-r-0 lg:border-b lg:px-2 lg:last:border-b-0"
+                            className="min-h-10! h-auto! w-auto! max-w-[15rem] flex-none! whitespace-normal! rounded-none! border-0! border-r border-solid px-3 text-sm shadow-none! transition-none! after:hidden! last:border-r-0 lg:w-full! lg:border-r-0 lg:border-b lg:px-2 lg:last:border-b-0"
                             style={runTabStyle(tabIndex === shown, hoveredRun === tabIndex)}
                             onMouseEnter={() => setHoveredRun(tabIndex)}
                             onMouseLeave={() => setHoveredRun((current) => (current === tabIndex ? null : current))}
@@ -1178,7 +1181,7 @@ function RunPane({
   const choosingEfficiency = retention?.status === "efficiency" && retention.efficiencyChoice && !efficiencyContinued;
   const looking = retention?.status === "look" && retention.look && !heat;
   const holdingBack = Boolean(backwards && backwardsChoice !== "continue");
-  const nextLabel = describeNextChange({
+  const recommendedNextLabel = describeNextChange({
     ready: run.status === "ready",
     holdingBack,
     backwardsChoice,
@@ -1195,6 +1198,10 @@ function RunPane({
     linePercent: linePercent ?? null,
     pickedPercent: pickedPercent ?? null,
   });
+  const nextLabel = next?.status === "ready"
+    ? `Review Run ${index + 2}: ${runSettingLine(next)}`
+    : recommendedNextLabel;
+  const duplicateIndex = duplicateRunIndex(run.read, runs.slice(0, index).map(item => item.read));
   const canOpenNext = Boolean(next) && !ask && !leftSelectivity;
   const currentLigand = (index === 0 ? details.ligand : run.ligand.trim() || details.ligand).trim();
   const nextLocked =
@@ -1301,6 +1308,13 @@ function RunPane({
         >
         {run.status === "ready" && run.read && rows && run.fileName ? (
           <>
+            {duplicateIndex != null ? (
+              <p className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950" role="status">
+                This export has identical detector, pressure, and peak-table data to Run {duplicateIndex + 1}.
+                Check that the correct export was uploaded, especially if the run conditions changed.
+                Treat these as duplicate data until verified.
+              </p>
+            ) : null}
             <ResultsPanel
               fileName={run.fileName}
               onRemove={() => onRemove(index)}

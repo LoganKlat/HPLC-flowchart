@@ -88,10 +88,12 @@ export function evaluateRun(read: LabFileRead, rules: RuleNumbers): ResultRow[] 
         read.peakCount,
         read.peakCount != null &&
           rules.requiredPeaks != null &&
-          read.peakCount >= rules.requiredPeaks,
+          read.peakCount === rules.requiredPeaks,
       ),
       note:
-        read.peakCount != null && read.peakRowCount !== read.peakCount
+        read.peakCount != null && rules.requiredPeaks != null && read.peakCount > rules.requiredPeaks
+          ? "More peaks than expected. Investigate impurities, carryover, or split peaks before changing the method."
+          : read.peakCount != null && read.peakRowCount !== read.peakCount
           ? `The file says ${formatCount(read.peakCount)} peaks, but the table lists ${formatCount(read.peakRowCount)} peak rows.`
           : null,
     },

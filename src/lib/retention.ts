@@ -389,7 +389,7 @@ export function formatPercentB(value: number): string {
 }
 
 const INVESTIGATE_COPY =
-  "This run has more peaks than the specification. Stop and investigate before changing %B, temperature, solvent, or the column. An extra peak can be a breakdown product, a peak that split in two, or sample left over from an earlier injection. Changing the method now would chase a peak that may not be one of the compounds. Compare the area and the height of the extra peak with the peaks from a 0.1 mg/mL injection. If it is nowhere near that size, it is probably not one of the compounds. You decide. Leave retention, selectivity, and efficiency as they are until that extra peak is checked. Changing them would move how long compounds stay, pull peaks apart, or narrow them for a peak that may not belong.";
+  "This run has more peaks than the specification. Pause method changes and check for impurities, carryover, degradation, or split peaks. Compare the peak table with a reference injection at 0.1 mg/mL under the same conditions, and review a blank for carryover. Area and height help compare signals, but size alone cannot identify a peak or prove that it is an impurity. Confirm which peaks belong to the sample before continuing.";
 
 function investigateDecision(sample: RetentionSample, rules: CompleteRules): RetentionDecision {
   const peaks = sample.peaks ?? [];
@@ -642,7 +642,7 @@ function lookRuns(samples: RetentionSample[], rules: CompleteRules): LookRun[] {
       rules.requiredPeaks,
     );
     const peaks: LookMark =
-      sample.peakCount == null ? "blank" : sample.peakCount >= rules.requiredPeaks ? "met" : "not-met";
+      sample.peakCount == null ? "blank" : sample.peakCount === rules.requiredPeaks ? "met" : "not-met";
     const resolutionMark: LookMark =
       rules.minResolution == null || !(rules.minResolution > 0)
         ? "blank"
