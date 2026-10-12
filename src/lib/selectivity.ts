@@ -524,7 +524,10 @@ export function planHistory(
     const fortyAt = segment.findIndex((run) => isForty(run));
     const beforeHeat =
       fortyAt > 0 ? decideRetention(segment.slice(0, fortyAt).map(toRetentionSample), rules) : null;
-    const secondMinThenHeat = !explicitHeat && !ovenSplit && beforeHeat?.reason === "second-minimum";
+    const secondMinThenHeat =
+      !explicitHeat &&
+      !ovenSplit &&
+      (beforeHeat?.reason === "second-minimum" || beforeHeat?.reason === "choose-percent");
     const ownPercentThenHeat = !explicitHeat && !ovenSplit && beforeHeat?.status === "efficiency";
     if (ovenSplit || secondMinThenHeat || ownPercentThenHeat) {
       const splitAt = ovenSplit ? raise : fortyAt;

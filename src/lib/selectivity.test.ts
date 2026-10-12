@@ -943,15 +943,17 @@ describe("selectivity plan", () => {
     expect(minimum.nextPercentB).toBe(42);
     const atMinimum = asRun(42, 3, 25);
     const second = decideRetention([...ladder, atMinimum].map(toSample), setup);
-    expect(second.reason).toBe("second-minimum");
-    expect(second.nextPercentB).not.toBeNull();
-    const at40 = asRun(second.nextPercentB!, 3, 40);
+    expect(second.reason).toBe("choose-percent");
+    expect(second.fit).toBeNull();
+    expect(second.nextPercentB).toBeNull();
+    expect(second.pickOwnPercent).toBe(true);
+    const at40 = asRun(38, 3, 40);
     const history = planHistory([...ladder, atMinimum, at40], setup);
     expect(history.phase).toBe("selectivity");
     if (history.phase !== "selectivity") return;
     expect(history.plan.step).toBe("temp-60");
     expect(history.plan.prefill).toMatchObject({
-      percentB: formatPercentB(at40.percentB!),
+      percentB: "38",
       temperature: "60",
     });
   });

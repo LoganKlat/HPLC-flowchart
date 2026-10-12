@@ -259,13 +259,11 @@ export function decideRetention(
     );
   }
 
-  if (samples.length >= 2) {
+  if (samples.length >= 2 && current.percentB != null) {
     const prior = decideRetention(samples.slice(0, -1), complete);
-    const matchedMinimum =
-      prior.move === "calculated" &&
-      prior.nextPercentB != null &&
-      nearly(current.percentB, prior.nextPercentB);
-    if (matchedMinimum) return secondMinimumDecision(samples, complete);
+    // The first calculated minimum is run once. A later file at that %B, including
+    // the whole percent just under a ceiled recommendation, does not refit the line.
+    if (ranRecommendedMinimum(current.percentB, prior)) return minimumAlreadyRun();
     if (prior.reason === "second-minimum" || prior.reason === "choose-percent") return prior;
   }
 
@@ -419,18 +417,32 @@ function investigateDecision(sample: RetentionSample, rules: CompleteRules): Ret
   };
 }
 
-function secondMinimumDecision(samples: RetentionSample[], rules: CompleteRules): RetentionDecision {
-  const calculated = calculatePercentB(samples, rules);
-  if (calculated.fit == null || calculated.nextPercentB == null) return calculated;
-  const percent = formatPercentB(calculated.nextPercentB);
+/** The uploaded %B is the first calculated minimum, so the last-peak line is not fit again. */
+function ranRecommendedMinimum(percentB: number, prior: RetentionDecision): boolean {
+  if (prior.move !== "calculated" || prior.nextPercentB == null) return false;
+  if (nearly(percentB, prior.nextPercentB)) return true;
+  const raw = prior.fit?.rawPercentB;
+  if (raw == null || !Number.isFinite(raw)) return false;
+  const below = Math.floor(raw + 1e-9);
+  return nearly(percentB, below) && percentB < prior.nextPercentB - 1e-9;
+}
+
+function minimumAlreadyRun(): RetentionDecision {
   return {
-    ...calculated,
-    reason: "second-minimum",
+    status: "recommend",
+    reason: "choose-percent",
     move: null,
+    nextPercentB: null,
     nextTemperature: "40",
-    choosePercent: true,
-    nextChange: `Run the next chromatogram at 40°C, at ${percent}% B. This %B is the new minimum from the last-peak line, including the run just uploaded. Use it, or type a different %B. Selectivity starts at 40°C with the %B you take.`,
+    pickOwnPercent: true,
+    nextChange: "Select a %B of your choosing. The next run is selectivity at 40°C at that %B.",
     following: SELECTIVITY_ORDER,
+    why: [
+      "The minimum %B from the last-peak line has already been run.",
+      "Staying in retention does not calculate another minimum %B, and it does not refit the last-peak line.",
+      "Select a %B of your choosing. With that %B, selectivity starts at 40°C.",
+    ].join("\n\n"),
+    fit: null,
   };
 }
 
