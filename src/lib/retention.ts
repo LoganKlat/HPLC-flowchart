@@ -263,7 +263,13 @@ export function decideRetention(
     const prior = decideRetention(samples.slice(0, -1), complete);
     // The first calculated minimum is run once. A later file at that %B, including
     // the whole percent just under a ceiled recommendation, does not refit the line.
-    if (ranRecommendedMinimum(current.percentB, prior)) return minimumAlreadyRun();
+    // Peaks already matching the specification still pause for efficiency first.
+    if (ranRecommendedMinimum(current.percentB, prior)) {
+      if (current.peakCount === complete.requiredPeaks) {
+        return equalPeakCount(samples, complete, choice);
+      }
+      return minimumAlreadyRun();
+    }
     if (prior.reason === "second-minimum" || prior.reason === "choose-percent") return prior;
   }
 

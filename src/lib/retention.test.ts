@@ -262,6 +262,39 @@ describe("retention %B along the four lab files", () => {
     expect(retentionChangeLabel(followed)).toBe("Select a %B");
   });
 
+  it("pauses for efficiency when the calculated minimum %B run itself meets the peak count", () => {
+    const calculated = decideRetention(samples, pathRules);
+    expect(calculated.move).toBe("calculated");
+    expect(calculated.nextPercentB).toBe(42);
+    const followed = decideRetention(
+      [
+        ...samples,
+        sample({
+          percentB: calculated.nextPercentB!,
+          peakCount: pathRules.requiredPeaks!,
+          lastPeakTimeMin: 12,
+          firstPeakTimeMin: 1.09,
+          minResolutionExcludingFirst: 0.4,
+          maxBackPressurePsi: 1400,
+        }),
+      ],
+      { ...pathRules, minResolution: 1 },
+    );
+    expect(followed.status).toBe("efficiency");
+    expect(followed.reason).toBe("efficiency");
+    expect(followed.nextPercentB).toBeNull();
+    expect(followed.pickOwnPercent ?? false).toBe(false);
+    expect(followed.nextTemperature ?? null).toBeNull();
+    expect(followed.nextChange).toContain("Move on to efficiency");
+    expect(followed.efficiencyChoice?.recommendedSentence).toContain("peak count equals the specification");
+    expect(followed.efficiencyChoice?.continueLabel).toBe("Move on to selectivity");
+    expect(followed.why).toContain(`Peaks: ${pathRules.requiredPeaks}. The specification is ${pathRules.requiredPeaks}. Met.`);
+    expect(followed.why).toContain("Efficiency is next for the resolution.");
+    expect(retentionChangeLabel(followed)).toBe("Move on to efficiency");
+    expect(followed.why).not.toContain("does not calculate another minimum");
+    expect(followed.nextChange).not.toContain("40°C");
+  });
+
   it("recommends a second minimum %B after the recommended minimum file, not during the 10% ladder", () => {
     const ladder = decideRetention(samples.slice(0, 2), pathRules);
     expect(ladder.reason).toBe("drop-10");
@@ -1223,12 +1256,15 @@ describe("declining selectivity after the 35% file", () => {
   }));
 
   it("keeps the selectivity offer, and staying in retention asks for a %B", () => {
+    // The 35% file is the recommended minimum (raw just under ceil) and already has 7 peaks.
     const afterMinimum = decideRetention(samples, rules);
-    expect(afterMinimum.status).toBe("recommend");
-    expect(afterMinimum.reason).toBe("choose-percent");
-    expect(afterMinimum.pickOwnPercent).toBe(true);
-    expect(afterMinimum.fit).toBeNull();
+    expect(afterMinimum.status).toBe("efficiency");
+    expect(afterMinimum.reason).toBe("efficiency");
+    expect(afterMinimum.nextChange).toContain("Move on to efficiency");
+    expect(afterMinimum.efficiencyChoice?.continueLabel).toBe("Move on to selectivity");
     expect(afterMinimum.nextPercentB).toBeNull();
+    expect(afterMinimum.pickOwnPercent ?? false).toBe(false);
+    expect(retentionChangeLabel(afterMinimum)).toBe("Move on to efficiency");
 
     const lateNotMinimum = { ...samples[5], percentB: 30 };
     const offered = decideRetention([...samples.slice(0, 5), lateNotMinimum], rules);
@@ -1312,11 +1348,14 @@ describe("declining selectivity after the 35% file", () => {
     );
     expect(firstMinimum.fit?.rawPercentB).toBeGreaterThan(35);
     expect(firstMinimum.fit?.rawPercentB).toBeLessThan(36);
-    expect(atFloor.reason).toBe("choose-percent");
+    // Floor of the raw minimum with peaks already met → efficiency pause, not another %B.
+    expect(atFloor.status).toBe("efficiency");
+    expect(atFloor.reason).toBe("efficiency");
     expect(atFloor.fit).toBeNull();
-    expect(atFloor.pickOwnPercent).toBe(true);
+    expect(atFloor.pickOwnPercent ?? false).toBe(false);
     expect(atFloor.nextPercentB).toBeNull();
-    expect(atFloor.why).toContain("does not calculate another minimum");
+    expect(atFloor.nextChange).toContain("Move on to efficiency");
+    expect(atFloor.why).toContain("Peaks: 7. The specification is 7. Met.");
   });
 });
 
