@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { NO_CHANGE_YET, retentionChangeLabel, selectivityChangeLabel } from "@/lib/change-label";
+import { nextRunLockedForSolvent, NO_CHANGE_YET, retentionChangeLabel, selectivityChangeLabel } from "@/lib/change-label";
 import type { RetentionDecision } from "@/lib/retention";
 import type { SelectivityPlan } from "@/lib/selectivity";
 
@@ -61,6 +61,26 @@ describe("next change wording", () => {
     ).toBe("Change solvent, back at 30°C");
     expect(selectivityChangeLabel({ ...plan, step: "ligand" }, { ligand: "C8" })).toBe("Run with C8");
     expect(selectivityChangeLabel({ ...plan, step: "temp-40" })).toBe("Run at 40°C");
+  });
+
+  it("locks the solvent step until a solvent and its %B are known", () => {
+    const solvent = { status: "recommend" as const, step: "solvent" as const };
+    expect(nextRunLockedForSolvent(solvent, { solvent: "", percentB: "" })).toBe(true);
+    expect(nextRunLockedForSolvent(solvent, { solvent: "MeOH", percentB: "" })).toBe(true);
+    expect(nextRunLockedForSolvent(solvent, { solvent: "", percentB: "50.3" })).toBe(true);
+    expect(nextRunLockedForSolvent(solvent, null)).toBe(true);
+    expect(nextRunLockedForSolvent(solvent, { solvent: "MeOH", percentB: "50.3" })).toBe(false);
+    expect(nextRunLockedForSolvent(solvent, { solvent: "THF", percentB: "17.6" })).toBe(false);
+    expect(nextRunLockedForSolvent({ status: "recommend", step: "temp-40" }, { solvent: "", percentB: "" })).toBe(
+      false,
+    );
+    expect(nextRunLockedForSolvent({ status: "recommend", step: "temp-60" }, null)).toBe(false);
+    expect(nextRunLockedForSolvent({ status: "recommend", step: "ligand" }, { solvent: "", percentB: "" })).toBe(
+      false,
+    );
+    expect(nextRunLockedForSolvent({ status: "recommend", step: "temp-choice" }, { solvent: "", percentB: "" })).toBe(
+      false,
+    );
   });
 
   it("says nothing is changing when no next run is recommended", () => {

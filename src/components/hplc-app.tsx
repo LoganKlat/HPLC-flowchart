@@ -40,7 +40,7 @@ import {
   type SelectivityRun,
   type TempPath,
 } from "@/lib/selectivity";
-import { NO_CHANGE_YET, retentionChangeLabel, selectivityChangeLabel } from "@/lib/change-label";
+import { nextRunLockedForSolvent, NO_CHANGE_YET, retentionChangeLabel, selectivityChangeLabel } from "@/lib/change-label";
 import { MENU_SOLVENTS, solventKey } from "@/lib/solvent-menu";
 
 type RestKey = Exclude<keyof RunDetails, "percentB" | "temperature" | "solvent" | "ligand">;
@@ -1058,6 +1058,10 @@ function RunPane({
     linePercent: linePercent ?? null,
     pickedPercent: pickedPercent ?? null,
   });
+  const canOpenNext = Boolean(next) && !ask && !leftSelectivity;
+  const nextLocked =
+    canOpenNext &&
+    nextRunLockedForSolvent(selectivity, next ? { solvent: next.solvent, percentB: next.percentB } : null);
   const secondMin =
     retention?.choosePercent && retention.nextPercentB != null && onPickPercent
       ? { recommended: retention.nextPercentB, picked: pickedPercent ?? null, onPick: onPickPercent }
@@ -1081,7 +1085,8 @@ function RunPane({
             runs={runs}
             details={details}
             nextLabel={nextLabel}
-            onNext={next && !ask && !leftSelectivity ? () => onOpen(index + 1) : undefined}
+            onNext={canOpenNext ? () => onOpen(index + 1) : undefined}
+            nextLocked={nextLocked}
             secondMin={secondMin}
             ownPercent={ownPercent}
           />
@@ -1207,6 +1212,7 @@ function RunSummary({
   details,
   nextLabel,
   onNext,
+  nextLocked = false,
   secondMin = null,
   ownPercent = null,
 }: {
@@ -1215,6 +1221,7 @@ function RunSummary({
   details: RunDetails;
   nextLabel: string;
   onNext?: () => void;
+  nextLocked?: boolean;
   secondMin?: {
     recommended: number;
     picked: number | null;
@@ -1252,8 +1259,15 @@ function RunSummary({
           <button
             type="button"
             id="next-run-change"
-            className="flex min-h-full w-full flex-1 cursor-pointer items-center gap-3 border-0 bg-[#0f6b56] px-4 py-3 text-left text-[#f7fffb] hover:bg-[#0c5948]"
-            onClick={onNext}
+            disabled={nextLocked}
+            className={
+              "flex min-h-full w-full flex-1 items-center gap-3 border-0 bg-[#0f6b56] px-4 py-3 text-left text-[#f7fffb] disabled:cursor-not-allowed disabled:opacity-50 " +
+              (nextLocked ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:bg-[#0c5948]")
+            }
+            onClick={() => {
+              if (nextLocked) return;
+              onNext();
+            }}
           >
             <span className="flex min-w-0 flex-1 flex-col items-start gap-1">
               <span className="text-xs font-medium tracking-[0.14em] uppercase">Next run</span>

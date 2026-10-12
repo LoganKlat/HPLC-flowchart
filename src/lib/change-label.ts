@@ -1,5 +1,6 @@
+import { parseUserNumber } from "@/lib/evaluate";
 import { formatPercentB, type RetentionDecision } from "@/lib/retention";
-import type { SelectivityPlan, TempPath } from "@/lib/selectivity";
+import { findSolvent, type SelectivityPlan, type TempPath } from "@/lib/selectivity";
 
 export const NO_CHANGE_YET = "No change yet";
 
@@ -55,4 +56,19 @@ export function selectivityChangeLabel(
   }
   if (plan.step === "ligand") return ligand ? `Run with ${ligand}` : "Run with a new ligand";
   return NO_CHANGE_YET;
+}
+
+/**
+ * The “change solvent, back at the original temperature” step cannot advance
+ * until a chart solvent is chosen and its %B has been computed. Temperature,
+ * ligand, and retention steps stay open.
+ */
+export function nextRunLockedForSolvent(
+  plan: Pick<SelectivityPlan, "step" | "status"> | null,
+  next: { solvent: string; percentB: string } | null,
+): boolean {
+  if (!plan || plan.status !== "recommend" || plan.step !== "solvent") return false;
+  if (!next || !findSolvent(next.solvent)) return true;
+  const percent = parseUserNumber(next.percentB);
+  return percent == null || percent < 0 || percent > 100;
 }
