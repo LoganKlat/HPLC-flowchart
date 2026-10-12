@@ -17,7 +17,7 @@ import { EquipmentPanel } from "@/components/equipment-panel";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { evaluateRun, parseUserCount, parseUserNumber, type RuleNumbers } from "@/lib/evaluate";
 import { detailsFromFileNameIfEnabled, parseRunFileName } from "@/lib/filename-details";
-import { readLabFile, type LabFileRead } from "@/lib/lab-file";
+import { type LabFileRead } from "@/lib/lab-file";
 import {
   decideRetention,
   findBackwardsRetention,
@@ -52,6 +52,8 @@ import { MENU_SOLVENTS, solventKey } from "@/lib/solvent-menu";
 import { methodStageFromLatest, type MethodStage } from "@/lib/method-stage";
 
 import { DECISION_EXAMPLE_FILES, EXAMPLE_RULES } from "@/lib/decision-example";
+
+import { readLabFileAsync } from "@/lib/read-lab-file-async";
 
 type RestKey = Exclude<keyof RunDetails, "percentB" | "temperature" | "solvent" | "ligand">;
 type RestDetails = Pick<RunDetails, RestKey>;
@@ -301,6 +303,11 @@ export function HplcApp() {
   const [exampleError, setExampleError] = useState<string | null>(null);
   const exampleAbort = useRef<AbortController | null>(null);
   const readGeneration = useRef(0);
+  const uploadControllers = useRef(new Map<number, AbortController>());
+  useEffect(() => {
+    const controllers = uploadControllers.current;
+    return () => { controllers.forEach((controller) => controller.abort()); controllers.clear(); };
+  }, []);
 
   const [active, setActive] = useState(0);
   const [section, setSection] = useState<(typeof sections)[number]["id"]>("decision-engine");
@@ -374,6 +381,8 @@ export function HplcApp() {
   function startFresh() {
     exampleAbort.current?.abort();
     readGeneration.current += 1;
+    uploadControllers.current.forEach((controller) => controller.abort());
+    uploadControllers.current.clear();
     setExampleStatus("fresh");
     setExampleError(null);
     setActive(0);
@@ -715,22 +724,27 @@ export function HplcApp() {
     const generation = readGeneration.current;
     applyAddedFile(index, fileName, fillFromFileName);
     patchRun(index, { status: "reading", fileName, read: null, message: null });
-    await new Promise((resolve) => setTimeout(resolve, 30));
-    if (generation !== readGeneration.current) return;
+    uploadControllers.current.get(index)?.abort();
+    const controller = new AbortController();
+    uploadControllers.current.set(index, controller);
     try {
-      const read = readLabFile(buffer);
+      const read = await readLabFileAsync(buffer, controller.signal);
+      if (controller.signal.aborted || generation !== readGeneration.current) return;
       if (read.blockingMessage) {
         patchRun(index, { status: "error", fileName, read: null, message: read.blockingMessage });
         return;
       }
       patchRun(index, { status: "ready", fileName, read, message: null });
-    } catch {
+    } catch (error) {
+      if (controller.signal.aborted || generation !== readGeneration.current) return;
       patchRun(index, {
         status: "error",
         fileName,
         read: null,
-        message: "This file could not be read.",
+        message: error instanceof Error ? error.message : "This file could not be read.",
       });
+    } finally {
+      if (uploadControllers.current.get(index) === controller) uploadControllers.current.delete(index);
     }
   }
 
@@ -739,6 +753,9 @@ export function HplcApp() {
   }
 
   function removeFile(index: number) {
+    for (const [runIndex, controller] of uploadControllers.current) {
+      if (runIndex >= index) { controller.abort(); uploadControllers.current.delete(runIndex); }
+    }
     setActive((current) => Math.min(current, index));
     setRuns((current) => {
       const next = current.slice(0, index + 1);

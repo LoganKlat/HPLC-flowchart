@@ -17,7 +17,7 @@ export function FileDrop({ prompt, reading, onBegin, onBuffer, onProblem }: File
   const [dragging, setDragging] = useState(false);
 
   async function takeFile(file: File | undefined) {
-    if (!file) return;
+    if (!file || reading) return;
     const lower = file.name.toLowerCase();
     if (!lower.endsWith(".csv") && !lower.endsWith(".txt") && !lower.endsWith(".xlsx")) {
       onProblem(file.name, "Choose a LabSolutions export. It should be a .csv, .txt, or .xlsx file.");
@@ -28,8 +28,12 @@ export function FileDrop({ prompt, reading, onBegin, onBuffer, onProblem }: File
       return;
     }
     onBegin(file.name);
-    const buffer = await file.arrayBuffer();
-    onBuffer(file.name, buffer);
+    try {
+      const buffer = await file.arrayBuffer();
+      onBuffer(file.name, buffer);
+    } catch {
+      onProblem(file.name, "This file could not be opened. Please try again.");
+    }
   }
 
   return (
@@ -59,7 +63,7 @@ export function FileDrop({ prompt, reading, onBegin, onBuffer, onProblem }: File
           dragging && "rounded-xl bg-accent",
         )}
       >
-        <p className="font-heading text-2xl text-foreground sm:text-3xl">{prompt}</p>
+        <p className="font-heading text-2xl text-foreground sm:text-3xl">{reading ? "Reading your chromatogram…" : prompt}</p>
         <p className="max-w-md text-sm text-muted-foreground">
           LabSolutions export (.csv, .txt, or .xlsx). Drag it here, or choose it from your computer.
         </p>
@@ -70,7 +74,7 @@ export function FileDrop({ prompt, reading, onBegin, onBuffer, onProblem }: File
             reading && "opacity-50",
           )}
         >
-          <span>Choose a file</span>
+          <span>{reading ? "Processing file…" : "Choose a file"}</span>
         </div>
         <input
           id={inputId}

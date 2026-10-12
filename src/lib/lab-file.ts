@@ -209,10 +209,12 @@ function isXlsx(bytes: Uint8Array): boolean {
 
 /** One sheet, cells in order. A section title in the first cell stays a [Section] line. */
 function workbookToLabText(bytes: Uint8Array): string {
-  const book = XLSX.read(bytes, { type: "array" });
+  // Dense rows avoid millions of cell-address strings for wide, mostly blank exports.
+  // Only the first sheet is consumed; display formatting and HTML are not used.
+  const book = XLSX.read(bytes, { type: "array", dense: true, sheets: 0, cellText: false, cellHTML: false });
   const sheetName = book.SheetNames[0];
   if (!sheetName) return "";
-  const sheet = book.Sheets[sheetName];
+  const sheet = book.Sheets[sheetName] as XLSX.WorkSheet & Array<Array<XLSX.CellObject | undefined>>;
   const ref = sheet["!ref"];
   if (!ref) return "";
   const range = XLSX.utils.decode_range(ref);
@@ -220,8 +222,9 @@ function workbookToLabText(bytes: Uint8Array): string {
   for (let row = range.s.r; row <= range.e.r; row++) {
     const cells: string[] = [];
     let last = -1;
-    for (let column = range.s.c; column <= range.e.c; column++) {
-      const cell = sheet[XLSX.utils.encode_cell({ r: row, c: column })];
+    const rowCells = sheet[row] ?? [];
+    for (let column = range.s.c; column < rowCells.length; column++) {
+      const cell = rowCells[column];
       const value = cellValue(cell);
       cells.push(value);
       if (value !== "") last = cells.length - 1;
