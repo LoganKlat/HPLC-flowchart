@@ -1,6 +1,7 @@
 "use client";
 
 import { useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import { ChromatogramExplorer } from "@/components/chromatogram-explorer";
 import { BeadDiagram } from "@/components/bead-diagram";
 import { ColumnDiagram, type ColumnRunTrace } from "@/components/column-diagram";
 import { ColumnRetentionAnimation } from "@/components/column-retention-animation";
@@ -263,6 +264,7 @@ const equipmentTabs = [
   { id: "hplc", label: "HPLC" },
   { id: "column", label: "Column" },
   { id: "beads", label: "Beads" },
+  { id: "chromatogram", label: "Chromatogram" },
 ] as const;
 
 function NameColumn({
@@ -488,6 +490,7 @@ export function EquipmentPanel({
           <ColumnRetentionAnimation />
         </>
       ) : null}
+      {view === "chromatogram" ? <ChromatogramExplorer /> : null}
       {view === "beads" ? <BeadDiagram ligands={ligands} /> : null}
       {view === "hplc" ? (
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
