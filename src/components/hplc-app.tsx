@@ -323,6 +323,15 @@ export function HplcApp() {
   const [leftSelectivity, setLeftSelectivity] = useState(false);
   const [tempPathByRun, setTempPathByRun] = useState<Record<number, TempPath>>({});
   const [hoveredRun, setHoveredRun] = useState<number | null>(null);
+  // Each run owns a panel, so switching runs mounts a new copy of the list.
+  // Keep its position at the session level and restore it before paint.
+  const runListScroll = useRef({ top: 0, left: 0 });
+  const restoreRunListVertical = useCallback((node: HTMLDivElement | null) => {
+    if (node) node.scrollTop = runListScroll.current.top;
+  }, []);
+  const restoreRunListHorizontal = useCallback((node: HTMLDivElement | null) => {
+    if (node) node.scrollLeft = runListScroll.current.left;
+  }, []);
   const [linePercent, setLinePercent] = useState<number | null>(null);
   const [pickedPercent, setPickedPercent] = useState<number | null>(null);
   const reportLinePercent = useCallback((percent: number | null) => {
@@ -396,6 +405,7 @@ export function HplcApp() {
     setLeftSelectivity(false);
     setTempPathByRun({});
     setHoveredRun(null);
+    runListScroll.current = { top: 0, left: 0 };
     setLinePercent(null);
     setPickedPercent(null);
     setFileNameNotes({});
@@ -907,9 +917,15 @@ export function HplcApp() {
                 index === shown ? (
                   <div
                     id="run-tabs"
+                    ref={restoreRunListVertical}
+                    onScroll={(event) => { runListScroll.current.top = event.currentTarget.scrollTop; }}
                     className="order-1 flex shrink-0 border-b border-border bg-card lg:order-2 lg:w-max lg:min-h-0 lg:shrink lg:flex-col lg:self-stretch lg:overflow-y-auto lg:border-b-0 lg:border-l"
                   >
-                    <div className="overflow-x-auto lg:overflow-visible">
+                    <div
+                      className="overflow-x-auto lg:overflow-visible"
+                      ref={restoreRunListHorizontal}
+                      onScroll={(event) => { runListScroll.current.left = event.currentTarget.scrollLeft; }}
+                    >
                       <TabsList className="flex! h-auto! w-max flex-row! items-stretch justify-start gap-0! rounded-none bg-transparent p-0! group-data-horizontal/tabs:h-auto! lg:w-full! lg:flex-col!">
                         {syncedRuns.map((_, tabIndex) => (
                           <TabsTrigger
