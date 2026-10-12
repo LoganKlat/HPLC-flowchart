@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { ArrowRight, Gauge, GitBranch, Info, Settings, type LucideIcon } from "lucide-react";
+import { ArrowRight, Gauge, GitBranch, Info, Settings, TableProperties, type LucideIcon } from "lucide-react";
+import { RunDataPanel } from "@/components/run-data-panel";
 import { FileDrop } from "@/components/file-drop";
 import { AboutPanel } from "@/components/about-panel";
 import { SettingsPanel } from "@/components/settings-panel";
@@ -111,8 +112,9 @@ function emptyRun(): RunState {
   };
 }
 
-const sections: readonly { id: "decision-engine" | "equipment" | "settings" | "about"; label: string; icon: LucideIcon }[] = [
+const sections: readonly { id: "decision-engine" | "run-data" | "equipment" | "settings" | "about"; label: string; icon: LucideIcon }[] = [
   { id: "decision-engine", label: "Decision engine", icon: GitBranch },
+  { id: "run-data", label: "Run data", icon: TableProperties },
   { id: "equipment", label: "Equipment", icon: Gauge },
   { id: "settings", label: "Settings", icon: Settings },
   { id: "about", label: "About", icon: Info },
@@ -812,11 +814,16 @@ export function HplcApp() {
           </button>
         </div>
       ) : null}
-      {section === "about" || section === "equipment" || section === "settings" ? (
+      {section === "about" || section === "equipment" || section === "settings" || section === "run-data" ? (
       <div className="min-h-0 flex-1 overflow-y-auto">
       <div className="mx-auto flex w-full max-w-6xl flex-col px-4 py-6 sm:px-6 sm:py-8">
       <Watermark />
       {section === "about" ? <AboutPanel /> : null}
+      {section === "run-data" ? <RunDataPanel
+        runs={syncedRuns.map((run, index) => ({ index, label: runTabLabel(index, syncedRuns, details, checks, { choice, heat: heatChoice, continued: continuedSelectivity, ligands: columnCoatings }), fileName: run.fileName, status: run.status, details: detailsForRun(index, syncedRuns, details), read: run.read, message: run.message }))}
+        checks={checks}
+        onOpen={(index) => { setActive(index); setSection("decision-engine"); }}
+      /> : null}
       {section === "equipment" ? (
         <EquipmentPanel columnRuns={columnRuns} ligands={columnCoatings} />
       ) : null}
@@ -1041,7 +1048,7 @@ function SectionNav({
 }) {
   const [hovered, setHovered] = useState<string | null>(null);
   return (
-    <nav aria-label="Sections" className="sticky top-0 z-40 grid w-full shrink-0 grid-cols-4 bg-background">
+    <nav aria-label="Sections" className="sticky top-0 z-40 grid w-full shrink-0 grid-cols-5 bg-background">
       {sections.map((item) => {
         const selected = item.id === section;
         return (
@@ -1049,13 +1056,13 @@ function SectionNav({
             key={item.id}
             type="button"
             aria-current={selected ? "page" : undefined}
-            className="flex h-10 items-center justify-center gap-1.5 border border-r-0 border-solid px-2 text-center text-xs leading-none last:border-r sm:gap-2 sm:text-sm"
+            className="flex min-h-10 items-center justify-center gap-1 border border-r-0 border-solid px-1 py-2 text-center text-xs leading-tight last:border-r sm:gap-2 sm:px-2 sm:text-sm"
             style={sectionTabStyle(selected, hovered === item.id)}
             onMouseEnter={() => setHovered(item.id)}
             onMouseLeave={() => setHovered((current) => (current === item.id ? null : current))}
             onClick={() => onSelect(item.id)}
           >
-            <item.icon className="size-4 shrink-0" aria-hidden="true" />
+            <item.icon className="hidden size-4 shrink-0 sm:block" aria-hidden="true" />
             <span>{item.label}</span>
           </button>
         );

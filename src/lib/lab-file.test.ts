@@ -330,3 +330,24 @@ function encodeUtf16(text: string, endian: "le" | "be"): Uint8Array {
   }
   return bytes;
 }
+
+describe("complete export data for Run data", () => {
+  it("retains every peak column and per-row resolution", () => {
+    const read = readLabFile(readFileSync(example06));
+    expect(read.peakTable?.headers).toContain("Resolution");
+    const column = read.peakTable!.headers.indexOf("Resolution");
+    read.peaks.forEach((peak, index) => {
+      const raw = read.peakTable!.rows[index][column];
+      expect(peak.resolution).toBe(raw && Number.isFinite(Number(raw)) ? Number(raw) : null);
+    });
+    expect(read.peakTable!.rows).toHaveLength(read.peakRowCount);
+  });
+  it("keeps original metadata and all named sections alongside normalized traces", () => {
+    const read = readLabFile(readFileSync(example06));
+    const names = read.exportSections!.map(section => section.name);
+    expect(names).toContain("Peak Table(Detector A)");
+    expect(names).toContain("LC Status Trace(Pump A Pressure)");
+    expect(read.exportSections!.find(section => section.name === "LC Status Trace(Pump A Pressure)")!.lines.length).toBeGreaterThan(0);
+    expect(read.peakTable!.metadata["# of Peaks"]).toBeDefined();
+  });
+});

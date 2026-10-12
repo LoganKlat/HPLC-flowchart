@@ -41,3 +41,12 @@ npx vite-node --config vitest.config.ts scripts/generate-decision-example.ts
 ```
 
 `src/lib/decision-example.test.ts` checks all originals against the cached results.
+
+## Run data
+
+The header's Run data tab shows all loaded run conditions, checks, full peak-table
+columns, per-peak reported resolution, calculated k/log k, and all named export
+sections. Download all runs as JSON or individual peak tables as CSV. Large raw
+sections are paged. Full example sections are loaded on demand from
+`public/decision-example/full-data.json.gz`; the generation command above updates
+both example caches. User uploads retain the full sections during parsing.

@@ -25,9 +25,15 @@ export type PeakMeasurement = {
   name?: string | null;
   /** ID# from the peak table. Blank when the file does not identify it. */
   id?: string | null;
+  /** Reported resolution for this row, usually against the preceding peak. */
+  resolution?: number | null;
 };
 
 export type LabFileRead = {
+  /** All peak-table columns, kept as reported, including widths and other optional metrics. */
+  peakTable?: { headers: string[]; rows: string[][]; metadata: Record<string, string> };
+  /** Every named section from the export, retained for complete inspection. */
+  exportSections?: { name: string; lines: string[] }[];
   /** Set when the peak table cannot be used. Plain words for the screen. */
   blockingMessage: string | null;
   notes: string[];
@@ -138,12 +144,14 @@ export function readLabFile(input: string | ArrayBuffer | Uint8Array): LabFileRe
   const heightCol = columnIndex(peakTable.headers, "Height");
   const nameCol = columnIndex(peakTable.headers, "Name");
   const idCol = columnIndex(peakTable.headers, "ID#");
+  const resolutionCol = columnIndex(peakTable.headers, "Resolution");
   const peaks = peakRows.map((row) => ({
     timeMin: parseFileNumber(row[timeCol] ?? ""),
     area: areaCol < 0 ? null : parseFileNumber(row[areaCol] ?? ""),
     height: heightCol < 0 ? null : parseFileNumber(row[heightCol] ?? ""),
     name: blankLabel(nameCol < 0 ? "" : (row[nameCol] ?? "")),
     id: blankLabel(idCol < 0 ? "" : (row[idCol] ?? "")),
+    resolution: resolutionCol < 0 ? null : parseFileNumber(row[resolutionCol] ?? ""),
   }));
   const peakTimesMin = peaks
     .map((peak) => peak.timeMin)
@@ -154,7 +162,6 @@ export function readLabFile(input: string | ArrayBuffer | Uint8Array): LabFileRe
     notes.push("The peak table has no retention times in the R.Time column.");
   }
 
-  const resolutionCol = columnIndex(peakTable.headers, "Resolution");
   let minResolutionExcludingFirst: number | null = null;
   if (resolutionCol < 0) {
     notes.push("The peak table is missing the Resolution column.");
@@ -172,6 +179,8 @@ export function readLabFile(input: string | ArrayBuffer | Uint8Array): LabFileRe
   const chromatogram = readChromatogram(sections, delimiter);
 
   return {
+    peakTable: { headers: peakTable.headers, rows: peakRows, metadata: peakTable.meta },
+    exportSections: [...sections].map(([name, lines]) => ({ name, lines })),
     blockingMessage: null,
     notes,
     peakCount,

@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { gunzipSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import { DECISION_EXAMPLE_FILES } from "./decision-example";
 import { readLabFile } from "./lab-file";
@@ -19,7 +20,11 @@ describe("preloaded decision example", () => {
       expect(read.chromatogram?.length).toBeGreaterThan(0);
       expect(parseRunFileName(fileName).ok).toBe(true);
       const cached = JSON.parse(readFileSync("public/decision-example/results.json", "utf8"));
-      expect(cached.find((item: { fileName: string }) => item.fileName === fileName).read).toEqual(JSON.parse(JSON.stringify(read)));
+      const { exportSections: _sections, ...summary } = read;
+      void _sections;
+      expect(cached.find((item: { fileName: string }) => item.fileName === fileName).read).toEqual(JSON.parse(JSON.stringify(summary)));
+      const full = JSON.parse(gunzipSync(readFileSync("public/decision-example/full-data.json.gz")).toString());
+      expect(full.find((item: { fileName: string }) => item.fileName === fileName).read).toEqual(JSON.parse(JSON.stringify(read)));
     }, 30000);
   }
 });
