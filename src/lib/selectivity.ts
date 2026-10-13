@@ -376,6 +376,9 @@ function efficiencyWhy(input: {
       "Every specification is met. Another selectivity change is not needed. Efficiency is not required either, because the peaks are already far enough apart and the run is already inside the time.",
     );
   }
+  parts.push(
+    "Role of Efficiency in Method Optimization: Resolution is governed by the Purnell equation: Rs = (√N / 4) × ((α − 1) / α) × (k / (1 + k)). Once chemical selectivity (α) has resolved all analytes into discrete peaks, efficiency (theoretical plate count N = 16 × (tR / W)^2 = L / HETP) optimizes peak width (W) through physical parameters (such as mobile phase flow velocity along the van Deemter curve, particle size, column dimensions, or gradient steepness). This sharpens separation or shortens run time without altering mobile phase chemistry.",
+  );
   return parts.join("\n\n");
 }
 
@@ -887,6 +890,7 @@ function plan60Despite(
           `Run ${args.baselineNumber} is a 40°C selectivity run at ${percent}% B (${measurementPhrase(hot, args.setup.requiredPeaks)}).`,
           onceReason(hot, args.setup),
           `The next chromatogram is 60°C, at ${percent}% B, on the same solvent. The %B stays the same.`,
+          "Testing 60°C evaluates whether a broader thermal range is needed to induce significant peak shifts before concluding the temperature screening phase.",
         ]
           .filter(Boolean)
           .join(" ")
@@ -894,6 +898,7 @@ function plan60Despite(
           `40°C did not improve the separation compared with Run ${args.baselineNumber}.`,
           compareSentence(args.baseline, args.baselineNumber, heated, args.setup.requiredPeaks),
           `The next chromatogram is still 60°C, at ${percent}% B, on the same solvent. The %B stays the same.`,
+          "Evaluating 60°C tests whether a broader thermal range is needed to induce significant peak shifts before concluding the temperature screening phase.",
         ].join(" "),
     prefill: { percentB: percent, temperature: "60", solvent, ligand },
     nomograph: null,
@@ -929,6 +934,7 @@ function plan40(
       onceChecks(args.baseline, args.setup),
       onceReason(args.baseline, args.setup),
       args.ambient.assumed ? args.ambient.sentence : "",
+      "Why temperature (40°C) is the first selectivity step: Column thermostatting is rapid, non-destructive, and requires no solvent changeover or line flushing. Under the van 't Hoff relationship (ln k = −ΔH°/(RT) + ΔS°/R + ln Φ), different analytes possess distinct standard molar enthalpies of transfer (ΔH°) between mobile and stationary phases. Elevating temperature alters retention factors at different rates, changing relative selectivity between critical pairs while lowering mobile phase viscosity and column back-pressure.",
     ]
       .filter((line) => line.trim().length > 0)
       .join("\n\n"),
@@ -977,6 +983,7 @@ function plan60(
       compareSentence(args.baseline, args.baselineNumber, heated, args.setup.requiredPeaks),
       `Heat helped, so 60°C at the same ${percent}% B is next. A higher temperature shortens retention. The %B stays the same. The point of the heat is a selectivity change so overlapping peaks can separate.`,
       "A higher temperature is likely to increase separation further.",
+      "Thermodynamic Trend Exploitation: Because the 40°C run demonstrated improved peak count or critical pair resolution, the mixture exhibits a favorable differential enthalpy response. Escalating the temperature to 60°C continues along this thermodynamic trajectory, testing whether complete baseline separation can be achieved while keeping %B constant to isolate thermal selectivity from solvent strength variations.",
     ].join(" "),
     prefill: { percentB: percent, temperature: "60", solvent, ligand },
     nomograph: null,
@@ -1011,6 +1018,8 @@ function solventPlan(args: {
     why: [
       `Change the solvent and go back to ${back}. ${args.ambient.sentence}`,
       `Pick ACN, MeOH, THF, Ethanol, IPA, Acetone, Propanol, or Butanol. The %B comes from the nomogram equation for the solvent you pick, through acetonitrile, matched to the retention minimum of ${minimum}% B. The equation does not choose the solvent.`,
+      "Solvent Selectivity & Snyder Triangle Principles: When temperature variations fail to resolve critical pairs, changing the organic modifier provides the most powerful mobile phase selectivity lever. Different organic solvents occupy distinct corners of the Snyder solvent selectivity triangle: Acetonitrile (Group VI) interacts predominantly through dipole-dipole attractions; Methanol (Group II) acts as a strong hydrogen-bond donor; and Tetrahydrofuran (THF, Group III) acts as a strong hydrogen-bond acceptor. Switching solvent class fundamentally alters analyte-solvent interactions in the mobile phase, frequently reversing elution order and separating critical overlapping pairs.",
+      `Role of the Nomogram: The Snyder solvent nomograph determines the iso-eluotropic mobile phase percentage (%B) for the chosen solvent, ensuring that overall retention remains matched to the retention minimum of ${minimum}% B without causing peaks to elute in the void volume or extend past the run time limit. Reverting to the starting temperature first isolates the chemical selectivity of the new organic modifier before testing thermal effects.`,
     ].join("\n\n"),
     prefill: {
       percentB: "",
@@ -1053,6 +1062,7 @@ function ligandPlan(args: {
       "The coating is last. Temperature is tried first, then a new solvent, because a new coating means starting over. The temperature steps and the solvent change still do not meet the peak count and the resolution check. A new ligand is a selectivity change: peaks can pull apart or change order. It is the last one. You pick the coating.",
       `${pick} Already used: ${triedText}.`,
       `The ladder starts again at 100% B with ACN, at ${temperaturePhrase(args.ambient.celsius)}. The previous solvent is not carried forward. A strong solvent brings the compounds off the new coating quickly, and the %B steps bring the last peak back toward the specified time.`,
+      "Stationary Phase Chemistry & Ligand Selectivity: Changing the bonded stationary phase ligand is the final and most powerful lever in the selectivity flowchart. When mobile phase temperature and organic modifier adjustments have been exhausted, changing the bonded phase alters the primary retention mechanism (such as moving from pure alkyl van der Waals hydrophobic interactions to aromatic π–π stacking, dipole-dipole, or shape selectivity). Because a new column introduces a completely different chromatographic matrix, the method development protocol restarts the retention screening ladder at 100% B with standard acetonitrile to establish baseline void volume, verify rapid elution of all components, and avoid irreversible adsorption before systematically stepping down %B.",
       args.ambient.sentence,
     ].join(" "),
     prefill: {

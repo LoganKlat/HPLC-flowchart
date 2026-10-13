@@ -302,7 +302,10 @@ export function decideRetention(
     return blocked(
       "pressure",
       `Do not lower %B. The highest back-pressure is ${measured} psi, already at or above the specification of ${limit} psi.`,
-      `The pressure is already too high to lower %B. This run reached ${measured} psi. The specification is ${limit} psi. A lower %B is a weaker solvent, so the compounds stay on the column longer and the back-pressure usually rises. That longer stay is higher retention. Selectivity and efficiency are not why this step stops.`,
+      [
+        `The pressure is already too high to lower %B. This run reached ${measured} psi. The specification is ${limit} psi. A lower %B is a weaker solvent, so the compounds stay on the column longer and the back-pressure usually rises. That longer stay is higher retention. Selectivity and efficiency are not why this step stops.`,
+        `In reversed-phase HPLC, decreasing %B increases the aqueous fraction of the mobile phase. Water-organic mixtures exhibit significantly higher dynamic viscosity than pure organic solvent (viscosity reaches a maximum at intermediate water-organic ratios due to extensive hydrogen-bonding networks). According to the Darcy equation (ΔP = η·u·L / K0), column pressure drop is directly proportional to mobile phase viscosity (η). Lowering %B would therefore increase both analyte retention and column back-pressure, worsening the pressure violation and risking column packing compaction, system fitting leaks, or pump pressure cutoffs.`,
+      ].join("\n\n"),
     );
   }
 
@@ -401,12 +404,16 @@ export function formatPercentB(value: number): string {
 const INVESTIGATE_COPY =
   "This run has more peaks than the specification. Pause method changes and check for impurities, carryover, degradation, or split peaks. Compare the peak table with a reference injection at 0.1 mg/mL under the same conditions, and review a blank for carryover. Area and height help compare signals, but size alone cannot identify a peak or prove that it is an impurity. Confirm which peaks belong to the sample before continuing.";
 
+const INVESTIGATE_DETAIL =
+  "Why extra peaks require investigation: Optimizing conditions when peak count exceeds the expected mixture risks tailoring the method around transient degradation products, synthetic impurities, mobile phase artifacts, or split peaks rather than true target compounds. Common root causes include: (1) chemical degradation or oxidation during sample storage, (2) autosampler needle or valve carryover from preceding runs, (3) mobile phase ghost peaks from contaminated water or additives, or (4) peak splitting caused by column head voiding or an injection solvent stronger than the initial mobile phase. Comparing peak retention times, areas, and heights against a fresh 0.1 mg/mL reference standard and a mobile phase blank ensures that method decisions reflect authentic sample components.";
+
 function investigateDecision(sample: RetentionSample, rules: CompleteRules): RetentionDecision {
   const peaks = sample.peaks ?? [];
   const areaMissing = peaks.length === 0 || peaks.some((peak) => peak.area == null);
   const heightMissing = peaks.length === 0 || peaks.some((peak) => peak.height == null);
   const lines = [
     INVESTIGATE_COPY,
+    INVESTIGATE_DETAIL,
     `Peaks: ${formatCount(sample.peakCount ?? peaks.length)}. The specification is ${formatCount(rules.requiredPeaks)}.`,
   ];
   if (areaMissing) lines.push("Area is missing.");
@@ -560,6 +567,7 @@ function specsMet(sample: RetentionSample, rules: CompleteRules, judged: EqualJu
       rules.minResolution != null && rules.minResolution > 0
         ? "The specifications are met. Do not keep going. The peaks are there, the worst pair is far enough apart, the last peak is inside the specified time, and the back-pressure is inside the specification. Retention, selectivity, and efficiency already meet the specification, so none of them is changed."
         : "The specifications are met. Do not keep going. The peaks are there, the last peak is inside the specified time, and the back-pressure is inside the specification. Retention is already inside the specified time, so it is not changed. Selectivity is not the next step either.",
+      "Method Development Complete: Every analytical performance requirement is satisfied under these isocratic conditions. All expected sample components are fully separated, the critical pair resolution exceeds the specification threshold, total analysis time is within the target throughput window, and column back-pressure operates safely below system pressure limits. Further modifications to mobile phase composition, temperature, or column chemistry are unnecessary.",
     ].join("\n\n"),
     fit: null,
   };
@@ -606,6 +614,7 @@ function efficiencyStop(
     why: [
       ...ruleLines(sample, rules, judged),
       nextLine,
+      "Why efficiency is the next stage: Under the Fundamental Resolution Equation (Rs = (√N / 4) × ((α − 1) / α) × (k2 / (1 + k2))), retention (k) and selectivity (α) are established once all peaks are present and detected. Further reducing %B would yield diminishing returns on retention while prolonging run time. Adjusting column efficiency (theoretical plate count N = L / HETP) via flow velocity along the van Deemter curve, smaller particle size packing, column length, or gradient elution narrows peak widths (W), achieving baseline resolution or shorter run times without altering retention chemistry.",
       "Efficiency is not built yet. This recommendation does not change %B, temperature, solvent, or the column.",
     ].join("\n\n"),
     fit: null,
@@ -665,10 +674,10 @@ function lookDecision(
   const sourceIndex = samples.length - 1;
   const why =
     mode === "picker"
-      ? "The peak count is still under the specification, so some peaks are still overlapping. Pick which uploaded run to heat. Heat is the next change. The goal is a selectivity change so the overlapping peaks separate. A higher temperature shortens retention. The %B of the run you pick stays the same."
+      ? "The peak count is still under the specification, so some peaks are still overlapping. Pick which uploaded run to heat. Heat is the next change. The goal is a selectivity change so the overlapping peaks separate. A higher temperature shortens retention. The %B of the run you pick stays the same.\n\nStacked Chromatogram Comparison: Reviewing the aligned retention traces tracks how peak spacing evolves across isocratic %B conditions. Selecting the most promising run as your baseline gives temperature elevation (40°C) the optimal starting point to exploit differential retention enthalpies and resolve overlapping peaks."
       : mode === "between"
-        ? "Compare the runs. The calculated %B matches a run already uploaded, so another drop is not the next step. An in-between %B uses the same temperature, solvent, and ligand as this run, and it sits between %B values already tried. A no does not start temperature, solvent, or a column. An in-between %B changes retention. It does not change selectivity, because temperature, solvent, and ligand stay the same."
-        : "Compare the runs before the next change. An in-between %B uses the same temperature, solvent, and ligand as the minimum %B run, and it fills a gap between %B values already tried. If that is not useful, pick which uploaded run to heat. Heat can pull overlapping peaks apart without dropping %B again. An in-between %B changes retention only. Heat is a selectivity change.";
+        ? "Compare the runs. The calculated %B matches a run already uploaded, so another drop is not the next step. An in-between %B uses the same temperature, solvent, and ligand as this run, and it sits between %B values already tried. A no does not start temperature, solvent, or a column. An in-between %B changes retention. It does not change selectivity, because temperature, solvent, and ligand stay the same.\n\nEvaluating an intermediate composition explores whether co-eluting peaks resolve at a specific solvent strength without altering the fundamental mobile phase or column chemistry."
+        : "Compare the runs before the next change. An in-between %B uses the same temperature, solvent, and ligand as the minimum %B run, and it fills a gap between %B values already tried. If that is not useful, pick which uploaded run to heat. Heat can pull overlapping peaks apart without dropping %B again. An in-between %B changes retention only. Heat is a selectivity change.\n\nReviewing the aligned retention traces helps identify whether peaks cross over or whether thermal selectivity is required to resolve the critical co-eluting pair.";
   return {
     status: "look",
     reason: "look",
@@ -812,9 +821,15 @@ function dropPoints(
     whyParts.push(
       `The last peak is at ${formatMinutes(current.lastPeakTimeMin!)} min, still significantly under the specified run time of ${formatTypedMinutes(rules.lastPeakTimeMin)} min. Decrease %B by 10% to increase retention and peak separation.`,
     );
+    whyParts.push(
+      `In reversed-phase HPLC, solvent B is the strong organic eluent (such as acetonitrile). Decreasing %B increases the aqueous proportion, strengthening hydrophobic partitioning between the analytes and the stationary phase. This increases retention factors (k) across all peaks, expanding the total retention window so closely eluting or overlapping peaks have more column residence time to resolve. Because the final peak eluted well under the specified run time and column pressure is comfortably below the limit, a standard 10 percentage point reduction systematically scouts the retention space without risking exceeding the run time or back-pressure specifications.`,
+    );
   } else {
     whyParts.push(
       `The last peak is at ${formatMinutes(current.lastPeakTimeMin!)} min, close to the specified run time of ${formatTypedMinutes(rules.lastPeakTimeMin)} min. Minimum %B: N/A (at least two runs are required to fit the logK line). This is the only chromatogram so far, so the %B that would hit that time is not calculated. ${from}% B minus 5 percentage points is ${to}% B. Another run is needed before that %B can be calculated. A larger drop is not used, because retention grows quickly as %B goes down.`,
+    );
+    whyParts.push(
+      `In reversed-phase systems, retention factor (k) increases exponentially as %B decreases (log k varies linearly with mobile phase composition). Because the last peak is already approaching the specified run time limit, taking another 10% reduction could push the final peak beyond the ${formatTypedMinutes(rules.lastPeakTimeMin)} min ceiling or generate excessive column back-pressure. A conservative 5 percentage point reduction safely increases retention while providing the second distinct isocratic data point required to establish a Linear Solvent Strength (LSS) calibration line.`,
     );
   }
 
@@ -851,6 +866,7 @@ function returnToSelectivity(samples: RetentionSample[], rules: CompleteRules): 
     why: [
       `This run has ${formatCount(current.peakCount!)} peaks, still under the specification of ${formatCount(rules.requiredPeaks)}.`,
       `The last peak is at ${formatMinutes(current.lastPeakTimeMin!)} min, later than the specification of ${formatMinutes(rules.lastPeakTimeMin)} min. A lower %B would hold the compounds even longer. ${lead} and change selectivity instead.`,
+      `Retention adjustments alone cannot resolve this mixture. Lowering %B further would only prolong elution beyond the ${formatMinutes(rules.lastPeakTimeMin)} min specification. Because the peak count (${formatCount(current.peakCount!)}) is still below the mixture specification (${formatCount(rules.requiredPeaks)}), the unresolved peaks are co-eluting due to identical hydrophobic partition coefficients under ambient conditions. Elevating column temperature to 40°C alters standard transfer enthalpies (ΔH°) differently for each analyte, allowing overlapping peaks to shift relative to each other (changing selectivity factor α = k2/k1) while simultaneously shortening retention time and reducing mobile phase viscosity.`,
     ].join("\n\n"),
     fit: null,
   };
@@ -997,6 +1013,11 @@ function calculatePercentB(samples: RetentionSample[], rules: CompleteRules): Re
   } else if (rounded.clamped === "low") {
     nextChange += " The calculated value was below 0, so it is held at 0.";
   }
+
+  const kTargetFormatted = formatCalc(kTarget, 3);
+  intro.push(
+    `Linear Solvent Strength (LSS) Model: In reversed-phase chromatography, isocratic retention adheres to log10(k) = log10(kw) − S × (%B / 100), where kw represents retention in pure aqueous mobile phase and S is the solvent sensitivity parameter. Fitting log10(k) of the last peak against %B across qualifying runs yields the slope and intercept needed to solve for the exact %B targeting k = ${kTargetFormatted}, aligning the final peak precisely at the specified run time of ${formatTypedMinutes(rules.lastPeakTimeMin)} min. This maximizes total chromatographic capacity and resolution across the run time window without exceeding specifications.`,
+  );
 
   const why = [...intro, fitMembershipSentence(samples, fit, spec, picked.checks, picked.r2Dropped)].join("\n\n");
 
@@ -1536,7 +1557,10 @@ export function findBackwardsRetention(runs: readonly BackwardsRun[]): Backwards
 export function backwardsWhy(pair: BackwardsPair): string {
   const higher = formatPercentB(pair.higherPercentB);
   const lower = formatPercentB(pair.lowerPercentB);
-  return `This is unexpected. An error likely occurred. The ${higher}% B run’s last peak is at ${formatMinutes(pair.higherLastMin)} min, and the ${lower}% B run’s last peak is at ${formatMinutes(pair.lowerLastMin)} min. A lower %B should hold the compounds longer.`;
+  return [
+    `This is unexpected. An error likely occurred. The ${higher}% B run’s last peak is at ${formatMinutes(pair.higherLastMin)} min, and the ${lower}% B run’s last peak is at ${formatMinutes(pair.lowerLastMin)} min. A lower %B should hold the compounds longer.`,
+    `Thermodynamic Retention Violation: In reversed-phase chromatography, lowering strong solvent concentration (%B) increases analyte retention factor (k = (tR − t0) / t0) because the mobile phase becomes more polar, strengthening hydrophobic partitioning into the stationary phase. A shorter retention time at lower %B indicates an experimental issue: swapped solvent lines (channels A and B reversed), incorrect file naming or %B entry, pump proportioning valve failure, column contamination, or sample vial misplacement. Review the raw data and rerun these conditions before basing further method decisions on them.`,
+  ].join("\n\n");
 }
 
 export const BACKWARDS_REDO =

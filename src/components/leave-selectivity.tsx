@@ -221,11 +221,13 @@ export function LeaveSelectivityDone({
           ) : null}
         </div>
         <div className="mt-1 flex flex-col gap-2 text-sm leading-relaxed text-foreground">
-          <p>{nextChange}</p>
+          <p className="font-medium">{nextChange}</p>
           <p>
-            Moving on to efficiency was chosen. No further solvent, temperature, or column change is recommended.
-            Efficiency can make the peaks narrower without a new solvent or a new coating. Gradient changes %B
-            while the run is going. Those stages are not built yet.
+            Moving on to efficiency was chosen. Chemical selectivity (α) and retention (k) are considered established.
+            Efficiency optimizations focus on the physical dispersion of analyte bands—governed by the Purnell resolution equation
+            (Rs = (√N / 4) × ((α − 1) / α) × (k / (1 + k))). Increasing theoretical plate count (N) through flow velocity
+            optimization along the van Deemter curve, smaller particle sizes, or column dimensions sharpens peak widths without
+            requiring changes to mobile phase chemistry. Gradient elution or column dimension changes belong to this stage.
           </p>
         </div>
       </section>

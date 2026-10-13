@@ -51,17 +51,10 @@ export function RetentionDecisionView({
   }, [onLinePercent, reported]);
 
   const paragraphs = fit ? [] : whyParagraphs(decision.why);
-  const isInvestigate = decision.status === "investigate";
-  const leadParagraphs = isInvestigate
-    ? paragraphs.slice(0, 2)
-    : paragraphs.length > 1
-      ? [paragraphs[paragraphs.length - 1]]
-      : paragraphs;
-  const detailParagraphs = isInvestigate
-    ? paragraphs.slice(2)
-    : paragraphs.length > 1
-      ? paragraphs.slice(0, -1)
-      : [];
+  const { lead: leadParagraphs, details: detailParagraphs } = splitRetentionWhy(
+    paragraphs,
+    decision.status,
+  );
 
   return (
     <div className="contents" id="retention-decision">
@@ -244,6 +237,28 @@ function whyParagraphs(why: string): string[] {
     .map((paragraph) => paragraph.trim())
     .filter((paragraph) => paragraph.length > 0 && !isOtherStage(paragraph));
   return parts.length > 0 ? parts : [NO_CHANGE_YET];
+}
+
+function splitRetentionWhy(
+  paragraphs: string[],
+  status: string,
+): { lead: string[]; details: string[] } {
+  if (status === "investigate") {
+    return {
+      lead: paragraphs.slice(0, 2),
+      details: paragraphs.slice(2),
+    };
+  }
+  const isRuleCheck = (text: string) =>
+    /^(Peaks:|Minimum resolution:|Last peak:|Back-pressure:|This run has|The highest back-pressure)/i.test(text.trim());
+
+  const leads = paragraphs.filter((p) => !isRuleCheck(p));
+  const details = paragraphs.filter((p) => isRuleCheck(p));
+
+  if (leads.length === 0) {
+    return { lead: paragraphs.slice(0, 1), details: paragraphs.slice(1) };
+  }
+  return { lead: leads, details };
 }
 
 /** The pump range and the later selectivity sequence stay off this step. */

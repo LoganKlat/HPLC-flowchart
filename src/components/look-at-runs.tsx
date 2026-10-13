@@ -423,16 +423,16 @@ export function LookAtRuns({
           </p>
           <KnowMoreToggle>
             <p>
-              Look at the runs. Each row is one uploaded run. Met means that measurement is inside the specification.
-              Not met means it is not. Compare the peak count, the worst resolution, the last peak, and the
-              back-pressure before choosing the next change.
+              Stacked chromatograms and run comparison: Each row summarizes one completed retention run against your specifications.
+              Comparing peak spacing and peak counts across the %B ladder reveals how individual analyte retention factors (k) respond to
+              decreasing solvent strength.
             </p>
             {showPicker ? (
               <p>
-                Pick one uploaded run in the Next run&apos;s change box above. The next change is heat, to 40°C, at
-                that run&apos;s %B. The goal is a selectivity change so the overlapping peaks separate. A higher
-                temperature shortens retention. The %B stays the same. A late run can be picked. Not met on time means
-                the last peak is later than the specification.
+                Pick one uploaded run in the Next run&apos;s change box above. The next change is heat, to 40°C, at that run&apos;s %B.
+                Elevating column temperature introduces thermal selectivity by altering standard enthalpies of transfer (ΔH°) differently for
+                each compound, helping overlapping peaks separate without increasing overall run time. Even a run that eluted later than the
+                time specification can be chosen because heating accelerates elution and shortens total analysis time.
               </p>
             ) : null}
           </KnowMoreToggle>

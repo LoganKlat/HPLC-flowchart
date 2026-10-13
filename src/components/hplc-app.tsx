@@ -2154,7 +2154,7 @@ function decorateBlankExplanation(
   explanation: Explanation,
   effectiveIndex: number,
 ): Explanation {
-  const prefix = `This is a blank run (sample type BLANK), used as preparation for the next run. Blank runs do not need to be uploaded. Repeating the last decision point from Run ${effectiveIndex + 1}:`;
+  const prefix = `This is a blank run (sample type BLANK), used as preparation for the next run. Blank runs do not need to be uploaded. Blank injections equilibrate the column to new mobile phase conditions, stabilize baseline absorbance, and confirm the absence of carryover or ghost peaks before running the sample. Repeating the last decision point from Run ${effectiveIndex + 1}:`;
   if (explanation.kind === "retention") {
     return {
       kind: "retention",
@@ -2205,7 +2205,7 @@ export function explainRun(
         move: null,
         nextPercentB: pct ?? 90,
         nextTemperature: cond.temperature || null,
-        why: `This is a blank run (sample type BLANK), used as preparation for the next run at ${pctText}% B. Blank runs do not need to be uploaded. Upload the composite sample (CP) run at these conditions to evaluate retention and separation.`,
+        why: `This is a blank run (sample type BLANK), used as preparation for the next run at ${pctText}% B. Blank runs do not need to be uploaded. Upload the composite sample (CP) run at these conditions to evaluate retention and separation. Blank injections equilibrate the column to new mobile phase conditions, stabilize baseline absorbance, and confirm the absence of carryover or ghost peaks before running the sample.`,
         nextChange: `Run the composite sample (CP) at ${pctText}% B.`,
         fit: null,
       },
