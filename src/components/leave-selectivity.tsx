@@ -180,13 +180,23 @@ export function BackwardsRetentionView({
   choice: "redo" | null;
 }) {
   const warning = backwardsWhy(pair);
+  const paragraphs = warning.split("\n\n").filter(Boolean);
+  const lead = paragraphs[0] ?? warning;
+  const details = paragraphs.slice(1);
   return (
     <div className="contents" id="backwards-retention">
       <section className="rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10">
         <h2 className="font-heading text-base">Why</h2>
         <div className="mt-3 flex flex-col gap-2 text-sm leading-relaxed text-foreground">
-          <p>{warning}</p>
+          <p>{lead}</p>
           {choice === "redo" ? <p>{BACKWARDS_REDO}</p> : null}
+          {details.length > 0 ? (
+            <KnowMoreToggle>
+              {details.map((paragraph, index) => (
+                <p key={index}>{paragraph}</p>
+              ))}
+            </KnowMoreToggle>
+          ) : null}
         </div>
       </section>
     </div>
@@ -222,13 +232,15 @@ export function LeaveSelectivityDone({
         </div>
         <div className="mt-1 flex flex-col gap-2 text-sm leading-relaxed text-foreground">
           <p className="font-medium">{nextChange}</p>
-          <p>
-            Moving on to efficiency was chosen. Chemical selectivity (α) and retention (k) are considered established.
-            Efficiency optimizations focus on the physical dispersion of analyte bands—governed by the Purnell resolution equation
-            (Rs = (√N / 4) × ((α − 1) / α) × (k / (1 + k))). Increasing theoretical plate count (N) through flow velocity
-            optimization along the van Deemter curve, smaller particle sizes, or column dimensions sharpens peak widths without
-            requiring changes to mobile phase chemistry. Gradient elution or column dimension changes belong to this stage.
-          </p>
+          <KnowMoreToggle>
+            <p>
+              Moving on to efficiency was chosen. Chemical selectivity (α) and retention (k) are considered established.
+              Efficiency optimizations focus on the physical dispersion of analyte bands—governed by the Purnell resolution equation
+              (Rs = (√N / 4) × ((α − 1) / α) × (k / (1 + k))). Increasing theoretical plate count (N) through flow velocity
+              optimization along the van Deemter curve, smaller particle sizes, or column dimensions sharpens peak widths without
+              requiring changes to mobile phase chemistry. Gradient elution or column dimension changes belong to this stage.
+            </p>
+          </KnowMoreToggle>
         </div>
       </section>
     </div>

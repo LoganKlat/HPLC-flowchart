@@ -2205,7 +2205,10 @@ export function explainRun(
         move: null,
         nextPercentB: pct ?? 90,
         nextTemperature: cond.temperature || null,
-        why: `This is a blank run (sample type BLANK), used as preparation for the next run at ${pctText}% B. Blank runs do not need to be uploaded. Upload the composite sample (CP) run at these conditions to evaluate retention and separation. Blank injections equilibrate the column to new mobile phase conditions, stabilize baseline absorbance, and confirm the absence of carryover or ghost peaks before running the sample.`,
+        why: [
+          `This is a blank run (sample type BLANK), used as preparation for the next run at ${pctText}% B. Blank runs do not need to be uploaded. Upload the composite sample (CP) run at these conditions to evaluate retention and separation.`,
+          "Blank injections equilibrate the column to new mobile phase conditions, stabilize baseline absorbance, and confirm the absence of carryover or ghost peaks before running the sample.",
+        ].join("\n\n"),
         nextChange: `Run the composite sample (CP) at ${pctText}% B.`,
         fit: null,
       },

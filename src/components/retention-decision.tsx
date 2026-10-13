@@ -178,14 +178,23 @@ export function StartHighBNote() {
 export function LaterChangeNote({ decision }: { decision: RetentionDecision | null }) {
   const explanation =
     decision?.nextChange ?? "Retention is finished. The next kind of change is not built yet.";
+  const paragraphs = decision?.why?.trim() ? whyParagraphs(decision.why) : [explanation];
+  const { lead, details } = splitRetentionWhy(paragraphs, decision?.status ?? "");
   return (
     <div className="flex flex-col gap-4">
       <section className="rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10">
         <h2 className="font-heading text-base">Why</h2>
         <div className="mt-1 flex flex-col gap-2 text-sm leading-relaxed text-foreground">
-          {(decision?.why?.trim() ? whyParagraphs(decision.why) : [explanation]).map((paragraph, index) => (
+          {lead.map((paragraph, index) => (
             <p key={index}>{paragraph}</p>
           ))}
+          {details.length > 0 ? (
+            <KnowMoreToggle>
+              {details.map((paragraph, index) => (
+                <p key={index}>{paragraph}</p>
+              ))}
+            </KnowMoreToggle>
+          ) : null}
         </div>
       </section>
     </div>
@@ -239,26 +248,71 @@ function whyParagraphs(why: string): string[] {
   return parts.length > 0 ? parts : [NO_CHANGE_YET];
 }
 
+function isRuleCheck(text: string): boolean {
+  return /^(Peaks:|Minimum resolution:|Last peak:|Back-pressure:|This run has \d|The highest back-pressure)/i.test(
+    text.trim(),
+  );
+}
+
+function isDetailedTheory(text: string): boolean {
+  return /^(In reversed-phase|Retention adjustments alone|Linear Solvent Strength|Why extra peaks require investigation|Why efficiency is the next stage|Method Development Complete|Stacked Chromatogram Comparison|Evaluating an intermediate composition|Reviewing the aligned retention traces|Thermodynamic Retention Violation|Efficiency is not built yet|Blank injections equilibrate)/i.test(
+    text.trim(),
+  );
+}
+
 function splitRetentionWhy(
   paragraphs: string[],
   status: string,
 ): { lead: string[]; details: string[] } {
-  if (status === "investigate") {
-    return {
-      lead: paragraphs.slice(0, 2),
-      details: paragraphs.slice(2),
-    };
+  if (paragraphs.length <= 1) {
+    return { lead: paragraphs, details: [] };
   }
-  const isRuleCheck = (text: string) =>
-    /^(Peaks:|Minimum resolution:|Last peak:|Back-pressure:|This run has|The highest back-pressure)/i.test(text.trim());
 
-  const leads = paragraphs.filter((p) => !isRuleCheck(p));
-  const details = paragraphs.filter((p) => isRuleCheck(p));
+  let leadIndex = -1;
 
-  if (leads.length === 0) {
-    return { lead: paragraphs.slice(0, 1), details: paragraphs.slice(1) };
+  if (status === "investigate" || status === "look") {
+    leadIndex = 0;
+  } else {
+    // Look for explicit decision / observation statements
+    const decisionIdx = paragraphs.findIndex((p) => {
+      const t = p.trim();
+      return (
+        t.includes("Decrease %B") ||
+        t.includes("close to the specified run time") ||
+        t.includes("Another run is needed before that %B can be calculated") ||
+        t.includes("Lower %B by 5") ||
+        t.includes("change selectivity instead") ||
+        t.startsWith("Efficiency is next") ||
+        t.startsWith("The specifications are met") ||
+        t.startsWith("The pressure is already too high") ||
+        t.includes("Select a %B of your choosing") ||
+        t.startsWith("This is a blank run") ||
+        t.startsWith("This run has more peaks than the specification") ||
+        t.startsWith("Do not recommend a %B")
+      );
+    });
+
+    if (decisionIdx >= 0) {
+      leadIndex = decisionIdx;
+    } else {
+      // Find the first paragraph that is neither a checklist line nor deep theory
+      const candidateIdx = paragraphs.findIndex(
+        (p) => !isRuleCheck(p) && !isDetailedTheory(p),
+      );
+      leadIndex = candidateIdx >= 0 ? candidateIdx : 0;
+    }
   }
-  return { lead: leads, details };
+
+  const lead = [paragraphs[leadIndex]];
+  const otherParagraphs = paragraphs.filter((_, i) => i !== leadIndex);
+
+  // Order details: in-depth theoretical explanations first, then general notes, then metric checks
+  const theory = otherParagraphs.filter((p) => isDetailedTheory(p));
+  const checks = otherParagraphs.filter((p) => isRuleCheck(p));
+  const rest = otherParagraphs.filter((p) => !isDetailedTheory(p) && !isRuleCheck(p));
+  const details = [...theory, ...rest, ...checks];
+
+  return { lead, details };
 }
 
 /** The pump range and the later selectivity sequence stay off this step. */

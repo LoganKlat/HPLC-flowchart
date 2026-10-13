@@ -887,19 +887,17 @@ function plan60Despite(
       : `After 60°C on this solvent, the next step is a new coating. ${SELECTIVITY_ORDER}`,
     why: startedAt40
       ? [
-          `Run ${args.baselineNumber} is a 40°C selectivity run at ${percent}% B (${measurementPhrase(hot, args.setup.requiredPeaks)}).`,
+          `Run ${args.baselineNumber} is a 40°C selectivity run at ${percent}% B (${measurementPhrase(hot, args.setup.requiredPeaks)}). The next chromatogram is 60°C, at ${percent}% B, on the same solvent. The %B stays the same.`,
           onceReason(hot, args.setup),
-          `The next chromatogram is 60°C, at ${percent}% B, on the same solvent. The %B stays the same.`,
           "Testing 60°C evaluates whether a broader thermal range is needed to induce significant peak shifts before concluding the temperature screening phase.",
         ]
           .filter(Boolean)
-          .join(" ")
+          .join("\n\n")
       : [
-          `40°C did not improve the separation compared with Run ${args.baselineNumber}.`,
+          `40°C did not improve the separation compared with Run ${args.baselineNumber}. The next chromatogram is still 60°C, at ${percent}% B, on the same solvent. The %B stays the same.`,
           compareSentence(args.baseline, args.baselineNumber, heated, args.setup.requiredPeaks),
-          `The next chromatogram is still 60°C, at ${percent}% B, on the same solvent. The %B stays the same.`,
           "Evaluating 60°C tests whether a broader thermal range is needed to induce significant peak shifts before concluding the temperature screening phase.",
-        ].join(" "),
+        ].join("\n\n"),
     prefill: { percentB: percent, temperature: "60", solvent, ligand },
     nomograph: null,
     showSolventChoices: false,
@@ -979,12 +977,11 @@ function plan60(
     nextChange: `Run the next chromatogram at 60°C, at ${percent}% B. Stay at this %B because heat already helped. A higher temperature shortens retention. The %B stays the same.`,
     following: `After 60°C, the next step is the second solvent at the chart %B, tried at 40°C and 60°C, then the coating last. ${SELECTIVITY_ORDER}`,
     why: [
-      `${what} at 40°C compared with Run ${args.baselineNumber}, the run from before the temperature change.`,
+      `${what} at 40°C compared with Run ${args.baselineNumber}, the run from before the temperature change. Heat helped, so 60°C at the same ${percent}% B is next. A higher temperature shortens retention. The %B stays the same. The point of the heat is a selectivity change so overlapping peaks can separate.`,
       compareSentence(args.baseline, args.baselineNumber, heated, args.setup.requiredPeaks),
-      `Heat helped, so 60°C at the same ${percent}% B is next. A higher temperature shortens retention. The %B stays the same. The point of the heat is a selectivity change so overlapping peaks can separate.`,
       "A higher temperature is likely to increase separation further.",
       "Thermodynamic Trend Exploitation: Because the 40°C run demonstrated improved peak count or critical pair resolution, the mixture exhibits a favorable differential enthalpy response. Escalating the temperature to 60°C continues along this thermodynamic trajectory, testing whether complete baseline separation can be achieved while keeping %B constant to isolate thermal selectivity from solvent strength variations.",
-    ].join(" "),
+    ].join("\n\n"),
     prefill: { percentB: percent, temperature: "60", solvent, ligand },
     nomograph: null,
     showSolventChoices: false,
@@ -1061,10 +1058,9 @@ function ligandPlan(args: {
     why: [
       "The coating is last. Temperature is tried first, then a new solvent, because a new coating means starting over. The temperature steps and the solvent change still do not meet the peak count and the resolution check. A new ligand is a selectivity change: peaks can pull apart or change order. It is the last one. You pick the coating.",
       `${pick} Already used: ${triedText}.`,
-      `The ladder starts again at 100% B with ACN, at ${temperaturePhrase(args.ambient.celsius)}. The previous solvent is not carried forward. A strong solvent brings the compounds off the new coating quickly, and the %B steps bring the last peak back toward the specified time.`,
+      `The ladder starts again at 100% B with ACN, at ${temperaturePhrase(args.ambient.celsius)}. The previous solvent is not carried forward. A strong solvent brings the compounds off the new coating quickly, and the %B steps bring the last peak back toward the specified time. ${args.ambient.sentence}`,
       "Stationary Phase Chemistry & Ligand Selectivity: Changing the bonded stationary phase ligand is the final and most powerful lever in the selectivity flowchart. When mobile phase temperature and organic modifier adjustments have been exhausted, changing the bonded phase alters the primary retention mechanism (such as moving from pure alkyl van der Waals hydrophobic interactions to aromatic π–π stacking, dipole-dipole, or shape selectivity). Because a new column introduces a completely different chromatographic matrix, the method development protocol restarts the retention screening ladder at 100% B with standard acetonitrile to establish baseline void volume, verify rapid elution of all components, and avoid irreversible adsorption before systematically stepping down %B.",
-      args.ambient.sentence,
-    ].join(" "),
+    ].join("\n\n"),
     prefill: {
       percentB: "100",
       temperature: temperatureField(args.ambient.celsius),
