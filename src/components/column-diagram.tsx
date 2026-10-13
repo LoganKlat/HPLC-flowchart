@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type CSSProperties } from "react";
+import { ArrowUpDown, ArrowLeftRight, Activity, Gauge, Split, Scale, Info, Sliders } from "lucide-react";
 import { ChromatogramChart } from "@/components/chromatogram-chart";
 import { FunctionNoteView, type FunctionNote } from "@/components/function-note";
 import { columnExampleTrace } from "@/lib/column-example";
@@ -12,6 +13,7 @@ import {
   scaledPeakTimes,
 } from "@/lib/column-shape";
 import type { ChromatogramPoint, PressurePoint } from "@/lib/lab-file";
+import { cn } from "@/lib/utils";
 
 const LENGTH_MIN = 50;
 const LENGTH_MAX = 250;
@@ -40,23 +42,23 @@ type NoteId = "length" | "width";
 
 const notes: Record<NoteId, { label: string; note: FunctionNote }> = {
   length: {
-    label: "Length",
+    label: "Column Length (L)",
     note: {
-      does: "Length is how long the column tube is. A longer tube gives the compounds more packing to travel through.",
-      sets: "The column. The length slider on this tab sets the drawing and the chromatogram. The oven does not change the length.",
-      range: "50–250 mm on this slider. It starts at the length of the column that produced the selected run.",
+      does: "Length is the physical tube length packed with stationary phase. A longer column increases the solute migration path through the stationary phase bed.",
+      sets: "The physical column tube. The length slider controls the SVG drawing and dynamically scales the retention times, peak widths, and system pressure of the selected chromatogram.",
+      range: "50–250 mm standard HPLC range. Defaults to the baseline length of the selected run (typically 150 mm).",
       changes:
-        "A longer column: retention time and back-pressure rise in line with length. Resolution and peak width rise with the square root of length. Peak height falls. Selectivity does not change. A shorter column does the opposite.",
+        "Longer column: retention time and back-pressure increase proportionally with length (L). Chromatographic efficiency (plate count N) and resolution (Rs) improve with the square root of length (√L). Peak width expands, reducing peak height. Selectivity remains unchanged.",
     },
   },
   width: {
-    label: "Width",
+    label: "Internal Diameter (dc)",
     note: {
-      does: "Width is the internal diameter of the column, the width of the tube inside.",
-      sets: "The column. The width slider on this tab sets the drawing and the chromatogram. The pump flow is chosen to suit that width.",
-      range: "2.1–4.6 mm internal diameter on this slider. It starts at the width of the column that produced the selected run.",
+      does: "Internal diameter is the inside bore width of the column hardware tube.",
+      sets: "The physical column tube hardware. The diameter slider scales the column volume, back-pressure, and volumetric flow velocity.",
+      range: "2.1–4.6 mm standard bore range. Defaults to the baseline internal diameter of the selected run (typically 4.6 mm).",
       changes:
-        "A wider column: retention time and peak width rise with the square of the width, and back-pressure falls with 1 over the square of the width. Resolution does not change with width. Selectivity does not change. A narrower column does the opposite.",
+        "Wider column: at fixed flow rate, mobile phase linear velocity slows by (dc)², causing retention time to increase with the square of diameter. Back-pressure falls with 1/(dc)². Chemical selectivity and intrinsic resolution do not change from diameter alone. Narrower bore columns (e.g. 2.1 mm) save mobile phase solvent and enhance electrospray/mass-spectrometric sensitivity.",
     },
   },
 };
@@ -92,7 +94,7 @@ function ColumnDrawing({ lengthMm, widthMm }: { lengthMm: number; widthMm: numbe
     <svg
       id="column-drawing"
       viewBox={`0 0 ${vbW} ${vbH}`}
-      className="block h-auto w-full"
+      className="block h-auto w-full max-h-[160px]"
       role="img"
       aria-label="Column, drawn to the length and internal diameter"
       data-body={body.toFixed(1)}
@@ -102,17 +104,17 @@ function ColumnDrawing({ lengthMm, widthMm }: { lengthMm: number; widthMm: numbe
     >
       <defs>
         <linearGradient id="column-tube" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#f7fffb" />
-          <stop offset="42%" stopColor="#d5efe4" />
-          <stop offset="100%" stopColor="#7eb9a4" />
+          <stop offset="0%" stopColor="var(--hp-surface)" />
+          <stop offset="42%" stopColor="var(--hp-soft-6)" />
+          <stop offset="100%" stopColor="var(--hp-mint)" />
         </linearGradient>
         <linearGradient id="column-metal" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#d5dbd7" />
-          <stop offset="40%" stopColor="#8e9893" />
-          <stop offset="100%" stopColor="#5c6661" />
+          <stop offset="0%" stopColor="var(--hp-grey-3)" />
+          <stop offset="40%" stopColor="var(--hp-grey-2)" />
+          <stop offset="100%" stopColor="var(--hp-grey-1)" />
         </linearGradient>
       </defs>
-      <rect x={x} y="118" width={body + side * 2} height="8" rx="4" fill="#e7f3ee" />
+      <rect x={x} y="118" width={body + side * 2} height="8" rx="4" fill="var(--hp-soft)" />
       <rect
         x={leftNutX}
         y={cy - nutH / 2}
@@ -120,7 +122,7 @@ function ColumnDrawing({ lengthMm, widthMm }: { lengthMm: number; widthMm: numbe
         height={nutH}
         rx="2"
         fill="url(#column-metal)"
-        stroke="#144237"
+        stroke="var(--hp-ink)"
         strokeWidth="1.5"
       />
       <rect
@@ -130,7 +132,7 @@ function ColumnDrawing({ lengthMm, widthMm }: { lengthMm: number; widthMm: numbe
         height={fitH}
         rx="2"
         fill="url(#column-metal)"
-        stroke="#144237"
+        stroke="var(--hp-ink)"
         strokeWidth="1.5"
       />
       <rect
@@ -140,7 +142,7 @@ function ColumnDrawing({ lengthMm, widthMm }: { lengthMm: number; widthMm: numbe
         height={thick}
         rx="3"
         fill="url(#column-tube)"
-        stroke="#0f6b56"
+        stroke="var(--hp-brand)"
         strokeWidth="2"
       />
       <rect
@@ -149,7 +151,7 @@ function ColumnDrawing({ lengthMm, widthMm }: { lengthMm: number; widthMm: numbe
         width={Math.max(12, body - 16)}
         height={Math.max(3, thick * 0.16)}
         rx="2"
-        fill="#ffffff"
+        fill="var(--hp-paper)"
         opacity="0.55"
       />
       <rect
@@ -159,7 +161,7 @@ function ColumnDrawing({ lengthMm, widthMm }: { lengthMm: number; widthMm: numbe
         height={fitH}
         rx="2"
         fill="url(#column-metal)"
-        stroke="#144237"
+        stroke="var(--hp-ink)"
         strokeWidth="1.5"
       />
       <rect
@@ -169,7 +171,7 @@ function ColumnDrawing({ lengthMm, widthMm }: { lengthMm: number; widthMm: numbe
         height={nutH}
         rx="2"
         fill="url(#column-metal)"
-        stroke="#144237"
+        stroke="var(--hp-ink)"
         strokeWidth="1.5"
       />
     </svg>
@@ -202,22 +204,58 @@ function ColumnWithSliders({
   const lengthSpan = (body / vbW) * 100;
   const widthAnchor = (x / vbW) * 100;
 
+  const presets = [
+    { label: "150 × 4.6 mm", l: 150, w: 4.6, tag: "Standard Analytical" },
+    { label: "100 × 2.1 mm", l: 100, w: 2.1, tag: "UHPLC / Core-Shell" },
+    { label: "250 × 4.6 mm", l: 250, w: 4.6, tag: "High Resolution" },
+    { label: "50 × 2.1 mm", l: 50, w: 2.1, tag: "Fast Screening" },
+  ];
+
   return (
-    <figure className="min-w-0 rounded-xl bg-card px-3 py-3 ring-1 ring-foreground/10 sm:px-4">
-      <div className="relative">
+    <figure className="flex flex-col gap-4 rounded-2xl border border-border/80 bg-card p-4 sm:p-5 shadow-xs">
+      <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
+        <div>
+          <h3 className="font-heading text-base font-bold text-foreground">Interactive Tube Geometry</h3>
+          <p className="text-xs text-muted-foreground">Adjust dimensions to stretch retention, resolution, and pressure.</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-[11px] font-semibold text-muted-foreground mr-1">Presets:</span>
+          {presets.map((preset) => (
+            <button
+              key={preset.label}
+              type="button"
+              className={cn(
+                "rounded-md border px-2 py-0.5 text-xs font-mono font-medium transition-all cursor-pointer",
+                lengthMm === preset.l && Math.abs(widthMm - preset.w) < 0.05
+                  ? "border-[var(--hp-brand)] bg-[var(--hp-brand)]/15 text-[var(--hp-brand)] font-bold shadow-2xs"
+                  : "border-border/70 text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+              )}
+              onClick={() => {
+                onLength(preset.l);
+                onWidth(preset.w);
+              }}
+            >
+              {preset.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="relative rounded-xl border border-border/60 bg-muted/20 p-2 sm:p-3 dark:bg-muted/10">
         <ColumnDrawing lengthMm={lengthMm} widthMm={widthMm} />
+        {/* Width overlay slider */}
         <div
           className="absolute inset-y-1 z-10 flex -translate-x-full flex-col items-center gap-1 pr-2"
           style={{ left: `${widthAnchor}%` }}
           {...widthEvents}
         >
-          <p className="text-xs font-medium leading-none text-[#144237]">Width</p>
-          <p className="rounded-md bg-card px-1.5 font-heading text-sm font-semibold whitespace-nowrap text-[#144237] tabular-nums ring-1 ring-foreground/10">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">ID</p>
+          <p className="rounded-md bg-card px-1.5 font-mono text-xs font-bold whitespace-nowrap text-[var(--hp-ink)] shadow-2xs ring-1 ring-foreground/10">
             {widthMm.toFixed(1)} mm
           </p>
           <input
             id="column-width"
-            className="column-slider-y mt-1 h-auto! min-h-0 w-7 flex-1"
+            className="column-slider-y mt-1 h-auto! min-h-0 w-7 flex-1 cursor-ns-resize"
             type="range"
             min={WIDTH_MIN}
             max={WIDTH_MAX}
@@ -229,12 +267,19 @@ function ColumnWithSliders({
           />
         </div>
       </div>
+
+      {/* Length control bar under tube */}
       <div className="relative mt-1 h-[4.75rem]" {...lengthEvents}>
         <div className="absolute top-0" style={{ left: `${lengthLeft}%`, width: `${lengthSpan}%` }}>
-          <p className="text-center text-xs font-medium leading-none text-[#144237]">Length</p>
+          <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground">
+            <span>Length (L)</span>
+            <span className="font-mono text-xs font-bold text-foreground tabular-nums bg-muted px-1.5 py-0.5 rounded">
+              {Math.round(lengthMm)} mm
+            </span>
+          </div>
           <input
             id="column-length"
-            className="column-slider mt-1"
+            className="column-slider mt-1.5 w-full cursor-ew-resize"
             type="range"
             min={LENGTH_MIN}
             max={LENGTH_MAX}
@@ -244,9 +289,11 @@ function ColumnWithSliders({
             aria-valuetext={`${Math.round(lengthMm)} mm`}
             onChange={(event) => onLength(Number(event.target.value))}
           />
-          <p className="text-center font-heading text-sm font-semibold whitespace-nowrap text-[#144237] tabular-nums">
-            {Math.round(lengthMm)} mm
-          </p>
+          <div className="flex justify-between text-[10px] text-muted-foreground/75 font-mono">
+            <span>50 mm</span>
+            <span>150 mm</span>
+            <span>250 mm</span>
+          </div>
         </div>
       </div>
     </figure>
@@ -303,11 +350,12 @@ export function ColumnDiagram({ runs }: { runs: ColumnRunTrace[] }) {
   const scaledPressure = scalePressureTrace(selected.pressurePoints, selected.peakTimesMin, scale);
   const frame = selected.points.length > 0 ? traceFrame(selected.points) : undefined;
   const open = openId ? notes[openId] : null;
+
   const multipliers = [
-    { label: "Resolution", value: formatColumnMultiple(scale.resolution) },
-    { label: "Retention time", value: formatColumnMultiple(scale.retentionTime) },
-    { label: "Pressure", value: formatColumnMultiple(scale.pressure) },
-    { label: "Peak width", value: formatColumnMultiple(scale.peakWidth) },
+    { label: "Resolution", value: formatColumnMultiple(scale.resolution), formula: "∝ √L", icon: Split },
+    { label: "Retention Time", value: formatColumnMultiple(scale.retentionTime), formula: "∝ L · dc²", icon: ArrowLeftRight },
+    { label: "Back-Pressure", value: formatColumnMultiple(scale.pressure), formula: "∝ L / dc²", icon: Gauge },
+    { label: "Peak Width", value: formatColumnMultiple(scale.peakWidth), formula: "∝ √L · dc²", icon: ArrowUpDown },
   ];
 
   function bind(id: NoteId) {
@@ -325,17 +373,26 @@ export function ColumnDiagram({ runs }: { runs: ColumnRunTrace[] }) {
   }
 
   return (
-    <section id="column-diagram" className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
-      <header className="min-w-0 lg:col-start-1">
-        <p className="text-xs tracking-[0.16em] text-[#0f6b56] uppercase">Column</p>
-        <h2 className="mt-1 font-heading text-2xl text-[#144237]">Length and width</h2>
-        <p className="mt-2 max-w-2xl text-base text-muted-foreground">
-          Drag the bar under the tube for length, and the bar at its left end for width. The drawing changes shape, and
-          the chromatogram is the selected run stretched by those two sizes. Each multiplier starts
-          at 1 for the column that produced that run.
-        </p>
-      </header>
-      <div className="flex min-w-0 flex-col gap-4 lg:col-start-1">
+    <section id="column-diagram" className="grid items-start gap-6 lg:grid-cols-12">
+      {/* Main Column Workspace (8 Cols) */}
+      <div className="flex flex-col gap-5 lg:col-span-8">
+        <header>
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--hp-brand)]/30 bg-[var(--hp-brand)]/10 px-2.5 py-0.5 text-xs font-semibold tracking-wider text-[var(--hp-brand)] uppercase">
+              <Scale className="size-3.5" />
+              Physical Column Scaling
+            </span>
+          </div>
+          <h2 className="mt-1.5 font-heading text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+            Column Dimensions & Scaling Dynamics
+          </h2>
+          <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+            Adjust column length and internal diameter to observe how column tube geometry physically transforms
+            peak resolution, retention time, back-pressure, and peak width relative to your baseline method.
+          </p>
+        </header>
+
+        {/* Tube and interactive sliders */}
         <ColumnWithSliders
           lengthMm={lengthMm}
           widthMm={widthMm}
@@ -344,11 +401,70 @@ export function ColumnDiagram({ runs }: { runs: ColumnRunTrace[] }) {
           lengthEvents={bind("length")}
           widthEvents={bind("width")}
         />
+
+        {/* 4 Multiplier Metric Cards */}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {multipliers.map((m) => {
+            const Icon = m.icon;
+            return (
+              <div
+                key={m.label}
+                className="flex flex-col justify-between rounded-xl border border-border/80 bg-card p-3 shadow-2xs"
+              >
+                <div className="flex items-center justify-between text-muted-foreground">
+                  <span className="text-[11px] font-semibold tracking-wider uppercase">{m.label}</span>
+                  <Icon className="size-3.5 text-[var(--hp-brand)]" />
+                </div>
+                <div className="mt-1.5 flex items-baseline justify-between">
+                  <span className="font-mono text-xl font-bold tracking-tight text-foreground tabular-nums">
+                    {m.value}
+                  </span>
+                  <span className="font-mono text-[10px] text-muted-foreground font-semibold bg-muted px-1.5 py-0.5 rounded">
+                    {m.formula}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Chromatogram trace response */}
         <section
           id="column-chromatogram"
-          className="flex flex-col overflow-hidden rounded-xl border-2 border-solid border-border bg-card lg:flex-row lg:items-stretch"
+          className="flex flex-col overflow-hidden rounded-2xl border border-border/80 bg-card shadow-xs"
         >
-          <div className="order-2 min-w-0 flex-1 p-4 lg:order-1">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/70 p-3 sm:px-4">
+            <div className="flex items-center gap-2">
+              <Activity className="size-4 text-[var(--hp-brand)]" />
+              <h3 className="font-heading text-sm font-bold text-foreground">
+                Scaled Chromatogram Response
+              </h3>
+            </div>
+            {/* Run Selection Tabs */}
+            <div
+              id="column-run-tabs"
+              className="flex shrink-0 overflow-x-auto rounded-lg border border-border/70 bg-muted/40 p-0.5"
+            >
+              {tabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  aria-pressed={tab.id === selected.id}
+                  className={cn(
+                    "rounded-md px-3 py-1 text-xs font-semibold transition-all cursor-pointer",
+                    tab.id === selected.id
+                      ? "bg-card text-foreground shadow-2xs border border-border/60"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                  onClick={() => setSelectedId(tab.id)}
+                >
+                  {tab.tabLabel}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="p-3 sm:p-4">
             {scaled.length > 0 && frame ? (
               <ChromatogramChart
                 points={scaled}
@@ -356,7 +472,7 @@ export function ColumnDiagram({ runs }: { runs: ColumnRunTrace[] }) {
                 peakTimesMin={scaledPeakTimes(selected.peakTimesMin, scale.retentionTime)}
                 fileName={selected.fileName}
                 frame={frame}
-                multipliers={multipliers}
+                multipliers={multipliers.map((m) => ({ label: m.label, value: m.value }))}
                 pressure={
                   scaledPressure.length > 0
                     ? { points: scaledPressure, unit: selected.pressureUnit }
@@ -364,61 +480,65 @@ export function ColumnDiagram({ runs }: { runs: ColumnRunTrace[] }) {
                 }
               />
             ) : (
-              <div className="rounded-xl bg-[#f7fbf8] px-4 py-6 text-sm ring-1 ring-foreground/10" role="status">
+              <div className="rounded-xl bg-muted/30 px-4 py-8 text-center text-sm" role="status">
                 <p className="font-medium text-foreground">{selected.fileName}</p>
-                <p className="mt-2 text-muted-foreground">This run has no chromatogram to draw.</p>
+                <p className="mt-1 text-xs text-muted-foreground">This run has no chromatogram to draw.</p>
               </div>
             )}
           </div>
-          <div
-            id="column-run-tabs"
-            className="order-1 flex shrink-0 overflow-x-auto border-b border-border bg-card lg:order-2 lg:w-max lg:flex-col lg:self-stretch lg:overflow-y-auto lg:border-b-0 lg:border-l"
-          >
-            {tabs.map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                aria-pressed={tab.id === selected.id}
-                className="h-10 flex-none rounded-none border-0 border-r border-solid border-border px-3 text-left text-sm last:border-r-0 lg:w-full lg:border-r-0 lg:border-b lg:px-2 lg:last:border-b-0"
-                style={columnTabStyle(tab.id === selected.id, hoveredTab === tab.id)}
-                onMouseEnter={() => setHoveredTab(tab.id)}
-                onMouseLeave={() => setHoveredTab((current) => (current === tab.id ? null : current))}
-                onClick={() => setSelectedId(tab.id)}
-              >
-                {tab.tabLabel}
-              </button>
-            ))}
-          </div>
         </section>
       </div>
+
+      {/* Inspector / Dimensional Physics Panel (4 Cols) */}
       <aside
         id="column-note"
-        className="rounded-xl bg-card px-4 py-4 text-sm leading-relaxed text-foreground ring-1 ring-foreground/10 lg:sticky lg:top-4 lg:col-start-2 lg:row-span-3 lg:row-start-1"
+        className="flex flex-col gap-4 rounded-2xl border border-border/80 bg-card p-4 sm:p-5 shadow-xs lg:sticky lg:top-4 lg:col-span-4"
       >
         {open ? (
-          <FunctionNoteView title={open.label} note={open.note} />
+          <div className="flex flex-col gap-3">
+            <span className="inline-flex w-fit items-center gap-1 rounded-full border border-[var(--hp-brand)]/30 bg-[var(--hp-brand)]/10 px-2 py-0.5 text-[10px] font-semibold text-[var(--hp-brand)] uppercase">
+              Parameter Inspector
+            </span>
+            <FunctionNoteView title={open.label} note={open.note} />
+          </div>
         ) : (
-          <p className="text-muted-foreground">Hover or tap a slider.</p>
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center gap-2 border-b border-border/60 pb-3">
+              <Sliders className="size-4 text-[var(--hp-brand)]" />
+              <h3 className="font-heading text-sm font-bold text-foreground">Dimensional Scaling Rules</h3>
+            </div>
+
+            <div className="flex flex-col gap-3 text-xs leading-relaxed text-muted-foreground">
+              <div className="rounded-xl border border-border/60 bg-muted/20 p-3 dark:bg-muted/10">
+                <h4 className="font-bold text-foreground flex items-center gap-1.5 mb-1">
+                  <span className="size-2 rounded-full bg-[var(--hp-brand)]" />
+                  Column Length (L)
+                </h4>
+                <p>
+                  Increasing column length raises theoretical plate count <strong>(N ∝ L)</strong>, improving resolution by <strong>√L</strong>. However, runtime and back-pressure also scale directly with <strong>L</strong>.
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-border/60 bg-muted/20 p-3 dark:bg-muted/10">
+                <h4 className="font-bold text-foreground flex items-center gap-1.5 mb-1">
+                  <span className="size-2 rounded-full bg-amber-500" />
+                  Internal Diameter (dc)
+                </h4>
+                <p>
+                  At constant volumetric pump flow, linear velocity drops by <strong>(dc)²</strong>. A 2.1 mm column generates roughly <strong>4.8× higher velocity and pressure</strong> than a 4.6 mm column at identical flow rate.
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-[var(--hp-brand)]/30 bg-[var(--hp-soft)]/20 p-3 dark:bg-[var(--hp-soft)]/10 text-foreground">
+                <h4 className="font-bold text-[var(--hp-brand)] mb-1">Interactive Hint</h4>
+                <p className="text-[11px] text-muted-foreground">
+                  Hover or tap either slider to inspect its specific mechanical and chromatographic effects.
+                </p>
+              </div>
+            </div>
+          </div>
         )}
       </aside>
     </section>
   );
-}
-
-function columnTabStyle(selected: boolean, hovered: boolean): CSSProperties {
-  if (selected && hovered) {
-    return { backgroundColor: "#a9d4c4", borderColor: "#0a5644", color: "#144237", fontWeight: 600 };
-  }
-  if (selected) {
-    return { backgroundColor: "#cfe8df", borderColor: "#0f6b56", color: "#144237", fontWeight: 600 };
-  }
-  if (hovered) {
-    return { backgroundColor: "#efe6c4", borderColor: "#b0893e", color: "#3d3416", fontWeight: 600 };
-  }
-  return {
-    backgroundColor: "var(--background)",
-    borderColor: "var(--border)",
-    color: "var(--foreground)",
-    fontWeight: 500,
-  };
 }

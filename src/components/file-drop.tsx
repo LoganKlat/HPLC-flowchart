@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useState } from "react";
+import { UploadCloud } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -58,23 +59,36 @@ export function FileDrop({ prompt, reading, onBegin, onBuffer, onProblem }: File
           setDragging(false);
           void takeFile(event.dataTransfer.files?.[0]);
         }}
-        className={cn(
-          "relative flex min-h-[24rem] flex-1 flex-col items-center justify-center gap-4 px-4 py-16 text-center transition-colors",
-          dragging && "rounded-xl bg-accent",
-        )}
+        className="relative flex min-h-[24rem] flex-1 flex-col items-center justify-center p-4 sm:p-8 text-center transition-all"
       >
-        <p className="font-heading text-2xl text-foreground sm:text-3xl">{reading ? "Reading your chromatogram…" : prompt}</p>
-        <p className="max-w-md text-sm text-muted-foreground">
-          LabSolutions export (.csv, .txt, or .xlsx). Drag it here, or choose it from your computer.
-        </p>
         <div
           className={cn(
-            buttonVariants({ variant: "outline" }),
-            "pointer-events-none h-10 px-4",
-            reading && "opacity-50",
+            "flex w-full max-w-xl flex-col items-center justify-center gap-4 rounded-2xl border-[3px] border-dashed border-border/80 bg-background/50 p-8 sm:p-12 transition-all duration-200",
+            dragging
+              ? "border-[var(--hp-brand)] bg-[var(--hp-soft)] ring-4 ring-[var(--hp-brand)]/20 scale-[1.01]"
+              : "hover:border-[var(--hp-brand)]/70 hover:bg-card/90",
           )}
         >
-          <span>{reading ? "Processing file…" : "Choose a file"}</span>
+          <div className="flex size-16 items-center justify-center rounded-full bg-[var(--hp-soft)] text-[var(--hp-brand)] ring-1 ring-[var(--hp-brand)]/30">
+            <UploadCloud className="size-8" aria-hidden="true" />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <p className="font-heading text-xl font-bold text-foreground sm:text-2xl">
+              {reading ? "Reading your chromatogram…" : prompt}
+            </p>
+            <p className="max-w-md text-xs sm:text-sm text-muted-foreground">
+              LabSolutions export (.csv, .txt, or .xlsx). Drag and drop your file here, or click to browse.
+            </p>
+          </div>
+          <div
+            className={cn(
+              buttonVariants({ variant: "outline" }),
+              "pointer-events-none mt-2 h-10 px-5 font-semibold transition-all",
+              reading && "opacity-50",
+            )}
+          >
+            <span>{reading ? "Processing file…" : "Choose a file"}</span>
+          </div>
         </div>
         <input
           id={inputId}

@@ -1,53 +1,59 @@
 import { Button } from "@/components/ui/button";
+import { KnowMoreToggle } from "@/components/know-more";
 import { BACKWARDS_REDO, backwardsWhy, EFFICIENCY_CONTINUE, EFFICIENCY_MOVE_ON, type BackwardsPair } from "@/lib/retention";
 
 const choiceClass =
-  "flex h-10 min-w-0 cursor-pointer items-center justify-center rounded-lg border px-3 text-sm font-medium";
+  "flex h-8 min-w-0 cursor-pointer select-none items-center justify-center gap-1.5 rounded-lg border px-3 text-xs font-bold shadow-xs transition-all duration-150 active:translate-y-0.5 active:scale-[0.98] outline-none focus-visible:ring-2 focus-visible:ring-ring/50";
 
 export function EfficiencyChoiceButtons({
   onEfficiency,
   onContinue,
   onContinueRetention,
+  inSelectivity = false,
 }: {
   onEfficiency: () => void;
   onContinue: () => void;
   onContinueRetention?: () => void;
+  inSelectivity?: boolean;
 }) {
   return (
-    <div id="efficiency-or-selectivity" className="flex flex-col gap-2">
+    <div id="efficiency-or-selectivity" className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
       <Button
         type="button"
         id="choose-efficiency"
-        className="h-auto w-full flex-col items-start gap-1 whitespace-normal px-4 py-3 text-left"
+        className="h-auto w-full cursor-pointer flex-col items-start gap-0.5 whitespace-normal px-3 py-1.5 text-left transition-all duration-150 hover:brightness-105 hover:shadow-xs active:translate-y-0.5 active:scale-[0.99]"
         style={{
           height: "auto",
           whiteSpace: "normal",
-          backgroundColor: "#0f6b56",
-          color: "#f7fffb",
-          borderColor: "#0f6b56",
+          backgroundColor: "var(--hp-brand)",
+          color: "var(--hp-on-brand)",
+          borderColor: "var(--hp-brand)",
         }}
         onClick={onEfficiency}
       >
-        <span className="text-xs tracking-[0.14em] uppercase">Recommended</span>
-        <span>{EFFICIENCY_MOVE_ON}</span>
+        <span className="text-[9px] font-bold tracking-wider uppercase opacity-90">Recommended</span>
+        <span className="text-xs font-semibold leading-tight">{EFFICIENCY_MOVE_ON}</span>
       </Button>
       <Button
         type="button"
         id="choose-continue"
         variant="outline"
-        className="h-auto w-full whitespace-normal px-4 py-3 text-left"
+        className="h-auto w-full cursor-pointer flex-col items-start gap-0.5 whitespace-normal px-3 py-1.5 text-left transition-all duration-150 hover:border-[var(--hp-brand)] hover:bg-[var(--hp-soft)] hover:text-[var(--hp-brand)] hover:shadow-xs active:translate-y-0.5 active:scale-[0.99]"
         style={{ height: "auto", whiteSpace: "normal" }}
         onClick={onContinue}
       >
-        {EFFICIENCY_CONTINUE}
+        <span className="text-[9px] font-bold tracking-wider uppercase text-muted-foreground">Selectivity</span>
+        <span className="text-xs font-semibold leading-tight">
+          {inSelectivity ? "Stay in selectivity" : EFFICIENCY_CONTINUE}
+        </span>
       </Button>
-      {onContinueRetention ? (
+      {!inSelectivity && onContinueRetention ? (
         <Button
           type="button"
           id="continue-retention"
           variant="outline"
-          className="h-auto w-full whitespace-normal px-4 py-3 text-left"
-          style={{ height: "auto", whiteSpace: "normal" }}
+          className="h-auto w-full cursor-pointer py-1 px-3 text-xs sm:col-span-2 text-center transition-all duration-150 hover:border-[var(--hp-brand)] hover:bg-[var(--hp-soft)] hover:text-[var(--hp-brand)] active:scale-[0.99]"
+          style={{ height: "auto" }}
           onClick={onContinueRetention}
         >
           Stay in retention
@@ -58,14 +64,22 @@ export function EfficiencyChoiceButtons({
 }
 
 export function EfficiencyChoiceView({ why }: { why: string }) {
+  const paragraphs = why.split("\n\n").filter(Boolean);
+  const summary = paragraphs[0] ?? why;
+  const more = paragraphs.slice(1);
   return (
     <div className="contents" id="efficiency-choice">
       <section className="rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10">
         <h2 className="font-heading text-base">Why</h2>
         <div className="mt-3 flex flex-col gap-2 text-sm leading-relaxed text-foreground">
-          {why.split("\n\n").map((paragraph, index) => (
-            <p key={index}>{paragraph}</p>
-          ))}
+          <p className="font-medium">{summary}</p>
+          {more.length > 0 ? (
+            <KnowMoreToggle>
+              {more.map((paragraph, index) => (
+                <p key={index}>{paragraph}</p>
+              ))}
+            </KnowMoreToggle>
+          ) : null}
         </div>
       </section>
     </div>
@@ -74,14 +88,19 @@ export function EfficiencyChoiceView({ why }: { why: string }) {
 
 export function LeaveSelectivityButtons({ onYes, onNo }: { onYes: () => void; onNo: () => void }) {
   return (
-    <div id="leave-selectivity-buttons" className="grid grid-cols-2 gap-2">
-      <button type="button" id="leave-selectivity-yes" className={`${choiceClass} border-primary bg-accent text-foreground`} onClick={onYes}>
+    <div id="leave-selectivity-buttons" className="grid grid-cols-2 gap-1.5">
+      <button
+        type="button"
+        id="leave-selectivity-yes"
+        className={`${choiceClass} border-[var(--hp-brand)] bg-[var(--hp-brand)] text-[var(--hp-on-brand)] ring-2 ring-[var(--hp-brand)]/20 hover:bg-[var(--hp-brand-hover)] hover:shadow-xs`}
+        onClick={onYes}
+      >
         Yes
       </button>
       <button
         type="button"
         id="leave-selectivity-no"
-        className={`${choiceClass} border-input bg-background text-foreground`}
+        className={`${choiceClass} border-border bg-card text-foreground hover:border-[var(--hp-brand)] hover:bg-[var(--hp-soft)] hover:text-[var(--hp-brand)] hover:shadow-xs`}
         onClick={onNo}
       >
         No
@@ -95,12 +114,13 @@ export function LeaveSelectivityAsk({
 }: {
   ask: { question: string; why: string; steps?: string[] };
 }) {
+  const paragraphs = ask.why.split("\n\n").filter(Boolean);
   return (
     <div className="contents" id="leave-selectivity-ask">
       <section className="rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10">
         <h2 className="font-heading text-base">Why</h2>
         <div className="mt-3 flex flex-col gap-2 text-sm leading-relaxed text-foreground">
-          <p>{ask.question}</p>
+          <p className="font-medium">{ask.question}</p>
           {ask.steps && ask.steps.length > 0 ? (
             <ol id="selectivity-steps" className="list-decimal space-y-2 pl-5">
               {ask.steps.map((step) => (
@@ -108,9 +128,13 @@ export function LeaveSelectivityAsk({
               ))}
             </ol>
           ) : null}
-          {ask.why.split("\n\n").map((paragraph, index) => (
-            <p key={index}>{paragraph}</p>
-          ))}
+          {paragraphs.length > 0 ? (
+            <KnowMoreToggle>
+              {paragraphs.map((paragraph, index) => (
+                <p key={index}>{paragraph}</p>
+              ))}
+            </KnowMoreToggle>
+          ) : null}
         </div>
       </section>
     </div>
@@ -125,25 +149,24 @@ export function BackwardsChoiceButtons({
   onRedo: () => void;
 }) {
   return (
-    <div id="backwards-choices" className="flex flex-col gap-2">
+    <div id="backwards-choices" className="grid grid-cols-2 gap-1.5">
       <Button
         type="button"
         id="backwards-continue"
-        className="h-auto w-full whitespace-normal px-4 py-3 text-left"
-        style={{ height: "auto", whiteSpace: "normal", backgroundColor: "#0f6b56", color: "#f7fffb", borderColor: "#0f6b56" }}
+        className="h-8 cursor-pointer px-2.5 text-xs font-bold transition-all duration-150 hover:brightness-105 hover:shadow-xs active:translate-y-0.5 active:scale-[0.99]"
+        style={{ backgroundColor: "var(--hp-brand)", color: "var(--hp-on-brand)", borderColor: "var(--hp-brand)" }}
         onClick={onContinue}
       >
-        Continue with the normal steps
+        Continue steps
       </Button>
       <Button
         type="button"
         id="backwards-redo"
         variant="outline"
-        className="h-auto w-full whitespace-normal px-4 py-3 text-left"
-        style={{ height: "auto", whiteSpace: "normal" }}
+        className="h-8 cursor-pointer border-border bg-card px-2.5 text-xs font-bold text-foreground transition-all duration-150 hover:border-[var(--hp-brand)] hover:bg-[var(--hp-soft)] hover:text-[var(--hp-brand)] hover:shadow-xs active:translate-y-0.5 active:scale-[0.99]"
         onClick={onRedo}
       >
-        Re-do the runs
+        Re-do runs
       </Button>
     </div>
   );
@@ -170,14 +193,33 @@ export function BackwardsRetentionView({
   );
 }
 
-export function LeaveSelectivityDone({ duringRetention }: { duringRetention: boolean }) {
+export function LeaveSelectivityDone({
+  duringRetention,
+  onUndo,
+}: {
+  duringRetention: boolean;
+  onUndo?: () => void;
+}) {
   const nextChange = duringRetention
     ? "Retention and selectivity are finished. Efficiency is next. That stage is not built yet."
     : "Selectivity is finished. Efficiency is next. That stage is not built yet.";
   return (
     <div className="contents" id="leave-selectivity-done">
       <section className="rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10">
-        <h2 className="font-heading text-base">Why</h2>
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="font-heading text-base">Why</h2>
+          {onUndo ? (
+            <Button
+              type="button"
+              id="undo-leave-selectivity"
+              variant="outline"
+              className="h-7 cursor-pointer px-2.5 text-xs font-semibold"
+              onClick={onUndo}
+            >
+              Back to choices
+            </Button>
+          ) : null}
+        </div>
         <div className="mt-1 flex flex-col gap-2 text-sm leading-relaxed text-foreground">
           <p>{nextChange}</p>
           <p>

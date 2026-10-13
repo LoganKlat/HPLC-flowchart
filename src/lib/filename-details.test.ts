@@ -513,4 +513,46 @@ describe("run file names", () => {
       }),
     ).toBe("GR41-04-5-MeOH-3-ISO-50.3-1.5-20u-CP-0.1-C18-150x4.6x5-amb-254");
   });
+
+  it("parses BLK blank run file names and populates all 17 RunDetails fields", () => {
+    const blankFiles = [
+      {
+        name: "GR41-03-5-ACN-3-ISO-90-1.5-20u-BLK-0.0-BiphP-150x4.6x5-amb-254_1_.csv",
+        percentB: "90",
+      },
+      {
+        name: "GR41-10-6-ACN-3-ISO-37-1.5-20u-BLK-0.0-BIPP-150x4.6x5-amb-254(1).csv",
+        percentB: "37",
+      },
+      {
+        name: "GR41-10-6-ACN-3-ISO-37-1.5-20u-BLK-0.0-BIPP-150x4.6x5-amb-254.csv",
+        percentB: "37",
+      },
+    ];
+
+    for (const item of blankFiles) {
+      const filled = detailsFromFileName(emptyRunDetails(), item.name);
+      expect(filled.ok, item.name).toBe(true);
+      if (!filled.ok) continue;
+      expect(filled.details).toEqual({
+        solvent: "ACN",
+        ph: "3",
+        method: "ISO",
+        percentB: item.percentB,
+        flowRate: "1.5",
+        injectionVolume: "20",
+        sampleType: "BLANK",
+        sampleConcentration: "0.0",
+        ligand: "biphenyl",
+        coreShell: "no",
+        poreSize: "140",
+        carbonLoad: "11",
+        lengthMm: "150",
+        diameterMm: "4.6",
+        particleSize: "5",
+        temperature: "ambient",
+        wavelength: "254",
+      });
+    }
+  });
 });

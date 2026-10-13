@@ -1,6 +1,8 @@
+import { isUltraColumn, type ColumnSpec } from "@/lib/column-catalog";
 import { formatPercentB } from "@/lib/retention";
 import type { RunDetails } from "@/lib/run-details";
 import { LIGANDS, SOLVENTS } from "@/lib/selectivity";
+import { SHEET_COLUMNS } from "@/lib/sheet-columns";
 
 export const FILE_NAME_EXAMPLE =
   "GR09-05-3-ACN-3-ISO-90-1.5-20-CP-0.1-C18aqP-150x4.6x5-amb-254";
@@ -26,6 +28,20 @@ const LIGAND_NAMES = new Map<string, (typeof LIGANDS)[number]>(
 LIGAND_NAMES.set("c18aqp", "C18aq");
 LIGAND_NAMES.set("biphp", "biphenyl");
 LIGAND_NAMES.set("bipp", "biphenyl");
+LIGAND_NAMES.set("biph", "biphenyl");
+LIGAND_NAMES.set("bip", "biphenyl");
+LIGAND_NAMES.set("c18p", "C18");
+LIGAND_NAMES.set("c8p", "C8");
+LIGAND_NAMES.set("pfppp", "PFPP");
+LIGAND_NAMES.set("ibdp", "IBD");
+LIGAND_NAMES.set("c18r", "C18");
+LIGAND_NAMES.set("biphr", "biphenyl");
+LIGAND_NAMES.set("bipr", "biphenyl");
+LIGAND_NAMES.set("pfppr", "PFPP");
+LIGAND_NAMES.set("c18f", "C18");
+LIGAND_NAMES.set("biphf", "biphenyl");
+LIGAND_NAMES.set("bipf", "biphenyl");
+LIGAND_NAMES.set("pfppf", "PFPP");
 
 /** File-name tokens that parse back through LIGAND_NAMES. */
 const LIGAND_FILE_TOKENS = new Map<string, string>([
@@ -56,6 +72,9 @@ const FILE_NAME_DETAIL_KEYS = [
   "sampleType",
   "sampleConcentration",
   "ligand",
+  "coreShell",
+  "poreSize",
+  "carbonLoad",
   "lengthMm",
   "diameterMm",
   "particleSize",
@@ -73,9 +92,9 @@ export function detailsFromFileName(
 ): { ok: true; details: RunDetails } | { ok: false; details: RunDetails; note: string } {
   const parsed = parseRunFileName(fileName);
   if (!parsed.ok) return { ok: false, details: current, note: parsed.message };
-  const details = { ...current };
+  const details: RunDetails = { ...current };
   for (const key of FILE_NAME_DETAIL_KEYS) {
-    details[key] = parsed.fields[key] ?? "";
+    Object.assign(details, { [key]: parsed.fields[key] ?? "" });
   }
   return { ok: true, details };
 }
@@ -127,7 +146,7 @@ function peelNameSuffixes(stem: string): string[] {
   let current = stem;
   for (let i = 0; i < 4; i++) {
     const next = current
-      .replace(/\s+\(\d+\)$/, "")
+      .replace(/\s*\(\d+\)$/, "")
       .replace(/_[A-Za-z0-9]+$/, "")
       .replace(/_+\d+_+$/, "");
     if (next === current) break;
@@ -205,8 +224,52 @@ function parseFull(parts: string[]): Partial<RunDetails> | null {
   const solventLabel = solventLabelFor(solvent);
   if (solventLabel) fields.solvent = solventLabel;
   const ligandName = LIGAND_NAMES.get(ligand.toLowerCase());
-  if (ligandName) fields.ligand = ligandName;
+  if (ligandName) {
+    fields.ligand = ligandName;
+    const specs = matchColumnSpecs(ligand, ligandName, size[1], size[2], size[3]);
+    if (specs) {
+      fields.coreShell = specs.coreShell;
+      fields.poreSize = specs.poreSize;
+      fields.carbonLoad = specs.carbonLoad;
+    }
+  }
   return fields;
+}
+
+function matchColumnSpecs(
+  rawLigand: string,
+  ligandName: string,
+  lengthMm: string,
+  diameterMm: string,
+  particleSize: string,
+): Pick<RunDetails, "coreShell" | "poreSize" | "carbonLoad"> | null {
+  const len = Number(lengthMm);
+  const dia = Number(diameterMm);
+  const part = Number(particleSize);
+  const available = SHEET_COLUMNS.filter((col) => !isUltraColumn(col) && col.coating === ligandName);
+  const sized = available.filter(
+    (col) =>
+      Math.abs(col.lengthMm - len) < 1e-6 &&
+      Math.abs(col.diameterMm - dia) < 1e-6 &&
+      Math.abs(col.particleUm - part) < 1e-6,
+  );
+  const pool: ColumnSpec[] = sized.length > 0 ? sized : available;
+  if (pool.length === 0) return null;
+  const low = rawLigand.toLowerCase();
+  const wantsPinnacle = low !== "pfpp" && low.endsWith("p");
+  const wantsRaptor = low.endsWith("r");
+  const wantsForce = low.endsWith("f");
+  const chosen =
+    (wantsPinnacle ? pool.find((col) => /pinnacle/i.test(col.product)) : undefined) ??
+    (wantsRaptor ? pool.find((col) => /raptor/i.test(col.product)) : undefined) ??
+    (wantsForce ? pool.find((col) => /force/i.test(col.product)) : undefined) ??
+    pool.find((col) => /pinnacle/i.test(col.product)) ??
+    pool[0];
+  return {
+    coreShell: chosen.coreShell,
+    poreSize: String(chosen.poreA),
+    carbonLoad: String(chosen.carbonLoad),
+  };
 }
 
 function methodLabel(token: string): "GRA" | "ISO" | null {
@@ -217,7 +280,7 @@ function methodLabel(token: string): "GRA" | "ISO" | null {
 
 function sampleTypeLabel(token: string): "CP" | "BLANK" | null {
   if (/^cp$/i.test(token)) return "CP";
-  if (/^blank$/i.test(token)) return "BLANK";
+  if (/^(?:blank|blk)$/i.test(token)) return "BLANK";
   return null;
 }
 

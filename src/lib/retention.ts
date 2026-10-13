@@ -22,6 +22,8 @@ export type RetentionSample = {
   maxBackPressurePsi: number | null;
   /** Peak table rows. Used when the peak count is above the specification. */
   peaks?: PeakMeasurement[];
+  /** Optional 1-based UI run number when blank runs are interleaved. */
+  displayRunNumber?: number;
 };
 
 export type RetentionChoice = {
@@ -39,6 +41,7 @@ export type LookMark = "met" | "not-met" | "blank";
 
 export type LookRun = {
   index: number;
+  displayRunNumber?: number;
   percentB: number | null;
   peakCount: number | null;
   resolution: number | null;
@@ -260,13 +263,20 @@ export function decideRetention(
   }
 
   if (samples.length >= 2 && current.percentB != null) {
-    const prior = decideRetention(samples.slice(0, -1), complete);
+    const rawPrior = decideRetention(samples.slice(0, -1), complete);
+    const prior =
+      rawPrior.status === "efficiency"
+        ? decideRetention(samples.slice(0, -1), complete, { continueRetention: true })
+        : rawPrior;
     // The first calculated minimum is run once. A later file at that %B, including
     // the whole percent just under a ceiled recommendation, does not refit the line.
     // Peaks already matching the specification still pause for efficiency first.
     if (ranRecommendedMinimum(current.percentB, prior)) {
       if (current.peakCount === complete.requiredPeaks) {
         return equalPeakCount(samples, complete, choice);
+      }
+      if (choice?.continueToLook) {
+        return lookDecision(samples, complete, "between-then-heat");
       }
       return minimumAlreadyRun();
     }
@@ -463,8 +473,9 @@ function afterInBetweenFile(
   }
   if (current.peakCount === rules.requiredPeaks) {
     const judged = judgeEqualPeaks(current, rules);
-    if (judged.resolutionMeets && !judged.timeLate) return specsMet(current, rules, judged);
+    if (judged.resolutionMeets && !judged.timeLate && !judged.pressureOver) return specsMet(current, rules, judged);
     if (choice?.continueToLook) return lookDecision(samples, rules, "between-then-heat");
+    if (choice?.continueRetention) return chooseOwnPercentDecision(current, rules);
     return efficiencyStop(current, rules, judged, true);
   }
   return lookDecision(samples, rules, "picker");
@@ -479,9 +490,36 @@ function equalPeakCount(
   const judged = judgeEqualPeaks(current, rules);
   // Peaks already match the specification: leave retention. Specs-met stops
   // everything; otherwise efficiency is next (not another %B, not selectivity).
-  if (judged.resolutionMeets && !judged.timeLate) return specsMet(current, rules, judged);
-  if (choice?.continueRetention) return chooseOwnPercentDecision(current, rules);
-  return efficiencyStop(current, rules, judged);
+  if (judged.resolutionMeets && !judged.timeLate && !judged.pressureOver) return specsMet(current, rules, judged);
+  if (choice?.continueToLook) return lookDecision(samples, rules, "between-then-heat");
+  if (choice?.continueRetention) {
+    const rawPrior = samples.length >= 2 ? decideRetention(samples.slice(0, -1), rules) : null;
+    const prior =
+      rawPrior && rawPrior.status === "efficiency"
+        ? decideRetention(samples.slice(0, -1), rules, { continueRetention: true })
+        : rawPrior;
+    const alreadyRanMin =
+      prior != null &&
+      current.percentB != null &&
+      ranRecommendedMinimum(current.percentB, prior);
+    if (
+      !judged.timeLate &&
+      !alreadyRanMin &&
+      current.lastPeakTimeMin != null &&
+      current.maxBackPressurePsi != null &&
+      pressureIsUnder(current.maxBackPressurePsi, rules.maxBackPressurePsi)
+    ) {
+      const line = retentionLine(rules.lastPeakTimeMin);
+      if (!isPast(current.lastPeakTimeMin, line)) {
+        return dropPoints(samples, rules, 10, "drop-10");
+      }
+      if (samples.length >= 2) {
+        return calculatePercentB(samples, rules);
+      }
+    }
+    return chooseOwnPercentDecision(current, rules);
+  }
+  return efficiencyStop(current, rules, judged, samples.length > 1);
 }
 
 type EqualJudgment = {
@@ -489,6 +527,7 @@ type EqualJudgment = {
   resolutionMeets: boolean;
   resolutionPositive: boolean;
   timeLate: boolean;
+  pressureOver: boolean;
 };
 
 function judgeEqualPeaks(sample: RetentionSample, rules: CompleteRules): EqualJudgment {
@@ -502,7 +541,11 @@ function judgeEqualPeaks(sample: RetentionSample, rules: CompleteRules): EqualJu
     !hasResolutionSpec || (resolution != null && Number.isFinite(resolution) && resolution + 1e-9 >= rules.minResolution!);
   const timeLate = sample.lastPeakTimeMin != null && isPast(sample.lastPeakTimeMin, rules.lastPeakTimeMin);
   const resolutionPositive = resolution != null && Number.isFinite(resolution) && resolution > 0;
-  return { resolution, resolutionMeets, resolutionPositive, timeLate };
+  const pressureOver =
+    sample.maxBackPressurePsi != null &&
+    !pressureIsUnder(sample.maxBackPressurePsi, rules.maxBackPressurePsi) &&
+    !nearly(sample.maxBackPressurePsi, rules.maxBackPressurePsi);
+  return { resolution, resolutionMeets, resolutionPositive, timeLate, pressureOver };
 }
 
 function specsMet(sample: RetentionSample, rules: CompleteRules, judged: EqualJudgment): RetentionDecision {
@@ -547,9 +590,13 @@ function efficiencyStop(
   judged: EqualJudgment,
   continueShowsLook = false,
 ): RetentionDecision {
-  const nextLine = judged.resolutionMeets
-    ? "Efficiency is next to bring the last peak time to the specification. The peaks are already there and the worst pair is already far enough apart. Efficiency can shorten the run without changing the separation you already have."
-    : "Efficiency is next for the resolution. The peaks are there, but the worst pair is still too close. The next change is meant to pull them apart.";
+  const nextLine = !judged.resolutionMeets
+    ? "Efficiency is next for the resolution. The peaks are there, but the worst pair is still too close. The next change is meant to pull them apart."
+    : judged.timeLate && judged.pressureOver
+      ? "Efficiency is next to bring the last peak time and the back-pressure to the specification. The peaks are already there and the worst pair is already far enough apart."
+      : judged.pressureOver
+        ? "Efficiency is next to bring the back-pressure to the specification. The peaks are already there, the worst pair is already far enough apart, and the last peak is inside the specified time."
+        : "Efficiency is next to bring the last peak time to the specification. The peaks are already there and the worst pair is already far enough apart. Efficiency can shorten the run without changing the separation you already have.";
   return {
     status: "efficiency",
     reason: "efficiency",
@@ -665,6 +712,7 @@ function lookRuns(samples: RetentionSample[], rules: CompleteRules): LookRun[] {
           : "not-met";
     return {
       index,
+      displayRunNumber: sample.displayRunNumber,
       percentB: sample.percentB,
       peakCount: sample.peakCount,
       resolution,
@@ -766,7 +814,7 @@ function dropPoints(
     );
   } else {
     whyParts.push(
-      `The last peak is at ${formatMinutes(current.lastPeakTimeMin!)} min, close to the specified run time of ${formatTypedMinutes(rules.lastPeakTimeMin)} min. This is the only chromatogram so far, so the %B that would hit that time is not calculated. ${from}% B minus 5 percentage points is ${to}% B. Another run is needed before that %B can be calculated. A larger drop is not used, because retention grows quickly as %B goes down.`,
+      `The last peak is at ${formatMinutes(current.lastPeakTimeMin!)} min, close to the specified run time of ${formatTypedMinutes(rules.lastPeakTimeMin)} min. Minimum %B: N/A (at least two runs are required to fit the logK line). This is the only chromatogram so far, so the %B that would hit that time is not calculated. ${from}% B minus 5 percentage points is ${to}% B. Another run is needed before that %B can be calculated. A larger drop is not used, because retention grows quickly as %B goes down.`,
     );
   }
 
@@ -790,17 +838,19 @@ function returnToSelectivity(samples: RetentionSample[], rules: CompleteRules): 
       ? previous.percentB
       : current.percentB!;
   const percent = formatPercentB(back);
+  const samePercent = nearly(back, current.percentB!);
+  const lead = samePercent ? `Stay at ${percent}% B` : `Go back to ${percent}% B`;
   return {
     status: "recommend",
     reason: "drop-10",
     move: null,
     nextPercentB: back,
     nextTemperature: "40",
-    nextChange: `Go back to ${percent}% B and change selectivity. Run the next chromatogram at 40°C, still at ${percent}% B. The goal is to change the conditions so the selectivity changes and the overlapping peaks separate. A higher temperature shortens retention. The %B stays the same. ${TEMPERATURE_SENTENCE} Do not lower %B. The last peak is already past the time and the peak count is still short.`,
+    nextChange: `${lead} and change selectivity. Run the next chromatogram at 40°C, still at ${percent}% B. The goal is to change the conditions so the selectivity changes and the overlapping peaks separate. A higher temperature shortens retention. The %B stays the same. ${TEMPERATURE_SENTENCE} Do not lower %B. The last peak is already past the time and the peak count is still short.`,
     following: SELECTIVITY_ORDER,
     why: [
       `This run has ${formatCount(current.peakCount!)} peaks, still under the specification of ${formatCount(rules.requiredPeaks)}.`,
-      `The last peak is at ${formatMinutes(current.lastPeakTimeMin!)} min, later than the specification of ${formatMinutes(rules.lastPeakTimeMin)} min. A lower %B would hold the compounds even longer. Go back to ${percent}% B and change selectivity instead.`,
+      `The last peak is at ${formatMinutes(current.lastPeakTimeMin!)} min, later than the specification of ${formatMinutes(rules.lastPeakTimeMin)} min. A lower %B would hold the compounds even longer. ${lead} and change selectivity instead.`,
     ].join("\n\n"),
     fit: null,
   };
@@ -948,7 +998,7 @@ function calculatePercentB(samples: RetentionSample[], rules: CompleteRules): Re
     nextChange += " The calculated value was below 0, so it is held at 0.";
   }
 
-  const why = [...intro, fitMembershipSentence(samples, fit, spec, picked.checks)].join("\n\n");
+  const why = [...intro, fitMembershipSentence(samples, fit, spec, picked.checks, picked.r2Dropped)].join("\n\n");
 
   return {
     status: "recommend",
@@ -1023,6 +1073,7 @@ function fitMembershipSentence(
   fit: RetentionFit,
   spec: SeparationSpec,
   checks: T0Check[],
+  r2Dropped: number[] = [],
 ): string {
   const used = fit.rows
     .map((row) => `Run ${row.runNumber} at ${formatPercentB(row.percentB)}% B`)
@@ -1034,7 +1085,7 @@ function fitMembershipSentence(
     parts.push(leftOut.length > 0 ? qTestLeftOutSentence(samples, leftOut) : "The t0 peaks passed the Q-test.");
   }
   if (samples.length > 3) {
-    const separation = separationMembershipSentence(samples, spec, checks);
+    const separation = separationMembershipSentence(samples, spec, checks, r2Dropped);
     if (separation) parts.push(separation);
   }
   parts.push(`The calculation uses ${used}.`);
@@ -1045,7 +1096,7 @@ function qTestLeftOutSentence(samples: RetentionSample[], leftOut: T0Check[]): s
   const labels = leftOut.map((check) => {
     const sample = samples[check.index];
     const percent = sample.percentB == null ? "" : ` at ${formatPercentB(sample.percentB)}% B`;
-    return `Run ${check.index + 1}${percent} (t0 peak ${formatMinutes(check.t0!)} min)`;
+    return `Run ${sample.displayRunNumber ?? check.index + 1}${percent} (t0 peak ${formatMinutes(check.t0!)} min)`;
   });
   if (labels.length === 1) return `The Q-test left out ${labels[0]}.`;
   const last = labels[labels.length - 1];
@@ -1056,30 +1107,37 @@ function separationMembershipSentence(
   samples: RetentionSample[],
   spec: SeparationSpec,
   checks: T0Check[],
+  r2Dropped: number[] = [],
 ): string {
   const highest = highestPercentIndex(samples);
   const parts: string[] = [];
   if (highest === 0) {
-    if (checks[0]?.far) return "";
-    const verdict = separationVerdict(samples[0], spec);
-    let line = `${runLabel(0, samples[0])} is the first run and also the highest %B, so that run is checked once. ${verdict.sentence}`;
-    if (!verdict.keep) line += " It is left out once.";
-    return line;
+    if (!checks[0]?.far) {
+      const verdict = separationVerdict(samples[0], spec);
+      let line = `${runLabel(0, samples[0])} is the first run and also the highest %B, so that run is checked once. ${verdict.sentence}`;
+      if (!verdict.keep) line += " It is left out once.";
+      parts.push(line);
+    }
+  } else {
+    if (!checks[0]?.far) {
+      const first = separationVerdict(samples[0], spec);
+      parts.push(`${runLabel(0, samples[0])} is the first run. ${first.sentence}`);
+    }
+    if (!checks[highest]?.far) {
+      const high = separationVerdict(samples[highest], spec);
+      parts.push(`${runLabel(highest, samples[highest])} has the highest %B. ${high.sentence}`);
+    }
   }
-  if (!checks[0]?.far) {
-    const first = separationVerdict(samples[0], spec);
-    parts.push(`${runLabel(0, samples[0])} is the first run. ${first.sentence}`);
-  }
-  if (!checks[highest]?.far) {
-    const high = separationVerdict(samples[highest], spec);
-    parts.push(`${runLabel(highest, samples[highest])} has the highest %B. ${high.sentence}`);
+  for (const idx of r2Dropped) {
+    const extra = separationVerdict(samples[idx], spec);
+    parts.push(`${runLabel(idx, samples[idx])} is also left out to improve R² toward 0.99. ${extra.sentence}`);
   }
   return parts.join(" ");
 }
 
 function runLabel(index: number, sample: RetentionSample): string {
   const percent = sample.percentB == null ? "" : ` at ${formatPercentB(sample.percentB)}% B`;
-  return `Run ${index + 1}${percent}`;
+  return `Run ${sample.displayRunNumber ?? index + 1}${percent}`;
 }
 
 type IndexedSample = {
@@ -1210,17 +1268,49 @@ type LineSelection = {
   kept: IndexedSample[];
   excluded: RetentionExclusion[];
   checks: T0Check[];
+  r2Dropped: number[];
 };
 
 function selectForLine(samples: RetentionSample[], spec: SeparationSpec): LineSelection {
-  const indexed = samples.map((sample, index) => ({ runNumber: index + 1, sample }));
+  const indexed = samples.map((sample, index) => ({ runNumber: sample.displayRunNumber ?? index + 1, sample }));
   const checks = t0Checks(samples);
   const dropIndexes = new Set(checks.filter((check) => check.far).map((check) => check.index));
+  const r2Dropped: number[] = [];
   if (samples.length > 3) {
     const highest = highestPercentIndex(samples);
     for (const index of [0, highest]) {
       if (dropIndexes.has(index)) continue;
       if (!separationVerdict(samples[index], spec).keep) dropIndexes.add(index);
+    }
+    while (true) {
+      const activeIndices: number[] = [];
+      const points: { x: number; y: number }[] = [];
+      for (let i = 0; i < samples.length; i++) {
+        if (dropIndexes.has(i)) continue;
+        const pct = samples[i].percentB;
+        const factor = retentionFactor(samples[i]);
+        if (pct == null || !factor) continue;
+        activeIndices.push(i);
+        points.push({ x: pct, y: factor.logK });
+      }
+      if (activeIndices.length <= 3) break;
+      const fit = ordinaryLeastSquares(points);
+      if (!fit || fit.rSquared >= 0.99) break;
+      let candidateIdx = -1;
+      let candidatePct = -Infinity;
+      for (const idx of activeIndices) {
+        const pct = samples[idx].percentB!;
+        if (pct > candidatePct) {
+          candidatePct = pct;
+          candidateIdx = idx;
+        }
+      }
+      if (candidateIdx < 0 || separationVerdict(samples[candidateIdx], spec).keep) break;
+      const withoutPoints = points.filter((_, pos) => activeIndices[pos] !== candidateIdx);
+      const nextFit = ordinaryLeastSquares(withoutPoints);
+      if (!nextFit || !(nextFit.rSquared > fit.rSquared + 1e-6)) break;
+      dropIndexes.add(candidateIdx);
+      r2Dropped.push(candidateIdx);
     }
   }
 
@@ -1240,7 +1330,7 @@ function selectForLine(samples: RetentionSample[], spec: SeparationSpec): LineSe
         : separationVerdict(item.sample, spec).sentence,
     });
   });
-  return { kept, excluded, checks };
+  return { kept, excluded, checks, r2Dropped };
 }
 
 function t0Checks(samples: RetentionSample[]): T0Check[] {
@@ -1300,7 +1390,7 @@ function catalogRuns(samples: RetentionSample[], rows: RetentionFitRow[]): FitCa
   const kept = new Set(rows.map((row) => row.runNumber));
   return samples.map((sample, index) => {
     const factor = retentionFactor(sample);
-    const runNumber = index + 1;
+    const runNumber = sample.displayRunNumber ?? index + 1;
     return {
       runNumber,
       percentB: sample.percentB,

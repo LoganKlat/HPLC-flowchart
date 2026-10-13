@@ -10,7 +10,7 @@ const topics = [
   ["last", "Last peak & runtime"], ["pressure", "Back-pressure"], ["checks", "App checks"],
 ] as const;
 type Topic = typeof topics[number][0];
-const green = "#0f6b56", amber = "#b36a13", blue = "#2563a6";
+const green = "var(--hp-brand)", amber = "var(--hp-amber)", blue = "var(--hp-blue)";
 const x = (time: number) => 80 + time / 13 * 730;
 const y = (signal: number) => 285 - signal / 150 * 225;
 const pressureY = (psi: number) => 285 - psi / 5500 * 225;
@@ -71,7 +71,7 @@ export function ChromatogramExplorer() {
         <p className="mt-2 max-w-3xl text-sm text-muted-foreground">An idealised isocratic UV example with one marker and four retained compounds. Choose a measurement, tap a peak, then change the controls to see what happens.</p>
       </header>
       <div className="flex flex-wrap gap-2" aria-label="Chromatogram measurements">
-        {topics.map(([key, label]) => <button key={key} type="button" aria-pressed={topic === key} onClick={() => { setTopic(key); if (key === "t0") setSelected(0); if (key === "last") setSelected(4); }} className={`rounded-md border px-3 py-2 text-sm ${topic === key ? "border-[#0f6b56] bg-[#cfe8df] text-[#144237]" : "border-border bg-card hover:bg-accent"}`}>{label}</button>)}
+        {topics.map(([key, label]) => <button key={key} type="button" aria-pressed={topic === key} onClick={() => { setTopic(key); if (key === "t0") setSelected(0); if (key === "last") setSelected(4); }} className={`rounded-md border px-3 py-2 text-sm ${topic === key ? "border-[var(--hp-brand)] bg-[var(--hp-soft-2)] text-[var(--hp-ink)]" : "border-border bg-card hover:bg-accent"}`}>{label}</button>)}
       </div>
       <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_21rem]">
         <div className="min-w-0 rounded-xl border border-border bg-card p-3 sm:p-5">
@@ -80,18 +80,18 @@ export function ChromatogramExplorer() {
               <title id={`${id}-title`}>Interactive UV chromatogram and pump-pressure trace</title>
               <desc id={`${id}-desc`}>Five components: marker at 1 minute, A at 3, B at 6, C at {n(6 + spacing)}, D at {n(last.time)}. Select a peak to inspect it. The blue overlay shows pressure in psi on the right Y axis.</desc>
               <defs><clipPath id={`${id}-clip`}><rect x="80" y="45" width="730" height="250" /></clipPath></defs>
-              {[0, 50, 100, 150].map(v => <g key={v}><line x1="80" x2="810" y1={y(v)} y2={y(v)} stroke="#e5e7eb" /><text x="68" y={y(v) + 4} textAnchor="end" fontSize="12" fill="#475569">{v}</text></g>)}
+              {[0, 50, 100, 150].map(v => <g key={v}><line x1="80" x2="810" y1={y(v)} y2={y(v)} stroke="var(--hp-slate-4)" /><text x="68" y={y(v) + 4} textAnchor="end" fontSize="12" fill="var(--hp-slate-1)">{v}</text></g>)}
               <line x1="80" x2="80" y1="45" y2="285" stroke={green} strokeWidth={topic === "axes" ? 3 : 1} />
               <line x1="80" x2="810" y1="285" y2="285" stroke={green} strokeWidth={topic === "axes" ? 3 : 1} />
               <text transform="translate(20 180) rotate(-90)" fontSize="14" textAnchor="middle" fill={green}>UV signal (mAU)</text>
-              {[0, 2, 4, 6, 8, 10, 12, 13].map(v => <g key={v}><line x1={x(v)} x2={x(v)} y1="285" y2="291" stroke={green} /><text x={x(v)} y="310" textAnchor="middle" fontSize="12" fill="#475569">{v}</text></g>)}
+              {[0, 2, 4, 6, 8, 10, 12, 13].map(v => <g key={v}><line x1={x(v)} x2={x(v)} y1="285" y2="291" stroke={green} /><text x={x(v)} y="310" textAnchor="middle" fontSize="12" fill="var(--hp-slate-1)">{v}</text></g>)}
               <text x="445" y="333" textAnchor="middle" fontSize="14" fill={green}>Time after injection (min)</text>
               <g clipPath={`url(#${id}-clip)`}>
                 {(topic === "area" || topic === "height" || topic === "width") && <path d={`M${x(peak.time - 3 * peak.sigma)},${y(baseline)} ${area} L${x(peak.time + 3 * peak.sigma)},${y(baseline)} Z`} fill={green} opacity="0.16" />}
-                <line x1="80" x2="810" y1={y(baseline)} y2={y(baseline)} stroke={topic === "baseline" ? amber : "#94a3b8"} strokeDasharray="5 4" strokeWidth={topic === "baseline" ? 3 : 1} />
+                <line x1="80" x2="810" y1={y(baseline)} y2={y(baseline)} stroke={topic === "baseline" ? amber : "var(--hp-slate-3)"} strokeDasharray="5 4" strokeWidth={topic === "baseline" ? 3 : 1} />
                 <path d={curve} fill="none" stroke={green} strokeWidth="2.5" />
                 {["t0", "retention"].includes(topic) && <line x1={x(t0)} x2={x(t0)} y1="50" y2="285" stroke={amber} strokeDasharray="6 4" strokeWidth="2" />}
-                {["last", "checks"].includes(topic) && <><line x1={x(12)} x2={x(12)} y1="45" y2="285" stroke="#be123c" strokeDasharray="6 4" /><text x={x(12) - 6} y="58" textAnchor="end" fontSize="12" fill="#be123c">12 min limit</text></>}
+                {["last", "checks"].includes(topic) && <><line x1={x(12)} x2={x(12)} y1="45" y2="285" stroke="var(--hp-rose)" strokeDasharray="6 4" /><text x={x(12) - 6} y="58" textAnchor="end" fontSize="12" fill="var(--hp-rose)">12 min limit</text></>}
                 {["peaks", "retention", "last"].includes(topic) && <line x1={x(peak.time)} x2={x(peak.time)} y1={y(baseline + peak.height)} y2="285" stroke={amber} strokeDasharray="4 3" strokeWidth="2" />}
                 {topic === "height" && <><line x1={x(peak.time)} x2={x(peak.time)} y1={y(baseline)} y2={y(baseline + peak.height)} stroke={amber} strokeWidth="3" /><text textAnchor={peak.time > 10 ? "end" : "start"} x={x(peak.time) + (peak.time > 10 ? -10 : 10)} y={y(baseline + peak.height / 2)} fontSize="13" fill={amber}>h = {n(peak.height)} mAU</text></>}
                 {showWidth && widthPeaks.map(p => {
@@ -117,23 +117,23 @@ export function ChromatogramExplorer() {
               <text transform="translate(888 170) rotate(90)" textAnchor="middle" fontSize="14" fill={blue}>Back-pressure (psi)</text>
               <g clipPath={`url(#${id}-clip)`}>
                 <path d={pressureCurve} fill="none" stroke={blue} strokeWidth={topic === "pressure" ? 3 : 2} />
-                <line x1="80" x2="810" y1={pressureY(4000)} y2={pressureY(4000)} stroke="#be123c" strokeDasharray="5 4" opacity="0.75" />
-                <text x="800" y={pressureY(4000) - 7} textAnchor="end" fontSize="12" fill="#be123c">Pressure limit: 4000 psi</text>
+                <line x1="80" x2="810" y1={pressureY(4000)} y2={pressureY(4000)} stroke="var(--hp-rose)" strokeDasharray="5 4" opacity="0.75" />
+                <text x="800" y={pressureY(4000) - 7} textAnchor="end" fontSize="12" fill="var(--hp-rose)">Pressure limit: 4000 psi</text>
                 {topic === "pressure" && <text x={x(4)} y={pressureY(pressure) - 9} textAnchor="middle" fontSize="12" fill={blue}>max {pressure} psi</text>}
               </g>
               <line x1="80" x2="100" y1="25" y2="25" stroke={green} strokeWidth="3" />
               <text x="108" y="29" fontSize="12" fill={green}>UV signal · left axis</text>
               <line x1="320" x2="340" y1="25" y2="25" stroke={blue} strokeWidth="3" />
               <text x="348" y="29" fontSize="12" fill={blue}>Pump pressure · right axis</text>
-              <text x="80" y="357" fontSize="11" fill="#64748b">Same time axis; UV response and pressure use independent Y scales.</text>
+              <text x="80" y="357" fontSize="11" fill="var(--hp-slate-2)">Same time axis; UV response and pressure use independent Y scales.</text>
             </svg>
           </div>
           <div className="flex flex-wrap gap-2" aria-label="Choose a peak">
-            {peaks.map((p, i) => <button key={p.label} type="button" aria-pressed={selected === i} onClick={() => pick(i)} className={`rounded-md border px-3 py-1.5 text-sm ${selected === i ? "border-[#b36a13] bg-amber-50 text-amber-900" : "border-border"}`}>{p.label} · {n(p.time)} min</button>)}
+            {peaks.map((p, i) => <button key={p.label} type="button" aria-pressed={selected === i} onClick={() => pick(i)} className={`rounded-md border px-3 py-1.5 text-sm ${selected === i ? "border-[var(--hp-amber)] bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200" : "border-border"}`}>{p.label} · {n(p.time)} min</button>)}
           </div>
         </div>
         <aside className="rounded-xl border border-border bg-card p-5 text-sm leading-relaxed xl:sticky xl:top-4" aria-live="polite">
-          <p className="text-xs tracking-widest text-[#0f6b56] uppercase">Selected measurement</p>
+          <p className="text-xs tracking-widest text-[var(--hp-brand)] uppercase">Selected measurement</p>
           <h3 className="mt-2 font-heading text-xl">{note.title}</h3>
           <p className="mt-3">{note.body}</p>
           {note.formula && <p className="mt-3 rounded-md bg-muted p-3 font-mono text-xs leading-relaxed">{note.formula}</p>}
@@ -164,8 +164,8 @@ export function ChromatogramExplorer() {
 
 function Slider({ label, value, min, max, step, unit, onChange }: { label: string; value: number; min: number; max: number; step: number; unit: string; onChange: (v: number) => void }) {
   const id = useId();
-  return <div><label htmlFor={id} className="flex justify-between gap-2 text-sm font-medium"><span>{label}</span><span>{Number.isInteger(value) ? value : value.toFixed(2)} {unit}</span></label><input id={id} type="range" min={min} max={max} step={step} value={value} onChange={e => onChange(Number(e.target.value))} className="mt-3 w-full accent-[#0f6b56]" /></div>;
+  return <div><label htmlFor={id} className="flex justify-between gap-2 text-sm font-medium"><span>{label}</span><span>{Number.isInteger(value) ? value : value.toFixed(2)} {unit}</span></label><input id={id} type="range" min={min} max={max} step={step} value={value} onChange={e => onChange(Number(e.target.value))} className="mt-3 w-full accent-[var(--hp-brand)]" /></div>;
 }
 function Check({ label, value, rule, met }: { label: string; value: string; rule: string; met: boolean }) {
-  return <div className={`rounded-xl border p-4 ${met ? "border-[#b5d6c9] bg-[#edf6f1]" : "border-amber-300 bg-amber-50"}`}><p className="text-xs text-muted-foreground">{label}</p><p className="mt-1 text-xl font-semibold">{value}</p><p className="mt-2 text-xs">{rule} · {met ? "met" : "not met"}</p></div>;
+  return <div className={`rounded-xl border p-4 ${met ? "border-[var(--hp-soft-line)] bg-[var(--hp-soft-wash)]" : "border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40"}`}><p className="text-xs text-muted-foreground">{label}</p><p className="mt-1 text-xl font-semibold">{value}</p><p className="mt-2 text-xs">{rule} · {met ? "met" : "not met"}</p></div>;
 }

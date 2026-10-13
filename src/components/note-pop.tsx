@@ -56,7 +56,7 @@ export function NotePop({ text, label, children }: { text?: ReactNode; label: st
       <button
         ref={buttonRef}
         type="button"
-        className="inline-flex size-5 shrink-0 items-center justify-center rounded-full border border-[#0f6b56] bg-white text-[11px] leading-none font-semibold text-[#0f6b56]"
+        className="inline-flex size-5 shrink-0 items-center justify-center rounded-full border border-[var(--hp-brand)] bg-[var(--hp-paper)] text-[11px] leading-none font-semibold text-[var(--hp-brand)]"
         aria-expanded={open}
         aria-controls={open ? panelId : undefined}
         aria-label={`Note for ${label}`}
@@ -71,7 +71,7 @@ export function NotePop({ text, label, children }: { text?: ReactNode; label: st
               id={panelId}
               data-note-pop=""
               role="note"
-              className="fixed z-50 max-h-[min(20rem,calc(100vh-1.5rem))] overflow-y-auto rounded-lg bg-[#f7f3ea] px-3 py-2 text-sm leading-relaxed text-[#144237] shadow-md ring-1 ring-[#0f6b56]/30"
+              className="fixed z-50 max-h-[min(20rem,calc(100vh-1.5rem))] overflow-y-auto rounded-lg bg-[var(--hp-note)] px-3 py-2 text-sm leading-relaxed text-[var(--hp-ink)] shadow-md ring-1 ring-[var(--hp-brand)]/30"
               style={{ top: box.top, left: box.left, width: box.width }}
             >
               {children ?? text}

@@ -149,19 +149,35 @@ export function ChromatogramChart({
     : "";
 
   return (
-    <figure className="overflow-hidden rounded-xl bg-[#f7fbf8] ring-1 ring-foreground/10">
-      {fileName ? (
-        <div className="flex items-center justify-between gap-3 px-4 pt-3">
-          <p className="min-w-0 text-sm font-medium text-foreground">{fileName}</p>
-          {onRemove ? (
-            <Button type="button" variant="outline" className="h-8 shrink-0 px-3" onClick={onRemove}>
-              Remove file
-            </Button>
+    <figure className="overflow-hidden rounded-xl bg-[var(--hp-surface)] ring-1 ring-foreground/10">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/40 px-3.5 py-2 sm:px-4">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <figcaption>
+            <span className="font-heading text-sm font-bold text-foreground">Chromatogram</span>
+          </figcaption>
+          {fileName ? (
+            <span
+              className="max-w-[16rem] truncate rounded-md border border-border/60 bg-muted/40 px-2 py-0.5 font-mono text-xs text-muted-foreground"
+              title={fileName}
+            >
+              {fileName}
+            </span>
           ) : null}
         </div>
-      ) : null}
+        {fileName && onRemove ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 cursor-pointer px-2.5 text-xs text-muted-foreground transition-all hover:border-destructive/40 hover:bg-destructive/10 hover:text-destructive active:translate-y-px"
+            onClick={onRemove}
+          >
+            Remove file
+          </Button>
+        ) : null}
+      </div>
       {multipliers && multipliers.length > 0 ? (
-        <ul id="column-multipliers" className="flex flex-wrap gap-x-4 gap-y-1 px-4 pt-2 text-sm text-[#144237]">
+        <ul id="column-multipliers" className="flex flex-wrap gap-x-4 gap-y-1 px-3.5 pt-2 text-xs text-[var(--hp-ink)]">
           {multipliers.map((item) => (
             <li key={item.label}>
               <span className="text-muted-foreground">{item.label}</span>{" "}
@@ -170,9 +186,6 @@ export function ChromatogramChart({
           ))}
         </ul>
       ) : null}
-      <figcaption className="px-4 pt-3">
-        <span className="font-heading text-base text-foreground">Chromatogram</span>
-      </figcaption>
       <svg
         viewBox={`0 0 ${width} ${height}`}
         role="img"
@@ -304,12 +317,12 @@ export function ChromatogramChart({
             id="pressure-trace"
             d={pressurePath}
             fill="none"
-            stroke="#7d746c"
+            stroke="var(--hp-grey-4)"
             strokeOpacity="0.55"
             strokeWidth="0.68"
           />
         ) : null}
-        <path d={path} fill="none" stroke="#0f6b56" strokeWidth="1.7" />
+        <path d={path} fill="none" stroke="var(--hp-brand)" strokeWidth="1.7" />
         {labels.map((label) => (
           <g key={`${label.text}-${label.anchorX.toFixed(1)}`}>
             <line
@@ -317,19 +330,19 @@ export function ChromatogramChart({
               y1={label.anchorY}
               x2={label.x}
               y2={label.y + LABEL_H / 2}
-              stroke="#0f6b56"
+              stroke="var(--hp-brand)"
               strokeWidth="1"
               opacity="0.45"
             />
-            <circle cx={label.anchorX} cy={label.anchorY} r="2.6" fill="#0f6b56" />
+            <circle cx={label.anchorX} cy={label.anchorY} r="2.6" fill="var(--hp-brand)" />
             <rect
               x={label.x - LABEL_W / 2}
               y={label.y - LABEL_H / 2}
               width={LABEL_W}
               height={LABEL_H}
               rx="3"
-              fill="#f7fbf8"
-              stroke="#0f6b56"
+              fill="var(--hp-surface)"
+              stroke="var(--hp-brand)"
               strokeOpacity="0.35"
             />
             <text

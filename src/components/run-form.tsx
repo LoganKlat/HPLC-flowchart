@@ -1,6 +1,7 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
+import { ChevronDown } from "lucide-react";
 import { ChoiceSelect } from "@/components/choice-select";
 import { FunctionNoteView, type FunctionNote } from "@/components/function-note";
 import { NotePop } from "@/components/note-pop";
@@ -10,7 +11,8 @@ import { Label } from "@/components/ui/label";
 import { applySizeChoice, sizeChoices, type ColumnSpec, type SizeField, type SizePick } from "@/lib/column-catalog";
 import { parseUserCount, parseUserNumber } from "@/lib/evaluate";
 import { FILE_NAME_CHECKBOX_LABEL, FILE_NAME_STRUCTURE_NOTE } from "@/lib/filename-details";
-import type { RuleInputs, RunDetails } from "@/lib/run-details";
+import type { CoreShell, RuleInputs, RunDetails } from "@/lib/run-details";
+import { cn } from "@/lib/utils";
 
 function ambientTemperature(value: string): boolean {
   return /^(amb|ambient)$/i.test(value.trim().replace(/°\s*C$/i, ""));
@@ -227,9 +229,20 @@ function DetailNote({ explained }: { explained: Explained }) {
   );
 }
 
-const cardTitleClass = "font-heading text-xl! leading-tight font-bold!";
+const cardTitleClass = "font-heading text-sm! font-bold text-foreground tracking-tight";
+
+function rulesSummary(rules: RuleInputs): string {
+  const parts: string[] = [];
+  if (rules.requiredPeaks.trim()) parts.push(`≥${rules.requiredPeaks.trim()} pk`);
+  if (rules.lastPeakTimeMin.trim()) parts.push(`≤${rules.lastPeakTimeMin.trim()}m`);
+  if (rules.minResolution.trim()) parts.push(`Rs ≥${rules.minResolution.trim()}`);
+  if (rules.maxBackPressurePsi.trim()) parts.push(`≤${rules.maxBackPressurePsi.trim()} psi`);
+  return parts.length > 0 ? parts.join(" · ") : "Rules";
+}
 
 export function RunForm({ title, details, rules, columns, solvents, onDetails, onRules, fileNameFill, fileNote }: RunFormProps) {
+  const [rulesOpen, setRulesOpen] = useState(true);
+
   function setDetail<K extends keyof RunDetails>(key: K, value: RunDetails[K]) {
     onDetails({ ...details, [key]: value });
   }
@@ -243,6 +256,8 @@ export function RunForm({ title, details, rules, columns, solvents, onDetails, o
       diameterMm: next.diameterMm,
       particleSize: next.particleUm,
       poreSize: next.poreA,
+      coreShell: (next.coreShell !== undefined ? next.coreShell : details.coreShell) as CoreShell,
+      carbonLoad: next.carbonLoad !== undefined ? next.carbonLoad : details.carbonLoad,
     });
   }
 
@@ -252,6 +267,11 @@ export function RunForm({ title, details, rules, columns, solvents, onDetails, o
   const diameterOptions = sizeChoices(columns, pick, "diameterMm").map((value) => ({ value, label: `${value} mm` }));
   const particleOptions = sizeChoices(columns, pick, "particleUm").map((value) => ({ value, label: `${value} µm` }));
   const poreOptions = sizeChoices(columns, pick, "poreA").map((value) => ({ value, label: `${value} Å` }));
+  const coreShellOptions = sizeChoices(columns, pick, "coreShell").map((value) => ({
+    value,
+    label: value === "yes" ? "Yes (core-shell)" : "No (fully porous)",
+  }));
+  const carbonOptions = sizeChoices(columns, pick, "carbonLoad").map((value) => ({ value, label: `${value}%` }));
 
   function setRule<K extends keyof RuleInputs>(key: K, value: string) {
     onRules({ ...rules, [key]: value });
@@ -259,11 +279,28 @@ export function RunForm({ title, details, rules, columns, solvents, onDetails, o
 
   return (
     <div id="setup-boxes" className="flex shrink-0 flex-col gap-2">
-      <Card size="sm" className="shrink-0" style={{ ["--card-spacing" as string]: "0.5rem" }}>
-        <CardHeader className="pb-2">
-          <CardTitle className={cardTitleClass}>Rules to meet</CardTitle>
+      <Card size="sm" className="shrink-0 overflow-hidden" style={{ ["--card-spacing" as string]: "0.4rem" }}>
+        <CardHeader className="p-2 sm:p-2.5 pb-1">
+          <button
+            type="button"
+            onClick={() => setRulesOpen((prev) => !prev)}
+            aria-expanded={rulesOpen}
+            className="group flex w-full cursor-pointer items-center justify-between gap-2 text-left select-none"
+          >
+            <div className="flex min-w-0 items-center gap-2">
+              <CardTitle className={cardTitleClass}>Rules to meet</CardTitle>
+              {!rulesOpen ? (
+                <span className="truncate rounded-md border border-border/60 bg-muted/40 px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
+                  {rulesSummary(rules)}
+                </span>
+              ) : null}
+            </div>
+            <span className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors group-hover:bg-muted group-hover:text-foreground">
+              <ChevronDown className={cn("size-4 transition-transform duration-200", rulesOpen && "rotate-180")} />
+            </span>
+          </button>
         </CardHeader>
-        <CardContent className="grid gap-1.5">
+        <CardContent className={cn("grid gap-1 px-2.5 pb-2.5", !rulesOpen && "hidden")}>
           <TextField
             label="Number of peaks"
             value={rules.requiredPeaks}
@@ -326,19 +363,19 @@ export function RunForm({ title, details, rules, columns, solvents, onDetails, o
         </CardContent>
       </Card>
 
-      <Card size="sm" className="min-h-min flex-1" style={{ ["--card-spacing" as string]: "0.5rem" }}>
-        <CardHeader className="pb-2">
+      <Card size="sm" className="min-h-min flex-1" style={{ ["--card-spacing" as string]: "0.4rem" }}>
+        <CardHeader className="p-2 sm:p-2.5 pb-1">
           <CardTitle id="run-details-title" className={cardTitleClass}>
             {title}
           </CardTitle>
         </CardHeader>
-        <CardContent className="grid grid-cols-1 gap-y-1.5">
+        <CardContent className="grid grid-cols-1 gap-y-1 px-2.5 pb-2.5">
           {fileNameFill ? (
             <div id="filename-fill" className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-2 gap-y-1 pb-1">
               <input
                 id="fill-from-filename"
                 type="checkbox"
-                className="col-start-1 row-start-1 mt-0.5 size-4 accent-[#0f6b56]"
+                className="col-start-1 row-start-1 mt-0.5 size-4 accent-[var(--hp-brand)]"
                 checked={fileNameFill.checked}
                 onChange={(event) => fileNameFill.onToggle(event.target.checked)}
               />
@@ -354,10 +391,18 @@ export function RunForm({ title, details, rules, columns, solvents, onDetails, o
             </div>
           ) : null}
           {fileNote ? (
-            <p id="filename-note" className="text-sm text-red-700" role="status">
+            <p id="filename-note" className="text-sm text-red-700 dark:text-red-400" role="status">
               {fileNote}
             </p>
           ) : null}
+
+          {/* Group 1: Mobile phase & conditions */}
+          <div className="flex items-center gap-2 pt-1 pb-0.5">
+            <span className="text-[10px] font-bold tracking-wider text-muted-foreground uppercase">
+              Mobile Phase & Conditions
+            </span>
+            <div className="h-px flex-1 bg-border/40" />
+          </div>
           <ChoiceField
             label="Solvent"
             note={<DetailNote explained={runNotes.solvent} />}
@@ -365,6 +410,30 @@ export function RunForm({ title, details, rules, columns, solvents, onDetails, o
             placeholder="Choose a solvent"
             options={solvents.map((solvent) => ({ value: solvent, label: solvent }))}
             onChange={(value) => setDetail("solvent", value)}
+          />
+          <TextField
+            label="%B"
+            unit="%"
+            note={<DetailNote explained={runNotes.percentB} />}
+            value={details.percentB}
+            onChange={(value) => setDetail("percentB", value)}
+            inputMode="decimal"
+          />
+          <TextField
+            label="Temperature"
+            unit={ambientTemperature(details.temperature) ? undefined : "°C"}
+            note={<DetailNote explained={runNotes.temperature} />}
+            value={details.temperature}
+            onChange={(value) => setDetail("temperature", value)}
+            inputMode={ambientTemperature(details.temperature) ? "text" : "decimal"}
+          />
+          <TextField
+            label="Flow rate"
+            unit="mL/min"
+            note={<DetailNote explained={runNotes.flow} />}
+            value={details.flowRate}
+            onChange={(value) => setDetail("flowRate", value)}
+            inputMode="decimal"
           />
           <TextField
             label="pH"
@@ -385,48 +454,14 @@ export function RunForm({ title, details, rules, columns, solvents, onDetails, o
             ]}
             onChange={(value) => setDetail("method", value === "GRA" || value === "ISO" ? value : "")}
           />
-          <TextField
-            label="%B"
-            unit="%"
-            note={<DetailNote explained={runNotes.percentB} />}
-            value={details.percentB}
-            onChange={(value) => setDetail("percentB", value)}
-            inputMode="decimal"
-          />
-          <TextField
-            label="Flow rate"
-            unit="mL/min"
-            note={<DetailNote explained={runNotes.flow} />}
-            value={details.flowRate}
-            onChange={(value) => setDetail("flowRate", value)}
-            inputMode="decimal"
-          />
-          <TextField
-            label="Injection volume"
-            unit="µL"
-            note={<DetailNote explained={runNotes.injection} />}
-            value={details.injectionVolume}
-            onChange={(value) => setDetail("injectionVolume", value)}
-          />
-          <ChoiceField
-            label="Sample type"
-            note={<DetailNote explained={runNotes.sampleType} />}
-            value={details.sampleType === "CP" || details.sampleType === "BLANK" ? details.sampleType : ""}
-            placeholder="select a sample type"
-            placeholderInList={false}
-            options={[
-              { value: "CP", label: "CP" },
-              { value: "BLANK", label: "BLANK" },
-            ]}
-            onChange={(value) => setDetail("sampleType", value === "CP" || value === "BLANK" ? value : "")}
-          />
-          <TextField
-            label="Sample concentration"
-            unit="mg/mL"
-            note={<DetailNote explained={runNotes.concentration} />}
-            value={details.sampleConcentration}
-            onChange={(value) => setDetail("sampleConcentration", value)}
-          />
+
+          {/* Group 2: Column specifications */}
+          <div className="flex items-center gap-2 pt-2 pb-0.5">
+            <span className="text-[10px] font-bold tracking-wider text-muted-foreground uppercase">
+              Column Specifications
+            </span>
+            <div className="h-px flex-1 bg-border/40" />
+          </div>
           <ChoiceField
             label="Coating"
             note={<DetailNote explained={runNotes.ligand} />}
@@ -434,36 +469,6 @@ export function RunForm({ title, details, rules, columns, solvents, onDetails, o
             placeholder="select a coating"
             options={coatingOptions}
             onChange={(value) => setSize("coating", value)}
-          />
-          <ChoiceField
-            label="Core shell"
-            note={<DetailNote explained={runNotes.coreShell} />}
-            value={details.coreShell}
-            placeholder="select an option"
-            placeholderInList={false}
-            options={[
-              { value: "yes", label: "Yes" },
-              { value: "no", label: "No" },
-            ]}
-            onChange={(value) =>
-              setDetail("coreShell", value === "yes" || value === "no" ? value : "")
-            }
-          />
-          <ChoiceField
-            label="Pore size"
-            note={<DetailNote explained={runNotes.pore} />}
-            value={details.poreSize}
-            placeholder="select a pore size"
-            options={poreOptions}
-            onChange={(value) => setSize("poreA", value)}
-          />
-          <TextField
-            label="Carbon load"
-            unit="%"
-            note={<DetailNote explained={runNotes.carbon} />}
-            value={details.carbonLoad}
-            onChange={(value) => setDetail("carbonLoad", value)}
-            inputMode="decimal"
           />
           <ChoiceField
             label="Length"
@@ -489,13 +494,71 @@ export function RunForm({ title, details, rules, columns, solvents, onDetails, o
             options={particleOptions}
             onChange={(value) => setSize("particleUm", value)}
           />
+          <ChoiceField
+            label="Core shell"
+            note={<DetailNote explained={runNotes.coreShell} />}
+            value={details.coreShell}
+            placeholder="select core shell"
+            placeholderInList={false}
+            options={
+              coreShellOptions.length > 0
+                ? coreShellOptions
+                : [
+                    { value: "yes", label: "Yes (core-shell)" },
+                    { value: "no", label: "No (fully porous)" },
+                  ]
+            }
+            onChange={(value) => setSize("coreShell", value)}
+          />
+          <ChoiceField
+            label="Pore size"
+            note={<DetailNote explained={runNotes.pore} />}
+            value={details.poreSize}
+            placeholder="select a pore size"
+            options={poreOptions}
+            onChange={(value) => setSize("poreA", value)}
+          />
+          <ChoiceField
+            label="Carbon load"
+            note={<DetailNote explained={runNotes.carbon} />}
+            value={details.carbonLoad}
+            placeholder="select carbon load"
+            options={carbonOptions}
+            onChange={(value) => setSize("carbonLoad", value)}
+          />
+
+          {/* Group 3: Sample & detection */}
+          <div className="flex items-center gap-2 pt-2 pb-0.5">
+            <span className="text-[10px] font-bold tracking-wider text-muted-foreground uppercase">
+              Sample & Detection
+            </span>
+            <div className="h-px flex-1 bg-border/40" />
+          </div>
+          <ChoiceField
+            label="Sample type"
+            note={<DetailNote explained={runNotes.sampleType} />}
+            value={details.sampleType === "CP" || details.sampleType === "BLANK" ? details.sampleType : ""}
+            placeholder="select a sample type"
+            placeholderInList={false}
+            options={[
+              { value: "CP", label: "CP" },
+              { value: "BLANK", label: "BLANK" },
+            ]}
+            onChange={(value) => setDetail("sampleType", value === "CP" || value === "BLANK" ? value : "")}
+          />
           <TextField
-            label="Temperature"
-            unit={ambientTemperature(details.temperature) ? undefined : "°C"}
-            note={<DetailNote explained={runNotes.temperature} />}
-            value={details.temperature}
-            onChange={(value) => setDetail("temperature", value)}
-            inputMode={ambientTemperature(details.temperature) ? "text" : "decimal"}
+            label="Sample concentration"
+            unit="mg/mL"
+            note={<DetailNote explained={runNotes.concentration} />}
+            value={details.sampleConcentration}
+            onChange={(value) => setDetail("sampleConcentration", value)}
+          />
+          <TextField
+            label="Injection volume"
+            unit="µL"
+            note={<DetailNote explained={runNotes.injection} />}
+            value={details.injectionVolume}
+            onChange={(value) => setDetail("injectionVolume", value)}
           />
           <TextField
             label="Wavelength"
@@ -518,6 +581,8 @@ function sizePick(details: RunDetails): SizePick {
     diameterMm: details.diameterMm,
     particleUm: details.particleSize,
     poreA: details.poreSize,
+    coreShell: details.coreShell,
+    carbonLoad: details.carbonLoad,
   };
 }
 

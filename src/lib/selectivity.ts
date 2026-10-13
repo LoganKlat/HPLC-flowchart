@@ -503,7 +503,6 @@ export function planHistory(
 
   let start = 0;
   let forced: { finishedOffset: number; carryIndex: number } | null = null;
-  let explicitHeat = false;
   const heat = options?.heat;
   if (
     heat &&
@@ -514,14 +513,51 @@ export function planHistory(
     (continuePast || !peaksMatchSpec(runs[runs.length - 1], setup))
   ) {
     forced = { finishedOffset: heat.seriesLength - 1, carryIndex: heat.carryIndex };
-    explicitHeat = true;
   }
   while (start < runs.length) {
     const segment = runs.slice(start);
     const rules = retentionRules(setup);
     let finishedOffset = -1;
     let carryIndex: number | null = null;
+    const explicitHeat =
+      forced != null &&
+      forced.carryIndex >= start &&
+      forced.finishedOffset >= start &&
+      (runs[start]?.ligand || "").trim().toLowerCase() ===
+        (runs[forced.carryIndex]?.ligand || "").trim().toLowerCase();
     const raise = segment.findIndex((run) => isForty(run) || isSixty(run));
+    if (raise === 0) {
+      if (latestNeedsRetentionStop(runs[runs.length - 1], setup, true, false)) {
+        return { phase: "retention", segmentStart: start };
+      }
+      const firstHeated = segment[0];
+      const syntheticCarry: SelectivityRun = {
+        ...firstHeated,
+        temperatureC: null,
+      };
+      const outcome = walkSelectivity({
+        carry: syntheticCarry,
+        later: segment,
+        slope: null,
+        usedPercentB: percentsOf(segment),
+        setup,
+        triedLigands: tried,
+        ligands,
+        carryRunNumber: start + 1,
+        firstLaterRunNumber: start + 1,
+      });
+      if (outcome.kind === "plan") {
+        return { phase: "selectivity", segmentStart: start, plan: outcome.plan };
+      }
+      const restart = segment[outcome.ligandRunOffset];
+      if (restart?.ligand.trim()) tried.push(restart.ligand);
+      const nextStart = start + outcome.ligandRunOffset;
+      if (nextStart <= start || nextStart >= runs.length) {
+        return { phase: "retention", segmentStart: Math.min(nextStart, runs.length - 1) };
+      }
+      start = nextStart;
+      continue;
+    }
     const ovenSplit = !explicitHeat && raise > 0 && (continuePast || sameSolventHeatPair(segment));
     const fortyAt = segment.findIndex((run) => isForty(run));
     const beforeHeat =
@@ -535,14 +571,10 @@ export function planHistory(
       const splitAt = ovenSplit ? raise : fortyAt;
       finishedOffset = splitAt - 1;
       carryIndex = splitAt - 1;
-      forced = null;
-    } else if (forced && start === 0) {
-      finishedOffset = forced.finishedOffset;
-      carryIndex = forced.carryIndex;
-      forced = null;
-    } else if (forced && start > 0) {
-      finishedOffset = 0;
-      carryIndex = 0;
+      if (explicitHeat) forced = null;
+    } else if (explicitHeat && forced) {
+      finishedOffset = forced.finishedOffset - start;
+      carryIndex = forced.carryIndex - start;
       forced = null;
     } else {
       for (let count = 1; count <= segment.length; count++) {
@@ -557,10 +589,10 @@ export function planHistory(
       }
     }
     if (finishedOffset < 0) {
-      if (continuePast) return heatLatest(runs, setup, tried, ligands);
+      if (continuePast) return heatLatest(runs, setup, tried, ligands, start);
       return { phase: "retention", segmentStart: start };
     }
-    if (!ovenSplit && !ownPercentThenHeat && peaksMatchSpec(runs[runs.length - 1], setup) && !continuePast) {
+    if (latestNeedsRetentionStop(runs[runs.length - 1], setup, continuePast, ownPercentThenHeat)) {
       return { phase: "retention", segmentStart: start };
     }
 
@@ -587,11 +619,34 @@ export function planHistory(
       return { phase: "retention", segmentStart: Math.min(nextStart, runs.length - 1) };
     }
     start = nextStart;
-    forced = null;
-    explicitHeat = false;
     continue;
   }
   return { phase: "retention", segmentStart: start };
+}
+
+export function coatingSegmentStart(runs: readonly SelectivityRun[]): number {
+  for (let i = runs.length - 1; i >= 1; i--) {
+    if (isRealCoatingRestart(runs, i)) return i;
+  }
+  return 0;
+}
+
+export function isRunInSelectivity(runs: readonly SelectivityRun[]): boolean {
+  if (runs.length === 0) return false;
+  const start = coatingSegmentStart(runs);
+  const segment = runs.slice(start);
+  if (segment.some((run) => isForty(run) || isSixty(run))) return true;
+  const firstSolvent = (segment[0]?.solvent || "").trim().toLowerCase();
+  if (
+    firstSolvent &&
+    segment.some((run) => {
+      const s = (run.solvent || "").trim().toLowerCase();
+      return s !== "" && s !== firstSolvent;
+    })
+  ) {
+    return true;
+  }
+  return false;
 }
 
 function heatLatest(
@@ -599,15 +654,17 @@ function heatLatest(
   setup: SelectivitySetup,
   tried: string[],
   ligands: readonly string[],
+  segmentStart = 0,
 ): HistoryPlan {
   const index = runs.length - 1;
   const carry = runs[index];
   if (!carry || carry.percentB == null) return { phase: "retention", segmentStart: Math.max(0, index) };
+  const segment = runs.slice(segmentStart);
   const outcome = walkSelectivity({
     carry,
     later: [],
-    slope: slopeOf(runs, retentionRules(setup)),
-    usedPercentB: percentsOf(runs),
+    slope: slopeOf(segment, retentionRules(setup)),
+    usedPercentB: percentsOf(segment),
     setup,
     triedLigands: tried,
     ligands,
@@ -615,7 +672,7 @@ function heatLatest(
     firstLaterRunNumber: index + 2,
   });
   if (outcome.kind !== "plan") return { phase: "retention", segmentStart: index };
-  return { phase: "selectivity", segmentStart: index, plan: outcome.plan };
+  return { phase: "selectivity", segmentStart, plan: outcome.plan };
 }
 
 function peaksMatchSpec(run: SelectivityRun | undefined, setup: SelectivitySetup): boolean {
@@ -625,6 +682,18 @@ function peaksMatchSpec(run: SelectivityRun | undefined, setup: SelectivitySetup
     run.peakCount != null &&
     run.peakCount === setup.requiredPeaks
   );
+}
+
+function latestNeedsRetentionStop(
+  latest: SelectivityRun | undefined,
+  setup: SelectivitySetup,
+  continuePast: boolean,
+  ownPercentThenHeat: boolean,
+): boolean {
+  if (!latest) return false;
+  if (!peaksMatchSpec(latest, setup)) return false;
+  if (!continuePast && !ownPercentThenHeat) return true;
+  return false;
 }
 
 type WalkResult = { kind: "plan"; plan: SelectivityPlan } | { kind: "restart"; ligandRunOffset: number };
@@ -741,6 +810,9 @@ function walkTemperature(args: {
   }
 
   const hot = args.pending[0];
+  if (isSixty(hot)) {
+    return { type: "advance", consumed: 1, did60: true };
+  }
   const heated = [hot];
   const better = separationImproved(args.baseline, hot, args.setup.requiredPeaks);
   const percent = hot.percentB ?? startPercent;
@@ -789,6 +861,7 @@ function plan60Despite(
   args: {
     baseline: SelectivityRun;
     baselineNumber: number;
+    baseNumber?: number;
     setup: SelectivitySetup;
     offerChoice: boolean;
   },
@@ -798,18 +871,30 @@ function plan60Despite(
   heated: SelectivityRun[],
 ): SelectivityPlan {
   const percent = formatPercentB(percentB);
+  const startedAt40 = args.baseNumber != null && args.baselineNumber === args.baseNumber;
+  const hot = heated[0] ?? args.baseline;
   return {
     status: "recommend",
     step: "temp-60",
-    nextChange: `Run the next chromatogram at 60°C, still at ${percent}% B. 40°C did not improve the separation. Stay on the same solvent and the same %B. A higher temperature shortens retention. The %B stays the same.`,
+    nextChange: startedAt40
+      ? `Run the next chromatogram at 60°C, still at ${percent}% B. Stay on the same solvent and the same %B. A higher temperature shortens retention. The %B stays the same.`
+      : `Run the next chromatogram at 60°C, still at ${percent}% B. 40°C did not improve the separation. Stay on the same solvent and the same %B. A higher temperature shortens retention. The %B stays the same.`,
     following: args.offerChoice
       ? `After 60°C, the next step is the second solvent at the chart %B, tried at 40°C and 60°C, then the coating last. ${SELECTIVITY_ORDER}`
       : `After 60°C on this solvent, the next step is a new coating. ${SELECTIVITY_ORDER}`,
-    why: [
-      `40°C did not improve the separation compared with Run ${args.baselineNumber}.`,
-      compareSentence(args.baseline, args.baselineNumber, heated, args.setup.requiredPeaks),
-      `The next chromatogram is still 60°C, at ${percent}% B, on the same solvent. The %B stays the same.`,
-    ].join(" "),
+    why: startedAt40
+      ? [
+          `Run ${args.baselineNumber} is a 40°C selectivity run at ${percent}% B (${measurementPhrase(hot, args.setup.requiredPeaks)}).`,
+          onceReason(hot, args.setup),
+          `The next chromatogram is 60°C, at ${percent}% B, on the same solvent. The %B stays the same.`,
+        ]
+          .filter(Boolean)
+          .join(" ")
+      : [
+          `40°C did not improve the separation compared with Run ${args.baselineNumber}.`,
+          compareSentence(args.baseline, args.baselineNumber, heated, args.setup.requiredPeaks),
+          `The next chromatogram is still 60°C, at ${percent}% B, on the same solvent. The %B stays the same.`,
+        ].join(" "),
     prefill: { percentB: percent, temperature: "60", solvent, ligand },
     nomograph: null,
     showSolventChoices: false,
@@ -1137,7 +1222,7 @@ type Ambient = { celsius: number | null; assumed: boolean; sentence: string };
 
 /** The temperature to return to: the retention run, or Run 1 when that run has no number. */
 function temperatureBeforeOven(run: SelectivityRun, setup: SelectivitySetup): Ambient {
-  const fromRun = finiteCelsius(run.temperatureC);
+  const fromRun = unheatedCelsius(run.temperatureC);
   if (fromRun != null) {
     return {
       celsius: fromRun,
@@ -1145,7 +1230,7 @@ function temperatureBeforeOven(run: SelectivityRun, setup: SelectivitySetup): Am
       sentence: `That is the temperature from before the oven was raised, ${formatTemperature(fromRun)}°C.`,
     };
   }
-  const fromStart = finiteCelsius(setup.ambientTemperatureC);
+  const fromStart = unheatedCelsius(setup.ambientTemperatureC);
   if (fromStart != null) {
     return {
       celsius: fromStart,
@@ -1161,7 +1246,7 @@ function temperatureBeforeOven(run: SelectivityRun, setup: SelectivitySetup): Am
 }
 
 function ambientOf(setup: SelectivitySetup): Ambient {
-  const celsius = finiteCelsius(setup.ambientTemperatureC);
+  const celsius = unheatedCelsius(setup.ambientTemperatureC);
   if (celsius == null) {
     return {
       celsius: null,
@@ -1178,6 +1263,13 @@ function ambientOf(setup: SelectivitySetup): Ambient {
 
 function finiteCelsius(value: number | null): number | null {
   return value != null && Number.isFinite(value) ? value : null;
+}
+
+function unheatedCelsius(value: number | null): number | null {
+  const c = finiteCelsius(value);
+  if (c == null) return null;
+  if (Math.abs(c - 40) < 0.51 || Math.abs(c - 60) < 0.51) return null;
+  return c;
 }
 
 /** Words for a decision sentence. Ambient stays a word; a number keeps °C. */
@@ -1234,15 +1326,39 @@ function ligandKey(value: string): string {
   return value.trim().toLowerCase().replace(/[\s_-]+/g, "");
 }
 
-/** Index of the latest run whose coating differs from the run before it. */
-function lastLigandChangeIndex(runs: SelectivityRun[]): number {
-  let index = -1;
-  for (let i = 1; i < runs.length; i++) {
-    const next = ligandKey(runs[i].ligand);
-    if (!next || next === ligandKey(runs[i - 1].ligand)) continue;
-    index = i;
+/** True when a ligand change at index starts a new coating retention ladder rather than a second-solvent selectivity run. */
+function isRealCoatingRestart(runs: readonly SelectivityRun[], index: number): boolean {
+  if (index <= 0 || index >= runs.length) return false;
+  const next = ligandKey(runs[index].ligand);
+  const prev = ligandKey(runs[index - 1].ligand);
+  if (!next || !prev || next === prev) return false;
+  const nextSolvent = (runs[index].solvent || "").trim().toLowerCase();
+  const prevSolvent = (runs[index - 1].solvent || "").trim().toLowerCase();
+  if (
+    nextSolvent &&
+    prevSolvent &&
+    nextSolvent !== prevSolvent &&
+    (isForty(runs[index - 1]) || isSixty(runs[index - 1]))
+  ) {
+    const priorSolvents = new Set(
+      runs
+        .slice(0, index)
+        .map((r) => (r.solvent || "").trim().toLowerCase())
+        .filter(Boolean),
+    );
+    if (priorSolvents.size === 1 && !priorSolvents.has(nextSolvent)) {
+      return false;
+    }
   }
-  return index;
+  return true;
+}
+
+/** Index of the latest run whose coating starts a new retention segment. */
+function lastLigandChangeIndex(runs: SelectivityRun[]): number {
+  for (let i = runs.length - 1; i >= 1; i--) {
+    if (isRealCoatingRestart(runs, i)) return i;
+  }
+  return -1;
 }
 
 /** True until this coating has a 40°C or 60°C run. The %B ladder stays in retention. */

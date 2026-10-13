@@ -1,10 +1,11 @@
+import { KnowMoreToggle } from "@/components/know-more";
 import { Button } from "@/components/ui/button";
 import { SOLVENTS, chartX, findSolvent, type SelectivityPlan, type TempPath } from "@/lib/selectivity";
 import { CHART_SOLVENT_NOTE } from "@/lib/solvent-menu";
 import { PERCENT_B_SENTENCE, SELECTIVITY_ORDER } from "@/lib/setting-kind";
 
 const fieldClass =
-  "h-10 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm text-foreground outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
+  "h-8 w-full rounded-lg border border-input bg-card px-2.5 text-xs font-medium text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50";
 
 export function SelectivityDecisionView({
   plan,
@@ -13,14 +14,24 @@ export function SelectivityDecisionView({
   plan: SelectivityPlan;
   tempPath: TempPath | null;
 }) {
+  const paragraphs = stepParagraphs(plan.why);
+  const { lead, details } = splitSelectivitySummary(paragraphs, plan.nextChange);
+
   return (
     <div className="contents" id="selectivity-decision">
       <section className="rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10">
         <h2 className="font-heading text-base">Why</h2>
         <div className="mt-1 flex flex-col gap-2 text-sm leading-relaxed text-foreground">
-          {stepParagraphs(plan.why).map((paragraph, index) => (
+          {lead.map((paragraph, index) => (
             <p key={index}>{paragraph}</p>
           ))}
+          {details.length > 0 ? (
+            <KnowMoreToggle>
+              {details.map((paragraph, index) => (
+                <p key={index}>{paragraph}</p>
+              ))}
+            </KnowMoreToggle>
+          ) : null}
         </div>
         {plan.nomograph && (plan.step !== "temp-choice" || tempPath === "solvent") ? (
           <div id="solvent-nomograph" className="mt-4 flex flex-col gap-3">
@@ -29,7 +40,7 @@ export function SelectivityDecisionView({
             ) : null}
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
               {plan.nomograph.map((entry) => (
-                <div key={entry.id} className="rounded-lg bg-[#e7f3ee] px-3 py-3 text-[#144237]">
+                <div key={entry.id} className="rounded-lg bg-[var(--hp-soft)] px-3 py-3 text-[var(--hp-ink)]">
                   <p className="text-xs tracking-wide">{entry.label}</p>
                   <p className="mt-1 font-heading text-2xl">{entry.percentText}% B</p>
                   {entry.capped ? (
@@ -43,6 +54,30 @@ export function SelectivityDecisionView({
       </section>
     </div>
   );
+}
+
+function splitSelectivitySummary(
+  paragraphs: string[],
+  nextChange: string,
+): { lead: string[]; details: string[] } {
+  if (paragraphs.length > 1) {
+    return {
+      lead: [paragraphs[0]],
+      details: paragraphs.slice(1),
+    };
+  }
+  const single = paragraphs[0] ?? nextChange;
+  const sentences = single
+    .split(/(?<=\.)\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (sentences.length <= 2) {
+    return { lead: [single], details: [] };
+  }
+  return {
+    lead: [sentences.slice(0, 2).join(" ")],
+    details: [sentences.slice(2).join(" ")],
+  };
 }
 
 /** True when Next run should show a solvent, coating, or temperature-path picker. */
@@ -76,7 +111,14 @@ export function SelectivityNextControls({
   onTempPath: (path: TempPath) => void;
 }) {
   const ligandChoices = [...ligands];
-  const solventChoices = plan.step === "solvent" ? solvents.filter((name) => findSolvent(name)) : [...solvents];
+  const oldSolventId = plan.oldSolvent ? findSolvent(plan.oldSolvent)?.id ?? null : null;
+  const solventChoices =
+    plan.step === "solvent"
+      ? solvents.filter((name) => {
+          const match = findSolvent(name);
+          return match != null && (oldSolventId == null || match.id !== oldSolventId);
+        })
+      : [...solvents];
   const choice = plan.tempChoice;
   const recommendedPath = choice?.other ?? "solvent";
   const showSolvent = plan.showSolventChoices || (choice != null && tempPath === "solvent");
@@ -85,45 +127,41 @@ export function SelectivityNextControls({
   if (!selectivityShowsChoices(plan, tempPath)) return null;
 
   return (
-    <div id="selectivity-next-controls" className="flex flex-col gap-3">
+    <div id="selectivity-next-controls" className="flex flex-col gap-1.5">
       {choice ? (
-        <div id="temp-choice" className="flex flex-col gap-2">
+        <div id="temp-choice" className="grid grid-cols-2 gap-1.5">
           <Button
             type="button"
             id={recommendedPath === "ligand" ? "choose-ligand" : "choose-solvent"}
             aria-pressed={tempPath === recommendedPath}
-            className="h-auto w-full flex-col items-start gap-1 whitespace-normal px-4 py-3 text-left"
-            style={{
-              height: "auto",
-              whiteSpace: "normal",
-              ...(tempPath === recommendedPath
-                ? { backgroundColor: "#0a5644", color: "#f7fffb", borderColor: "#144237" }
-                : { backgroundColor: "#0f6b56", color: "#f7fffb", borderColor: "#0f6b56" }),
-            }}
+            className="h-8 cursor-pointer items-center justify-between gap-1.5 px-2.5 text-xs font-bold transition-all duration-150 hover:brightness-105 hover:shadow-xs active:translate-y-0.5 active:scale-[0.99]"
+            style={
+              tempPath === recommendedPath
+                ? { backgroundColor: "var(--hp-brand-strong)", color: "var(--hp-on-brand)", borderColor: "var(--hp-ink)" }
+                : { backgroundColor: "var(--hp-brand)", color: "var(--hp-on-brand)", borderColor: "var(--hp-brand)" }
+            }
             onClick={() => onTempPath(recommendedPath)}
           >
-            <span className="text-xs tracking-[0.14em] uppercase">Recommended</span>
             <span>{recommendedPath === "ligand" ? "Ligand" : "Solvent"}</span>
+            <span className="rounded bg-black/20 dark:bg-white/20 px-1 py-0.5 text-[9px] font-bold tracking-wider uppercase">Rec</span>
           </Button>
           <Button
             type="button"
             id="choose-60"
             variant="outline"
             aria-pressed={tempPath === "heat"}
-            className="h-auto w-full whitespace-normal px-4 py-3 text-left"
-            style={{
-              height: "auto",
-              whiteSpace: "normal",
-              ...(tempPath === "heat" ? { backgroundColor: "#efe6c4", borderColor: "#b0893e", color: "#3d3416" } : {}),
-            }}
+            className="h-8 cursor-pointer items-center justify-center border-border bg-card px-2.5 text-xs font-bold text-foreground transition-all duration-150 hover:border-[var(--hp-brand)] hover:bg-[var(--hp-soft)] hover:text-[var(--hp-brand)] hover:shadow-xs active:translate-y-0.5 active:scale-[0.99]"
+            style={
+              tempPath === "heat" ? { backgroundColor: "var(--hp-gold-soft)", borderColor: "var(--hp-gold)", color: "var(--hp-gold-ink)" } : {}
+            }
             onClick={() => onTempPath("heat")}
           >
-            Temperature 60°C
+            Temp 60°C
           </Button>
         </div>
       ) : null}
       {showSolvent ? (
-        <label className="flex flex-col gap-1.5 text-sm" htmlFor="solvent-choice">
+        <label className="flex flex-col gap-1 text-xs font-medium" htmlFor="solvent-choice">
           New solvent
           <select
             id="solvent-choice"
@@ -139,14 +177,14 @@ export function SelectivityNextControls({
             ))}
           </select>
           {solventId.trim() && !chartSolvent ? (
-            <p id="solvent-chart-note" className="text-sm leading-snug text-[#144237]">
+            <p id="solvent-chart-note" className="text-xs leading-snug text-[var(--hp-ink)]">
               {CHART_SOLVENT_NOTE}
             </p>
           ) : null}
         </label>
       ) : null}
       {showLigand ? (
-        <label className="flex flex-col gap-1.5 text-sm" htmlFor="ligand-choice">
+        <label className="flex flex-col gap-1 text-xs font-medium" htmlFor="ligand-choice">
           Column coating
           <select
             id="ligand-choice"
@@ -212,7 +250,7 @@ function NomographSketch({ oldSolvent, percentB }: { oldSolvent: string; percent
           const y = top + index * rowH;
           return (
             <g key={entry.id}>
-              <text x="0" y={y + 4} fill="#144237" fontSize="11">
+              <text x="0" y={y + 4} fill="var(--hp-ink)" fontSize="11">
                 {entry.label}
               </text>
               <line
@@ -220,14 +258,14 @@ function NomographSketch({ oldSolvent, percentB }: { oldSolvent: string; percent
                 y1={y}
                 x2={mapX(ends[index])}
                 y2={y}
-                stroke="#144237"
+                stroke="var(--hp-ink)"
                 strokeWidth="3"
                 strokeLinecap="round"
               />
             </g>
           );
         })}
-        <line x1={lineX} y1={8} x2={lineX} y2={height - 8} stroke="#c2410c" strokeWidth="1.5" />
+        <line x1={lineX} y1={8} x2={lineX} y2={height - 8} stroke="var(--hp-warn)" strokeWidth="1.5" />
       </svg>
     </figure>
   );

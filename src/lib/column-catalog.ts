@@ -10,8 +10,12 @@ export type ColumnSpec = {
   lengthMm: number;
   diameterMm: number;
   particleUm: number;
-  /** Angstroms, when the sheet name includes a pore such as 200A. */
-  poreA: number | null;
+  /** Pore size in Ångströms (e.g. 90, 100, 140, 200). */
+  poreA: number;
+  /** Core-shell (superficially porous SPP) vs fully porous silica. */
+  coreShell: "yes" | "no";
+  /** Carbon load percentage (e.g. 7 for 7%). */
+  carbonLoad: number;
   label: string;
 };
 
@@ -49,7 +53,7 @@ export function coatingsFromColumns(columns: readonly ColumnSpec[]): string[] {
   return [...ordered, ...extra];
 }
 
-export type SizeField = "coating" | "lengthMm" | "diameterMm" | "particleUm" | "poreA";
+export type SizeField = "coating" | "lengthMm" | "diameterMm" | "particleUm" | "poreA" | "coreShell" | "carbonLoad";
 
 export type SizePick = {
   coating: string;
@@ -57,6 +61,8 @@ export type SizePick = {
   diameterMm: string;
   particleUm: string;
   poreA: string;
+  coreShell?: string;
+  carbonLoad?: string;
 };
 
 /** Product or display name contains “ultra”, in any capitalization. */
@@ -69,7 +75,7 @@ export function isUltraColumn(column: Pick<ColumnSpec, "product" | "label">): bo
  * A size that also exists on a column that can be chosen is not Ultra-only.
  */
 export function ultraOnlyPick(columns: readonly ColumnSpec[], pick: SizePick): boolean {
-  const specified = Object.values(pick).some((value) => value.trim() !== "");
+  const specified = Object.values(pick).some((value) => value != null && value.trim() !== "");
   if (!specified) return false;
   const matches = columns.filter((column) => matchesPick(column, pick));
   return matches.length > 0 && matches.every(isUltraColumn);
@@ -90,10 +96,21 @@ export function sizeChoices(columns: readonly ColumnSpec[], pick: SizePick, fiel
 /** Keep the chosen sizes when they still match a column. Clear a size that no longer does. */
 export function applySizeChoice(columns: readonly ColumnSpec[], pick: SizePick, field: SizeField, value: string): SizePick {
   const next: SizePick = { ...pick, [field]: value };
-  const order: SizeField[] = ["coating", "lengthMm", "diameterMm", "particleUm", "poreA"];
+  const order: SizeField[] = ["coating", "lengthMm", "diameterMm", "particleUm", "coreShell", "poreA", "carbonLoad"];
   for (const other of order) {
     if (other === field || !next[other]) continue;
     if (!sizeChoices(columns, next, other).includes(next[other])) next[other] = "";
+  }
+  const matching = columns.filter((col) => !isUltraColumn(col) && matchesPick(col, next));
+  if (matching.length === 1) {
+    const single = matching[0];
+    next.coating = single.coating;
+    next.lengthMm = formatSize(single.lengthMm);
+    next.diameterMm = formatSize(single.diameterMm);
+    next.particleUm = formatSize(single.particleUm);
+    next.coreShell = single.coreShell;
+    next.poreA = formatSize(single.poreA);
+    next.carbonLoad = formatSize(single.carbonLoad);
   }
   return next;
 }
@@ -147,13 +164,85 @@ function collectOtherSheet(found: ColumnSpec[], sheet: XLSX.WorkSheet) {
   }
 }
 
-function specFrom(
+export function inferColumnSpecs(
+  product: string,
+  coating: string,
+  particleUm: number,
+  poreA: number | null,
+): { poreA: number; coreShell: "yes" | "no"; carbonLoad: number } {
+  const prod = (product || "").trim().toLowerCase();
+  const coat = (coating || "").trim().toLowerCase();
+
+  let coreShell: "yes" | "no" = "no";
+  if (/raptor|kinetex|aeris|accucore|halo|cortecs|poroshell|spp|core-shell|coreshell/.test(prod)) {
+    coreShell = "yes";
+  }
+
+  let pore = poreA;
+  if (pore == null) {
+    if (prod.includes("raptor")) pore = 90;
+    else if (prod.includes("pinnacle")) pore = 140;
+    else if (prod.includes("200a")) pore = 200;
+    else if (prod.includes("bondapak")) pore = 125;
+    else pore = 100;
+  }
+
+  let carbon = 15;
+  if (prod.includes("raptor")) {
+    if (coat.includes("c18")) {
+      if (particleUm <= 2) carbon = 9;
+      else if (particleUm >= 5) carbon = 5;
+      else carbon = 7;
+    } else if (coat.includes("pfpp") || coat.includes("pfp")) {
+      carbon = 4;
+    } else if (coat.includes("c8")) {
+      carbon = 5;
+    } else {
+      carbon = 7;
+    }
+  } else if (prod.includes("force")) {
+    if (coat.includes("c18")) carbon = 20;
+    else if (coat.includes("bip")) carbon = 15;
+    else if (coat.includes("c8")) carbon = 12;
+    else if (coat.includes("pfpp") || coat.includes("pfp")) carbon = 11;
+    else carbon = 15;
+  } else if (prod.includes("ultra")) {
+    if (coat.includes("c18")) carbon = 15;
+    else if (coat.includes("bip")) carbon = 15;
+    else if (coat.includes("c8")) carbon = 11;
+    else if (coat.includes("pfpp") || coat.includes("pfp")) carbon = 11;
+    else if (coat.includes("ibd")) carbon = 12;
+    else carbon = 13;
+  } else if (prod.includes("pinnacle")) {
+    if (coat.includes("c18")) carbon = 13;
+    else if (coat.includes("pfpp")) carbon = 11;
+    else carbon = 11;
+  } else if (prod.includes("luna")) {
+    carbon = 19;
+  } else if (coat.includes("c18")) {
+    carbon = 15;
+  } else if (coat.includes("c8")) {
+    carbon = 11;
+  } else if (coat.includes("pfpp") || coat.includes("pfp")) {
+    carbon = 11;
+  } else if (coat.includes("bip")) {
+    carbon = 15;
+  } else if (coat.includes("ibd")) {
+    carbon = 12;
+  }
+
+  return { poreA: pore, coreShell, carbonLoad: carbon };
+}
+
+export function specFrom(
   coating: string,
   product: string,
   lengthMm: number,
   diameterMm: number,
   particleUm: number,
   poreA: number | null,
+  coreShell?: "yes" | "no",
+  carbonLoad?: number | null,
 ): ColumnSpec | null {
   const phase = normalizePhaseWords(coating);
   const line = brandClean(normalizePhaseWords(product));
@@ -161,7 +250,18 @@ function specFrom(
   if (!(lengthMm > 0) || !(diameterMm > 0) || !(particleUm > 0)) return null;
   const shownProduct = line && columnKey(line) !== columnKey(phase) ? line : "";
   const label = columnLabel(phase, shownProduct, lengthMm, diameterMm, particleUm, poreA);
-  return { coating: phase, product: shownProduct, lengthMm, diameterMm, particleUm, poreA, label };
+  const inferred = inferColumnSpecs(shownProduct, phase, particleUm, poreA);
+  return {
+    coating: phase,
+    product: shownProduct,
+    lengthMm,
+    diameterMm,
+    particleUm,
+    poreA: inferred.poreA,
+    coreShell: coreShell ?? inferred.coreShell,
+    carbonLoad: carbonLoad ?? inferred.carbonLoad,
+    label,
+  };
 }
 
 export function columnLabel(
@@ -182,7 +282,9 @@ function matchesPick(column: ColumnSpec, pick: SizePick): boolean {
   if (pick.lengthMm && !sameNumber(column.lengthMm, pick.lengthMm)) return false;
   if (pick.diameterMm && !sameNumber(column.diameterMm, pick.diameterMm)) return false;
   if (pick.particleUm && !sameNumber(column.particleUm, pick.particleUm)) return false;
-  if (pick.poreA && !sameNumber(column.poreA ?? Number.NaN, pick.poreA)) return false;
+  if (pick.poreA && !sameNumber(column.poreA, pick.poreA)) return false;
+  if (pick.coreShell && column.coreShell.toLowerCase() !== pick.coreShell.toLowerCase()) return false;
+  if (pick.carbonLoad && !sameNumber(column.carbonLoad, pick.carbonLoad)) return false;
   return true;
 }
 
@@ -191,7 +293,9 @@ function matchesOther(column: ColumnSpec, pick: SizePick, field: SizeField): boo
   if (field !== "lengthMm" && pick.lengthMm && !sameNumber(column.lengthMm, pick.lengthMm)) return false;
   if (field !== "diameterMm" && pick.diameterMm && !sameNumber(column.diameterMm, pick.diameterMm)) return false;
   if (field !== "particleUm" && pick.particleUm && !sameNumber(column.particleUm, pick.particleUm)) return false;
-  if (field !== "poreA" && pick.poreA && !sameNumber(column.poreA ?? Number.NaN, pick.poreA)) return false;
+  if (field !== "poreA" && pick.poreA && !sameNumber(column.poreA, pick.poreA)) return false;
+  if (field !== "coreShell" && pick.coreShell && column.coreShell.toLowerCase() !== pick.coreShell.toLowerCase()) return false;
+  if (field !== "carbonLoad" && pick.carbonLoad && !sameNumber(column.carbonLoad, pick.carbonLoad)) return false;
   return true;
 }
 
@@ -200,10 +304,15 @@ function fieldValue(column: ColumnSpec, field: SizeField): string {
   if (field === "lengthMm") return formatSize(column.lengthMm);
   if (field === "diameterMm") return formatSize(column.diameterMm);
   if (field === "particleUm") return formatSize(column.particleUm);
-  return column.poreA == null ? "" : formatSize(column.poreA);
+  if (field === "poreA") return formatSize(column.poreA);
+  if (field === "coreShell") return column.coreShell;
+  if (field === "carbonLoad") return formatSize(column.carbonLoad);
+  return "";
 }
 
 function compareSize(left: string, right: string): number {
+  if (left === "yes" && right === "no") return -1;
+  if (left === "no" && right === "yes") return 1;
   const leftNumber = Number(left);
   const rightNumber = Number(right);
   if (Number.isFinite(leftNumber) && Number.isFinite(rightNumber) && leftNumber !== rightNumber) return leftNumber - rightNumber;

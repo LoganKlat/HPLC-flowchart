@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start --hostname 0.0.0.0 --port 41731",
     "lint": "eslint",
-    "test": "vitest run"
+    "test": "vitest run",
+    "gh:status": "node scripts/github-sync.mjs status",
+    "gh:push": "node scripts/github-sync.mjs push"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",

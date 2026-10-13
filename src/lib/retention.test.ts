@@ -1166,15 +1166,15 @@ describe("which run to carry forward after the calculated %B", () => {
 
 describe("backwards retention", () => {
   it("warns when the 90% last peak is later than the 80% last peak", () => {
-    const uploads = "/home/ubuntu/.cursor/projects/workspace/uploads";
+    const labDir = path.join(process.cwd(), "fixtures/lab");
     const higher = readLabFile(
       readFileSync(
-        `${uploads}/GR09-05-3-ACN-3-ISO-90-1.5-20-CP-0.1-C18aqP-150x4.6x5-amb-254_432b.xlsx`,
+        path.join(labDir, "GR09-05-3-ACN-3-ISO-90-1.5-20-CP-0.1-C18aqP-150x4.6x5-amb-254_f959.xlsx"),
       ),
     );
     const lower = readLabFile(
       readFileSync(
-        `${uploads}/GR09-06-3-ACN-3-ISO-80-1.5-20-CP-0.1-C18aqP-150x4.6x5-amb-254_9b84.xlsx`,
+        path.join(labDir, "GR09-06-3-ACN-3-ISO-80-1.5-20-CP-0.1-C18aqP-150x4.6x5-amb-254_2191.xlsx"),
       ),
     );
     expect(higher.lastPeakTimeMin).not.toBeNull();
@@ -1201,12 +1201,12 @@ describe("backwards retention", () => {
   });
 
   it("loads the 90% then 80% workbooks without throwing", () => {
-    const uploads = "/home/ubuntu/.cursor/projects/workspace/uploads";
+    const labDir = path.join(process.cwd(), "fixtures/lab");
     const higher = readLabFile(
-      readFileSync(`${uploads}/GR09-05-3-ACN-3-ISO-90-1.5-20-CP-0.1-C18aqP-150x4.6x5-amb-254_f9c3.xlsx`),
+      readFileSync(path.join(labDir, "GR09-05-3-ACN-3-ISO-90-1.5-20-CP-0.1-C18aqP-150x4.6x5-amb-254_f959.xlsx")),
     );
     const lower = readLabFile(
-      readFileSync(`${uploads}/GR09-06-3-ACN-3-ISO-80-1.5-20-CP-0.1-C18aqP-150x4.6x5-amb-254_a3e0.xlsx`),
+      readFileSync(path.join(labDir, "GR09-06-3-ACN-3-ISO-80-1.5-20-CP-0.1-C18aqP-150x4.6x5-amb-254_2191.xlsx")),
     );
     expect(higher.lastPeakTimeMin).not.toBeNull();
     expect(lower.lastPeakTimeMin).not.toBeNull();
@@ -1489,4 +1489,65 @@ describe("extra peaks and the in-between choice", () => {
     expect(looked.look?.mode).toBe("between-then-heat");
     expect(looked.nextChange).toBe("Look at the runs.");
   });
+
+  it("continues the 10% drop or calculates Min %B when staying in retention after peaks match early", () => {
+    const check: RetentionRules = {
+      requiredPeaks: 7,
+      lastPeakTimeMin: 15,
+      minResolution: 1.5,
+      maxBackPressurePsi: 4000,
+    };
+    const earlySeries = [
+      sample({ percentB: 80, peakCount: 5, lastPeakTimeMin: 2.1, firstPeakTimeMin: 1.05 }),
+      sample({ percentB: 70, peakCount: 7, lastPeakTimeMin: 3.4, firstPeakTimeMin: 1.05, minResolutionExcludingFirst: 0.8 }),
+    ];
+    const pausedEarly = decideRetention(earlySeries, check);
+    expect(pausedEarly.status).toBe("efficiency");
+    expect(pausedEarly.continueShowsLook).toBe(true);
+
+    const continuedDrop = decideRetention(earlySeries, check, { continueRetention: true });
+    expect(continuedDrop.status).toBe("recommend");
+    expect(continuedDrop.move).toBe("drop-10");
+    expect(continuedDrop.nextPercentB).toBe(60);
+
+    const lookedFromPause = decideRetention(earlySeries, check, { continueToLook: true });
+    expect(lookedFromPause.status).toBe("look");
+    expect(lookedFromPause.look?.mode).toBe("between-then-heat");
+
+    const pastHalfSeries = [
+      ...earlySeries,
+      sample({ percentB: 60, peakCount: 7, lastPeakTimeMin: 5.8, firstPeakTimeMin: 1.05, minResolutionExcludingFirst: 1.0 }),
+      sample({ percentB: 50, peakCount: 7, lastPeakTimeMin: 8.9, firstPeakTimeMin: 1.05, minResolutionExcludingFirst: 1.2 }),
+    ];
+    const continuedCalc = decideRetention(pastHalfSeries, check, { continueRetention: true });
+    expect(continuedCalc.status).toBe("recommend");
+    expect(continuedCalc.move).toBe("calculated");
+    expect(continuedCalc.fit).not.toBeNull();
+    expect(continuedCalc.nextPercentB).not.toBeNull();
+  });
+
+  it("routes to efficiency when peakCount matches requiredPeaks but back-pressure is over the specification", () => {
+    const check: RetentionRules = {
+      requiredPeaks: 7,
+      lastPeakTimeMin: 15,
+      minResolution: 1.5,
+      maxBackPressurePsi: 3000,
+    };
+    const overPressure = decideRetention(
+      [
+        sample({
+          percentB: 40,
+          peakCount: 7,
+          lastPeakTimeMin: 10,
+          minResolutionExcludingFirst: 1.8,
+          maxBackPressurePsi: 3500,
+        }),
+      ],
+      check,
+    );
+    expect(overPressure.status).toBe("efficiency");
+    expect(overPressure.why).toContain("Back-pressure: 3500.0 psi. Over the specification of 3000 psi. Not met.");
+    expect(overPressure.why).toContain("Efficiency is next to bring the back-pressure to the specification.");
+  });
 });
+

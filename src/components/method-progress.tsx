@@ -21,9 +21,9 @@ export function MethodProgress({ stage }: { stage: MethodStage }) {
                 className={
                   "flex w-full min-w-0 items-center justify-center gap-1 rounded-md px-2 py-1 text-xs font-medium whitespace-nowrap " +
                   (active
-                    ? "bg-[#0f6b56] text-[#f7fffb]"
+                    ? "bg-[var(--hp-brand)] text-[var(--hp-on-brand)]"
                     : done
-                      ? "bg-[#e7f3ee] text-[#0f6b56]"
+                      ? "bg-[var(--hp-soft)] text-[var(--hp-brand)]"
                       : "text-muted-foreground ring-1 ring-foreground/15")
                 }
               >

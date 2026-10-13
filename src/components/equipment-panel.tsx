@@ -1,6 +1,7 @@
 "use client";
 
 import { useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import { Activity, Cylinder, LineChart, Atom, Sliders, Info, Cpu, Layers } from "lucide-react";
 import { ChromatogramExplorer } from "@/components/chromatogram-explorer";
 import { BeadDiagram } from "@/components/bead-diagram";
 import { ColumnDiagram, type ColumnRunTrace } from "@/components/column-diagram";
@@ -9,6 +10,7 @@ import { FunctionNoteView, type FunctionNote } from "@/components/function-note"
 import { HplcSketch } from "@/components/hplc-drawing";
 import { KindMark } from "@/components/setting-legend";
 import type { SettingKind } from "@/lib/setting-kind";
+import { cn } from "@/lib/utils";
 
 type Box = { left: number; top: number; width: number; height: number };
 
@@ -22,6 +24,8 @@ type Part = {
 type Setup = {
   id: string;
   label: string;
+  tagline: string;
+  badge: string;
   src: string;
   width: number;
   height: number;
@@ -29,80 +33,92 @@ type Setup = {
 };
 
 const solvents: FunctionNote = {
-  does: "Bottles of the liquids that carry the sample. One is usually water, sometimes with a set pH. The other is the organic solvent, such as acetonitrile or methanol. The mix of organic solvent is the %B.",
+  does: "Solvent reservoirs containing the mobile phase components. In reversed-phase HPLC, Bottle A is typically aqueous (water, often with a pH buffer), while Bottle B is organic modifier (such as acetonitrile or methanol). The percentage of organic modifier (%B) controls solvent elution strength.",
   sets: "The solvent bottles hold the liquids. The pump blends them into %B. The organic solvents on the chart are ACN, MeOH, THF, Ethanol, IPA, Acetone, Propanol, and Butanol.",
-  range: "%B is a percent of organic solvent, from 0% to 100%. The bottles themselves have no number to type.",
+  range: "%B is a percent of organic solvent, from 0% to 100%. The bottles themselves have no mechanical setting to type.",
   changes:
-    "A higher %B lowers retention (k), so compounds come off sooner. A lower %B raises retention, quickly. Changing which organic solvent is in the bottle is a selectivity change: peaks can pull apart or change order. The bottles do not change efficiency (how narrow the peaks are) by themselves.",
+    "A higher %B lowers retention (k), causing compounds to elute earlier. A lower %B raises retention. Switching the organic modifier (e.g. ACN vs MeOH) changes chemical selectivity (α), pulling peaks apart or inverting elution order. Mobile phase bottles do not directly alter column efficiency.",
 };
+
 const degasser: FunctionNote = {
-  does: "Takes dissolved air out of the solvents before the pump. Bubbles would upset the flow and the detector.",
-  sets: "The degasser. It sits between the solvent bottles and the pump. There is no setting to type.",
-  range: "No range and no units. It runs with the instrument. This page does not ask for a degasser number.",
+  does: "In-line vacuum degasser that extracts dissolved gases (oxygen, nitrogen) from the solvents before entering the pump. Prevents cavitation, bubble-induced flow fluctuations, baseline drift, and optical detector noise.",
+  sets: "Operates continuously with instrument power. Sits directly between the solvent reservoirs and the pump intake.",
+  range: "Self-regulating vacuum chamber. No user-typed parameter.",
   changes:
-    "It does not change retention (k), selectivity, or efficiency. It keeps bubbles out so the flow and the chromatogram stay steady.",
+    "Maintains stable volumetric delivery and quiet baseline traces. Does not alter retention factor (k) or chemical selectivity.",
 };
+
 const pumpChanges =
-  "The pump sets flow and %B. A higher %B lowers retention (k). A lower %B raises retention, quickly. Flow changes the clock time of the run and the back-pressure. It does not change k, because the unretained peak and the retained peaks speed up together. It does not change selectivity. Efficiency (how narrow the peaks are) does change with flow: far from a usual flow for that column width, peaks get wider.";
+  "Flow rate governs total runtime and back-pressure. %B dictates retention factor (k). Near the optimal linear velocity, flow rate optimizes chromatographic efficiency (peak width). Selectivity does not change from pump flow alone.";
 const pumpRange =
-  "Flow is in mL/min. A usual range for these columns is about 0.2–2 mL/min on a 4.6 mm column, and lower on a 2.1 mm column. %B is 0–100%. This diagram does not enforce a pump maximum.";
+  "Flow is in mL/min (typically 0.2–2.0 mL/min on 4.6 mm ID columns; 0.1–0.5 mL/min on 2.1 mm ID columns). %B is 0–100%.";
+
 const pumpQuaternary: FunctionNote = {
-  does: "Pushes the liquid through the column and blends the solvents. That blend is the %B.",
-  sets: "The pump, through its quaternary valve. The valve can blend up to four solvents. Flow rate and %B are the settings.",
+  does: "Quaternary low-pressure gradient pump capable of proportioning up to four mobile phase channels before a single high-pressure drive. Delivers precise flow rate and dynamic or isocratic %B blends.",
+  sets: "Pump flow rate (mL/min) and %B mobile phase composition.",
   range: pumpRange,
   changes: pumpChanges,
 };
+
 const pumps12: FunctionNote = {
-  does: "Two pumps. Each pushes its own solvent, and they mix after the pumps. Together they set the flow rate and the %B.",
-  sets: "Pump 1 and Pump 2. Each pump has its own flow. The mix of the two flows is the %B.",
+  does: "Dual-pump high-pressure binary gradient system. Pump A and Pump B meter solvent under high pressure into an in-line mixer, minimizing system gradient dwell volume.",
+  sets: "Independent delivery speeds of Pump 1 (aqueous) and Pump 2 (organic modifier).",
   range: pumpRange,
   changes: pumpChanges,
 };
+
 const detectorChanges =
-  "Detector wavelength does not change retention (k), selectivity, or efficiency. It changes whether the peak is visible.";
+  "Detection wavelength determines analyte molar absorptivity and peak visibility. It does not alter retention time, peak separation, or back-pressure.";
 const detectorRange =
-  "Wavelength is in nm. The page does not enforce a detector maximum. The wavelength box on Run 1 accepts what is typed.";
+  "Wavelength is in nm (typically 190–400 nm; e.g. 254 nm for aromatic compounds).";
+
 const uvDetector: FunctionNote = {
-  does: "Shines UV light through the liquid leaving the column. The chromatogram is how much light the sample absorbs, over time.",
-  sets: "The UV detector. The setting is the wavelength.",
+  does: "Single or dual-wavelength UV-Vis absorbance detector measuring analyte light absorption through a flow cell over time, generating the chromatographic signal trace (mAU).",
+  sets: "Monochromator detection wavelength (nm).",
   range: detectorRange,
   changes: detectorChanges,
 };
+
 const uvOrPda: FunctionNote = {
-  does: "A UV detector reads one wavelength. A PDA reads many wavelengths at once, so a spectrum can be kept.",
-  sets: "The UV or PDA detector. The setting is the wavelength.",
-  range: detectorRange,
+  does: "Photodiode Array (PDA / DAD) detector recording multi-wavelength absorbance spectra simultaneously across 190–800 nm, enabling spectral peak purity verification and library identification.",
+  sets: "Monitored wavelength channel(s) and spectral bandwidth.",
+  range: "190–800 nm.",
   changes: detectorChanges,
 };
+
 const ovenAndColumn: FunctionNote = {
-  does: "The column is where the peaks separate. The oven holds that column at a temperature.",
-  sets: "The oven sets the temperature. The column carries the ligand, the length, the internal diameter, and the particle size. Those column parts are chosen with the column, not with the oven knob.",
+  does: "Thermostatted column compartment holding the stationary phase column at stable operating temperature (typically 25°C to 60°C). Elevating temperature lowers solvent viscosity, reduces back-pressure, and alters chromatographic selectivity.",
+  sets: "Column compartment temperature (°C). The column inside provides stationary phase ligand, length, diameter, and particle size.",
   range:
-    "Temperature is in °C. This class uses about 25°C, then 40°C and 60°C. The temperature box on Run 1 accepts what is typed. The page does not enforce an oven maximum. Length on the Column tab is 50–250 mm. Width there is 2.1–4.6 mm internal diameter.",
+    "Ambient to 60°C (standard method development range). Column length 50–250 mm, ID 2.1–4.6 mm.",
   changes:
-    "Temperature changes selectivity (peaks can pull apart or change order) and usually shortens retention. The same %B is kept after a temperature change. Length, width, and particle size change retention and efficiency, as on the Column and Beads tabs. The ligand is the coating and is the last selectivity change. The oven does not change efficiency by itself.",
+    "Temperature shifts thermodynamic partition equilibria, changing chemical selectivity (α) and shortening retention times. Length and diameter govern plate count, runtime, and back-pressure.",
 };
+
 const injectionChanges =
-  "Injection volume does not change retention (k) or selectivity. A small injection does not change efficiency. A very large injection can widen peaks, which lowers efficiency.";
+  "Excessive injection volumes cause volume overload and band broadening, lowering efficiency. Moderate volumes do not alter retention factor k or selectivity.";
 const injectionRange =
-  "Injection volume is in µL. The page does not enforce a maximum. The injection-volume box on Run 1 accepts what is typed.";
+  "Typically 5–50 µL calibrated loop volume.";
+
 const manualInjector: FunctionNote = {
-  does: "The sample is loaded by hand with a syringe into the flow.",
-  sets: "The manual injector. The amount loaded is the injection volume.",
+  does: "Rheodyne 6-port manual injection valve with an external sample loop. The sample is introduced with a microsyringe in the LOAD position and swept into the column stream in the INJECT position.",
+  sets: "Manual sample introduction. The sample loop volume sets the injection volume (e.g. 5, 10, or 20 µL).",
   range: injectionRange,
   changes: injectionChanges,
 };
+
 const autosampler: FunctionNote = {
-  does: "Injects the sample from a vial, without a hand syringe.",
-  sets: "The autosampler. The setting is the injection volume.",
-  range: injectionRange,
+  does: "Automated robotic autosampler providing high-precision sample injections from microvials with programmable injection volume, needle wash routines, and optional sample chilling.",
+  sets: "Injection volume (µL) and vial injection sequence.",
+  range: "0.1–100 µL programmable range.",
   changes: injectionChanges,
 };
+
 const controller: FunctionNote = {
-  does: "A controller can start runs and store methods on some instruments. The controller is not used in this class.",
-  sets: "The controller on the instrument. This class does not set anything there.",
-  range: "No range and no units in this class. Nothing is typed on the controller.",
-  changes: "It does not change retention (k), selectivity, or efficiency. The controller is not used in this class.",
+  does: "System controller and communications interface module synchronizing pump delivery, autosampler triggers, and detector data acquisition with the chromatography data station (CDS).",
+  sets: "System clock and automated run sequence execution.",
+  range: "Automated instrument control; no manual settings required for method development.",
+  changes: "Ensures coordinated timing across modules. Does not alter chemical retention or selectivity.",
 };
 
 function box(x: number, y: number, w: number, h: number, imgW: number, imgH: number, pad = 2): Box {
@@ -122,6 +138,8 @@ const setups: Setup[] = [
   {
     id: "hplc-1-2-5",
     label: "HPLC 1, 2, and 5",
+    tagline: "Quaternary Low-Pressure Proportioning",
+    badge: "Manual Injector · UV",
     src: "/equipment/hplc-1-2-5.png",
     width: 387,
     height: 422,
@@ -158,6 +176,8 @@ const setups: Setup[] = [
   {
     id: "hplc-3",
     label: "HPLC 3",
+    tagline: "Binary High-Pressure Mixing",
+    badge: "Autosampler · UV/PDA",
     src: "/equipment/hplc-3.png",
     width: 399,
     height: 655,
@@ -190,6 +210,8 @@ const setups: Setup[] = [
   {
     id: "hplc-6",
     label: "HPLC 6",
+    tagline: "Quaternary Mixing with Automated Sampling",
+    badge: "Autosampler · UV/PDA",
     src: "/equipment/hplc-6.png",
     width: 400,
     height: 565,
@@ -242,29 +264,39 @@ function partSide(part: Part): "left" | "right" {
   return part.box.left + part.box.width / 2 < 50 ? "left" : "right";
 }
 
-function choiceStyle(selected: boolean, hovered: boolean): CSSProperties {
-  if (selected && hovered) {
-    return { backgroundColor: "#a9d4c4", borderColor: "#0a5644", color: "#144237", fontWeight: 600 };
-  }
-  if (selected) {
-    return { backgroundColor: "#cfe8df", borderColor: "#0f6b56", color: "#144237", fontWeight: 600 };
-  }
-  if (hovered) {
-    return { backgroundColor: "#efe6c4", borderColor: "#b0893e", color: "#3d3416", fontWeight: 600 };
-  }
-  return {
-    backgroundColor: "var(--background)",
-    borderColor: "var(--border)",
-    color: "var(--foreground)",
-    fontWeight: 500,
-  };
-}
-
 const equipmentTabs = [
-  { id: "hplc", label: "HPLC" },
-  { id: "column", label: "Column" },
-  { id: "beads", label: "Beads" },
-  { id: "chromatogram", label: "Chromatogram" },
+  {
+    id: "column",
+    label: "Column",
+    title: "Column Anatomy",
+    description: "Physical dimensions, phase coatings, and retention animation",
+    badge: "Dimensions",
+    icon: Cylinder,
+  },
+  {
+    id: "hplc",
+    label: "HPLC",
+    title: "HPLC Instruments",
+    description: "Interactive instrument setups, pumps, valves, and UV/PDA detectors",
+    badge: "Setups",
+    icon: Activity,
+  },
+  {
+    id: "beads",
+    label: "Beads",
+    title: "Silica Particles",
+    description: "Pores, superficially porous (SPP) core-shell vs fully porous",
+    badge: "Microstructure",
+    icon: Atom,
+  },
+  {
+    id: "chromatogram",
+    label: "Chromatogram",
+    title: "Chromatograms",
+    description: "Signal resolution, peak integration, and retention time metrics",
+    badge: "Traces",
+    icon: LineChart,
+  },
 ] as const;
 
 function NameColumn({
@@ -283,7 +315,7 @@ function NameColumn({
           key={part.id}
           ref={(node) => setLabel(part.id, node)}
           data-hplc-label={annotationName(part)}
-          className="whitespace-nowrap text-xs leading-none font-medium text-[#144237]"
+          className="whitespace-nowrap text-xs leading-none font-semibold text-foreground/90 py-1"
         >
           {annotationName(part)}
         </p>
@@ -359,53 +391,53 @@ function HplcDiagram({
   }, [setup]);
 
   return (
-    <figure id="hplc-diagram" className="overflow-x-auto rounded-xl bg-card p-2 ring-1 ring-foreground/10 sm:p-3">
+    <figure id="hplc-diagram" className="overflow-x-auto rounded-xl bg-card p-3 ring-1 ring-foreground/10 sm:p-5">
       <div
         ref={frameRef}
-        className="relative grid min-w-[20rem] grid-cols-[max-content_minmax(8rem,1fr)_max-content] items-stretch gap-x-3 sm:gap-x-5"
+        className="relative grid min-w-[20rem] grid-cols-[max-content_minmax(8rem,1fr)_max-content] items-stretch gap-x-3 sm:gap-x-6"
       >
-          <NameColumn
-            parts={left}
-            side="left"
-            setLabel={(id, node) => {
-              if (node) labels.current.set(id, node);
-              else labels.current.delete(id);
-            }}
-          />
-          <div ref={imageRef} className="relative min-w-0">
-            <HplcSketch id={setup.id} width={setup.width} height={setup.height} />
-            {setup.parts.map((part) => {
-              const active = openId === part.id;
-              return (
-                <button
-                  key={part.id}
-                  type="button"
-                  aria-label={part.label}
-                  aria-expanded={active}
-                  className="absolute rounded-sm transition-none"
-                  style={{
-                    left: `${part.box.left}%`,
-                    top: `${part.box.top}%`,
-                    width: `${part.box.width}%`,
-                    height: `${part.box.height}%`,
-                    backgroundColor: active ? "rgba(207, 232, 223, 0.55)" : "transparent",
-                    outline: active ? "2px solid #0f6b56" : "2px solid transparent",
-                  }}
-                  onMouseEnter={() => onEnter(part.id)}
-                  onMouseLeave={() => onLeave(part.id)}
-                  onClick={() => onPick(part.id)}
-                />
-              );
-            })}
-          </div>
-          <NameColumn
-            parts={right}
-            side="right"
-            setLabel={(id, node) => {
-              if (node) labels.current.set(id, node);
-              else labels.current.delete(id);
-            }}
-          />
+        <NameColumn
+          parts={left}
+          side="left"
+          setLabel={(id, node) => {
+            if (node) labels.current.set(id, node);
+            else labels.current.delete(id);
+          }}
+        />
+        <div ref={imageRef} className="relative min-w-0 flex items-center justify-center">
+          <HplcSketch id={setup.id} width={setup.width} height={setup.height} />
+          {setup.parts.map((part) => {
+            const active = openId === part.id;
+            return (
+              <button
+                key={part.id}
+                type="button"
+                aria-label={part.label}
+                aria-expanded={active}
+                className="absolute rounded-sm transition-all cursor-pointer"
+                style={{
+                  left: `${part.box.left}%`,
+                  top: `${part.box.top}%`,
+                  width: `${part.box.width}%`,
+                  height: `${part.box.height}%`,
+                  backgroundColor: active ? "color-mix(in oklab, var(--hp-brand) 25%, transparent)" : "transparent",
+                  outline: active ? "2.5px solid var(--hp-brand)" : "2px solid transparent",
+                }}
+                onMouseEnter={() => onEnter(part.id)}
+                onMouseLeave={() => onLeave(part.id)}
+                onClick={() => onPick(part.id)}
+              />
+            );
+          })}
+        </div>
+        <NameColumn
+          parts={right}
+          side="right"
+          setLabel={(id, node) => {
+            if (node) labels.current.set(id, node);
+            else labels.current.delete(id);
+          }}
+        />
         {frame.w > 0 ? (
           <svg
             className="pointer-events-none absolute inset-0 h-full w-full"
@@ -422,7 +454,7 @@ function HplcDiagram({
                 orient="auto"
                 markerUnits="userSpaceOnUse"
               >
-                <path d="M0,0 L6,3 L0,6 Z" fill="#0f6b56" />
+                <path d="M0,0 L6,3 L0,6 Z" fill="var(--hp-brand)" />
               </marker>
             </defs>
             {callouts.map((callout) => (
@@ -430,7 +462,7 @@ function HplcDiagram({
                 key={callout.id}
                 points={callout.points}
                 fill="none"
-                stroke="#0f6b56"
+                stroke="var(--hp-brand)"
                 strokeWidth="1.5"
                 strokeLinejoin="round"
                 markerEnd="url(#hplc-arrow)"
@@ -451,107 +483,235 @@ export function EquipmentPanel({
   ligands: readonly string[];
 }) {
   const [view, setView] = useState<(typeof equipmentTabs)[number]["id"]>("hplc");
-  const [hoveredView, setHoveredView] = useState<string | null>(null);
   const [setupId, setSetupId] = useState(setups[0].id);
-  const [hoveredChoice, setHoveredChoice] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [pinnedId, setPinnedId] = useState<string | null>(null);
   const setup = setups.find((item) => item.id === setupId) ?? setups[0];
   const open = setup.parts.find((part) => part.id === openId) ?? null;
 
   return (
-    <div id="equipment" className="flex flex-col gap-5">
+    <div id="equipment" className="flex flex-col gap-6 pb-12">
       <header>
-        <p className="text-xs tracking-[0.16em] text-[#0f6b56] uppercase">Lab setups</p>
-        <h1 className="mt-1 font-heading text-3xl text-foreground sm:text-4xl">Equipment</h1>
+        <p className="text-xs tracking-[0.16em] text-[var(--hp-brand)] uppercase">Laboratory Instrumentation</p>
+        <h1 className="mt-1 font-heading text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
+          Equipment & Anatomy
+        </h1>
+        <p className="mt-1 text-sm text-muted-foreground sm:text-base">
+          Explore interactive instruments, column geometries, silica bead microstructures, and chromatographic traces.
+        </p>
       </header>
-      <div id="equipment-tabs" className="flex flex-wrap gap-2">
+
+      {/* Hero Showcase Subheading Cards */}
+      <div id="equipment-tabs" className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {equipmentTabs.map((tab) => {
           const selected = tab.id === view;
+          const Icon = tab.icon;
           return (
             <button
               key={tab.id}
               type="button"
               aria-pressed={selected}
-              className="h-10 rounded-md border border-solid px-4 text-sm transition-none"
-              style={choiceStyle(selected, hoveredView === tab.id)}
-              onMouseEnter={() => setHoveredView(tab.id)}
-              onMouseLeave={() => setHoveredView((current) => (current === tab.id ? null : current))}
+              className={cn(
+                "group relative flex flex-col justify-between gap-3.5 rounded-2xl border p-4 text-left transition-all duration-200 cursor-pointer select-none outline-none focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-[0.98]",
+                selected
+                  ? "border-[var(--hp-brand)] bg-[var(--hp-soft)] shadow-md ring-2 ring-[var(--hp-brand)]/25 -translate-y-0.5"
+                  : "border-border/80 bg-card hover:border-[var(--hp-brand)]/70 hover:bg-[var(--hp-soft)]/40 hover:-translate-y-1 hover:shadow-md"
+              )}
               onClick={() => setView(tab.id)}
             >
-              {tab.label}
+              <div className="flex w-full items-start justify-between gap-2">
+                <div
+                  className={cn(
+                    "flex size-11 items-center justify-center rounded-xl transition-all duration-200",
+                    selected
+                      ? "bg-[var(--hp-brand)] text-[var(--hp-on-brand)] shadow-sm ring-2 ring-[var(--hp-brand)]/30"
+                      : "bg-muted text-muted-foreground group-hover:bg-[var(--hp-brand)]/15 group-hover:text-[var(--hp-brand)] group-hover:scale-105"
+                  )}
+                >
+                  <Icon className="size-5.5 shrink-0" aria-hidden="true" />
+                </div>
+                <span
+                  className={cn(
+                    "rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase transition-colors",
+                    selected
+                      ? "border border-[var(--hp-brand)]/30 bg-[var(--hp-brand)]/20 text-[var(--hp-brand)]"
+                      : "border border-border/50 bg-muted/70 text-muted-foreground group-hover:border-[var(--hp-brand)]/30 group-hover:text-[var(--hp-brand)]"
+                  )}
+                >
+                  {tab.badge}
+                </span>
+              </div>
+              <div>
+                <h2
+                  className={cn(
+                    "font-heading text-base font-bold transition-colors",
+                    selected ? "text-[var(--hp-ink)]" : "text-foreground group-hover:text-[var(--hp-brand)]"
+                  )}
+                >
+                  {tab.title}
+                </h2>
+                <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
+                  {tab.description}
+                </p>
+              </div>
             </button>
           );
         })}
       </div>
+
+      {/* Column Subtab */}
       {view === "column" ? (
-        <>
+        <div className="flex flex-col gap-6">
           <ColumnDiagram runs={columnRuns} />
           <ColumnRetentionAnimation />
-        </>
+        </div>
       ) : null}
+
+      {/* Chromatogram Subtab */}
       {view === "chromatogram" ? <ChromatogramExplorer /> : null}
+
+      {/* Beads Subtab */}
       {view === "beads" ? <BeadDiagram ligands={ligands} /> : null}
+
+      {/* HPLC Instruments Subtab */}
       {view === "hplc" ? (
-      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
-      <div className="flex min-w-0 flex-col gap-5">
-      <header>
-        <p className="mt-2 max-w-2xl text-base text-muted-foreground">
-          Pick the HPLC in the lab.           Hover or tap a part. The note gives what it does, the part that sets it, the range
-          and units, and what it changes.
-        </p>
-      </header>
-      <div id="equipment-choices" className="flex flex-wrap gap-2">
-        {setups.map((item) => {
-          const selected = item.id === setup.id;
-          return (
-            <button
-              key={item.id}
-              type="button"
-              aria-pressed={selected}
-              className="h-10 rounded-md border border-solid px-4 text-sm transition-none"
-              style={choiceStyle(selected, hoveredChoice === item.id)}
-              onMouseEnter={() => setHoveredChoice(item.id)}
-              onMouseLeave={() => setHoveredChoice((current) => (current === item.id ? null : current))}
-              onClick={() => {
-                setSetupId(item.id);
-                setOpenId(null);
-                setPinnedId(null);
-              }}
-            >
-              {item.label}
-            </button>
-          );
-        })}
-      </div>
-      <HplcDiagram
-        setup={setup}
-        openId={open?.id ?? null}
-        onEnter={(id) => setOpenId(id)}
-        onLeave={(id) => setOpenId((current) => (current === id && pinnedId !== id ? null : current))}
-        onPick={(id) => {
-          setPinnedId((current) => {
-            const next = current === id ? null : id;
-            setOpenId(next);
-            return next;
-          });
-        }}
-      />
-      </div>
-      <aside
-        id="equipment-note"
-        className="rounded-xl bg-card px-4 py-4 text-sm leading-relaxed text-foreground ring-1 ring-foreground/10 lg:sticky lg:top-4"
-      >
-        {open ? (
-          <div className="flex flex-col gap-3">
-            {partKind(open.id) ? <KindMark kind={partKind(open.id) as SettingKind} /> : null}
-            <FunctionNoteView title={open.label} note={open.note} />
+        <div className="grid items-start gap-6 lg:grid-cols-12">
+          {/* Main Instrument Stage (8 Cols) */}
+          <div className="flex flex-col gap-5 lg:col-span-8">
+            <header>
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--hp-brand)]/30 bg-[var(--hp-brand)]/10 px-2.5 py-0.5 text-xs font-semibold tracking-wider text-[var(--hp-brand)] uppercase">
+                  <Activity className="size-3.5" />
+                  Instrument Architecture
+                </span>
+              </div>
+              <h2 className="mt-1.5 font-heading text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+                HPLC System Configurations & Flow Path
+              </h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Select an HPLC instrument to examine its hardware modules. Hover or tap any component to inspect its
+                function, adjustable settings, and impact on chromatographic separation.
+              </p>
+            </header>
+
+            {/* Instrument Setup Selector Cards */}
+            <div id="equipment-choices" className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              {setups.map((item) => {
+                const selected = item.id === setup.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    aria-pressed={selected}
+                    className={cn(
+                      "flex flex-col justify-between gap-2 rounded-xl border p-3.5 text-left transition-all cursor-pointer shadow-2xs select-none",
+                      selected
+                        ? "border-[var(--hp-brand)] bg-[var(--hp-soft)] ring-2 ring-[var(--hp-brand)]/20 shadow-xs"
+                        : "border-border/80 bg-card hover:bg-muted/50 hover:border-border"
+                    )}
+                    onClick={() => {
+                      setSetupId(item.id);
+                      setOpenId(null);
+                      setPinnedId(null);
+                    }}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="font-heading text-sm font-bold text-foreground">{item.label}</span>
+                        <span className="rounded-full bg-muted border border-border/70 px-2 py-0.2 text-[10px] font-semibold text-muted-foreground">
+                          {item.badge}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground">{item.tagline}</p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Interactive Schematic Diagram */}
+            <div className="flex flex-col gap-2 rounded-2xl border border-border/80 bg-card p-4 sm:p-5 shadow-xs">
+              <div className="flex items-center justify-between border-b border-border/60 pb-3">
+                <span className="font-heading text-sm font-bold text-foreground">
+                  {setup.label} Schematic Diagram
+                </span>
+                <span className="text-xs text-muted-foreground">Hover or click any module box</span>
+              </div>
+              <HplcDiagram
+                setup={setup}
+                openId={open?.id ?? null}
+                onEnter={(id) => setOpenId(id)}
+                onLeave={(id) => setOpenId((current) => (current === id && pinnedId !== id ? null : current))}
+                onPick={(id) => {
+                  setPinnedId((current) => {
+                    const next = current === id ? null : id;
+                    setOpenId(next);
+                    return next;
+                  });
+                }}
+              />
+            </div>
           </div>
-        ) : (
-          <p className="text-muted-foreground">Hover or tap a part of the instrument.</p>
-        )}
-      </aside>
-      </div>
+
+          {/* Right Component Inspector Panel (4 Cols) */}
+          <aside
+            id="equipment-note"
+            className="flex flex-col gap-4 rounded-2xl border border-border/80 bg-card p-4 sm:p-5 shadow-xs lg:sticky lg:top-4 lg:col-span-4"
+          >
+            {open ? (
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <span className="inline-flex items-center gap-1 rounded-full border border-[var(--hp-brand)]/30 bg-[var(--hp-brand)]/10 px-2 py-0.5 text-[10px] font-semibold text-[var(--hp-brand)] uppercase">
+                    Component Inspector
+                  </span>
+                  {partKind(open.id) ? <KindMark kind={partKind(open.id) as SettingKind} /> : null}
+                </div>
+                <FunctionNoteView title={open.label} note={open.note} />
+              </div>
+            ) : (
+              <div className="flex flex-col gap-4">
+                <div className="flex items-center gap-2 border-b border-border/60 pb-3">
+                  <Cpu className="size-4 text-[var(--hp-brand)]" />
+                  <h3 className="font-heading text-sm font-bold text-foreground">System Flow Path Overview</h3>
+                </div>
+
+                <div className="flex flex-col gap-2 text-xs text-muted-foreground">
+                  <p className="leading-relaxed">
+                    Mobile phase moves under high pressure through sequential operational modules. Click any module below to inspect its specs:
+                  </p>
+
+                  <div className="flex flex-col gap-1.5 mt-1">
+                    {setup.parts.map((p, idx) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        className="flex items-center justify-between rounded-lg border border-border/70 bg-muted/20 px-2.5 py-1.5 text-left text-xs font-medium text-foreground transition-all hover:border-[var(--hp-brand)] hover:bg-[var(--hp-soft)]/20 cursor-pointer"
+                        onClick={() => {
+                          setPinnedId(p.id);
+                          setOpenId(p.id);
+                        }}
+                      >
+                        <span className="flex items-center gap-2">
+                          <span className="size-4 rounded-full bg-[var(--hp-brand)]/15 text-[var(--hp-brand)] text-[10px] font-bold flex items-center justify-center">
+                            {idx + 1}
+                          </span>
+                          {p.label}
+                        </span>
+                        {partKind(p.id) ? (
+                          <span className="text-[10px] text-muted-foreground capitalize">{partKind(p.id)}</span>
+                        ) : null}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-[var(--hp-brand)]/30 bg-[var(--hp-soft)]/20 p-3 text-[11px] leading-relaxed text-muted-foreground dark:bg-[var(--hp-soft)]/10">
+                  <strong className="text-foreground">Tip:</strong> You can click components directly on the schematic or from the flow path list above.
+                </div>
+              </div>
+            )}
+          </aside>
+        </div>
       ) : null}
     </div>
   );

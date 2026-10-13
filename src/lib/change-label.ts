@@ -67,11 +67,16 @@ export function selectivityChangeLabel(
  * ligand, and retention steps stay open.
  */
 export function nextRunLockedForSolvent(
-  plan: Pick<SelectivityPlan, "step" | "status"> | null,
+  plan: { step: SelectivityPlan["step"]; status: SelectivityPlan["status"]; oldSolvent?: string | null } | null,
   next: { solvent: string; percentB: string } | null,
 ): boolean {
   if (!plan || plan.status !== "recommend" || plan.step !== "solvent") return false;
-  if (!next || !findSolvent(next.solvent)) return true;
+  const chosen = next ? findSolvent(next.solvent) : null;
+  if (!next || !chosen) return true;
+  if (plan.oldSolvent) {
+    const previous = findSolvent(plan.oldSolvent);
+    if (previous && previous.id === chosen.id) return true;
+  }
   const percent = parseUserNumber(next.percentB);
   return percent == null || percent < 0 || percent > 100;
 }

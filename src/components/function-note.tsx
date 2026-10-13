@@ -18,7 +18,7 @@ export function FunctionNoteView({ title, note }: { title?: string; note: Functi
       {title ? <p className="font-medium">{title}</p> : null}
       {sections.map(([key, heading]) => (
         <section key={key}>
-          <h3 className="text-sm font-semibold text-[#0f6b56]">{heading}</h3>
+          <h3 className="text-sm font-semibold text-[var(--hp-brand)]">{heading}</h3>
           <p className="mt-1">{note[key]}</p>
         </section>
       ))}

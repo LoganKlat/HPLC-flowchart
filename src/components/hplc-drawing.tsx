@@ -33,25 +33,36 @@ const modules: Record<string, Module[]> = {
   ],
 };
 
-const ink = "#0f6b56";
-const inkDark = "#144237";
-const cream = "#f4efe2";
-const paper = "#f7f3ea";
-const liquid = "#efe6c4";
+const ink = "var(--hp-brand)";
+const inkDark = "var(--foreground)";
+const liquidAqueous = "var(--hp-soft)";
+const liquidOrganic = "var(--hp-gold-soft)";
 
 export function HplcSketch({ id, width, height }: { id: string; width: number; height: number }) {
   const parts = modules[id] ?? [];
   return (
     <svg
       viewBox={`0 0 ${width} ${height}`}
-      className="block h-auto w-full"
+      className="block h-auto w-full select-none"
       role="img"
-      aria-label=""
+      aria-label="HPLC instrument diagram"
     >
-      <rect width={width} height={height} fill={paper} />
+      {/* Transparent base so the schematic blends seamlessly with the page/card background */}
+      <rect width={width} height={height} rx={12} fill="transparent" />
       {parts.map((part) => (
         <g key={`${part.icon}-${part.x}-${part.y}`}>
-          <rect x={part.x} y={part.y} width={part.w} height={part.h} rx={10} fill={cream} stroke={ink} strokeWidth={2} />
+          {/* Module chassis */}
+          <rect
+            x={part.x}
+            y={part.y}
+            width={part.w}
+            height={part.h}
+            rx={8}
+            fill="var(--card)"
+            stroke={ink}
+            strokeWidth={1.8}
+            className="filter drop-shadow-2xs"
+          />
           <IconShape part={part} />
         </g>
       ))}
@@ -84,8 +95,38 @@ function Bottles({ part }: { part: Module }) {
         const x = left + index * (bottleW + gap);
         return (
           <g key={index}>
-            <rect x={x + bottleW * 0.32} y={y - bottleH * 0.18} width={bottleW * 0.36} height={bottleH * 0.2} rx={2} fill={cream} />
-            <rect x={x} y={y} width={bottleW} height={bottleH} rx={6} fill={index === 0 ? "#d7ebe3" : liquid} />
+            {/* Solvent bottle cap */}
+            <rect
+              x={x + bottleW * 0.3}
+              y={y - bottleH * 0.18}
+              width={bottleW * 0.4}
+              height={bottleH * 0.2}
+              rx={2}
+              fill="var(--muted)"
+              stroke="var(--border)"
+            />
+            {/* Glass reservoir */}
+            <rect
+              x={x}
+              y={y}
+              width={bottleW}
+              height={bottleH}
+              rx={6}
+              fill={index === 0 ? liquidAqueous : liquidOrganic}
+              stroke="var(--hp-brand)"
+              strokeWidth={1.5}
+            />
+            {/* Liquid level indicator */}
+            <line
+              x1={x + 3}
+              x2={x + bottleW - 3}
+              y1={y + bottleH * 0.28}
+              y2={y + bottleH * 0.28}
+              stroke={inkDark}
+              strokeWidth={1.2}
+              strokeDasharray="2,2"
+              opacity={0.5}
+            />
           </g>
         );
       })}
@@ -98,7 +139,7 @@ function Degasser({ cx, cy, w }: { cx: number; cy: number; w: number }) {
     <g fill="none" stroke={ink} strokeWidth={1.75} strokeLinecap="round">
       <path d={`M ${cx - w * 0.32} ${cy} H ${cx + w * 0.32}`} />
       {[-0.18, 0, 0.18].map((shift) => (
-        <circle key={shift} cx={cx + w * shift} cy={cy} r={5} fill={paper} />
+        <circle key={shift} cx={cx + w * shift} cy={cy} r={5} fill="var(--muted)" stroke="var(--border)" />
       ))}
     </g>
   );
@@ -111,7 +152,7 @@ function Detector({ part }: { part: Module }) {
   const h = part.h * 0.44;
   return (
     <g fill="none" stroke={inkDark} strokeWidth={1.75}>
-      <rect x={x} y={y} width={w} height={h} rx={4} fill="#e7f3ee" />
+      <rect x={x} y={y} width={w} height={h} rx={4} fill="var(--hp-soft)" stroke="var(--hp-brand)" />
       <path d={`M ${x + 8} ${y + h * 0.7} Q ${x + w * 0.35} ${y + 6} ${x + w * 0.55} ${y + h * 0.55} T ${x + w - 8} ${y + h * 0.35}`} stroke={ink} />
     </g>
   );
@@ -120,7 +161,7 @@ function Detector({ part }: { part: Module }) {
 function Pump({ cx, cy }: { cx: number; cy: number }) {
   return (
     <g fill="none" stroke={inkDark} strokeWidth={1.75}>
-      <circle cx={cx} cy={cy} r={18} fill="#e7f3ee" />
+      <circle cx={cx} cy={cy} r={18} fill="var(--hp-soft)" stroke="var(--hp-brand)" />
       <path d={`M ${cx - 8} ${cy} H ${cx + 6}`} strokeLinecap="round" />
       <path d={`M ${cx + 2} ${cy - 5} L ${cx + 8} ${cy} L ${cx + 2} ${cy + 5}`} />
     </g>
@@ -134,7 +175,7 @@ function Screen({ part }: { part: Module }) {
   const h = part.h * 0.5;
   return (
     <g fill="none" stroke={inkDark} strokeWidth={1.75}>
-      <rect x={x} y={y} width={w} height={h} rx={4} fill="#e7f3ee" />
+      <rect x={x} y={y} width={w} height={h} rx={4} fill="var(--hp-soft)" stroke="var(--hp-brand)" />
       <path d={`M ${x + w * 0.2} ${y + h + 8} H ${x + w * 0.8}`} strokeLinecap="round" />
     </g>
   );
@@ -147,7 +188,7 @@ function Oven({ part }: { part: Module }) {
   const y = part.y + part.h * 0.19;
   return (
     <g fill="none" stroke={inkDark} strokeWidth={1.75}>
-      <rect x={x} y={y} width={colW} height={colH} rx={colW / 2} fill="#d7ebe3" />
+      <rect x={x} y={y} width={colW} height={colH} rx={colW / 2} fill="var(--muted)" stroke="var(--hp-brand)" />
       <path d={`M ${x + 4} ${y + colH * 0.3} H ${x + colW - 4}`} stroke={ink} />
       <path d={`M ${x + 4} ${y + colH * 0.5} H ${x + colW - 4}`} stroke={ink} />
       <path d={`M ${x + 4} ${y + colH * 0.7} H ${x + colW - 4}`} stroke={ink} />
@@ -158,7 +199,7 @@ function Oven({ part }: { part: Module }) {
 function Syringe({ cx, cy }: { cx: number; cy: number }) {
   return (
     <g fill="none" stroke={inkDark} strokeWidth={1.75} strokeLinecap="round">
-      <rect x={cx - 22} y={cy - 7} width={36} height={14} rx={3} fill={liquid} />
+      <rect x={cx - 22} y={cy - 7} width={36} height={14} rx={3} fill={liquidOrganic} stroke="var(--hp-brand)" />
       <path d={`M ${cx + 14} ${cy} H ${cx + 28}`} />
       <path d={`M ${cx - 22} ${cy - 10} V ${cy + 10}`} />
     </g>
@@ -179,9 +220,9 @@ function Vials({ part }: { part: Module }) {
           cx={part.x + cellW * (col + 1)}
           cy={part.y + cellH * (row + 1)}
           r={Math.min(9, cellW * 0.28)}
-          fill={row % 2 === 0 ? liquid : "#d7ebe3"}
+          fill={row % 2 === 0 ? liquidOrganic : liquidAqueous}
           stroke={inkDark}
-          strokeWidth={1.5}
+          strokeWidth={1.4}
         />,
       );
     }
