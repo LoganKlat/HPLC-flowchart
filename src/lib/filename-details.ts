@@ -344,6 +344,122 @@ export function identityFromFileName(fileName: string | null | undefined): RunId
   return null;
 }
 
+/**
+ * Extracts the run's injection number as an integer from the file name
+ * (or optionally inspects text/CSV content if the file name lacks it).
+ * Returns null if no injection number can be determined.
+ */
+export function parseInjectionNumber(fileName: string, content?: string | ArrayBuffer): number | null {
+  const fromString = (str: string): number | null => {
+    const trimmed = str.trim();
+    if (!trimmed) return null;
+
+    // 1. Check standard identity from name
+    const id = identityFromFileName(trimmed);
+    if (id && id.injection) {
+      const num = Number(id.injection);
+      if (Number.isFinite(num) && num > 0) return Math.floor(num);
+    }
+
+    const base = trimmed.replace(/^.*[/\\]/, "").replace(/\.(csv|txt|xlsx)$/i, "");
+
+    // 2. Explicit injection or run patterns:
+    // e.g. "inj_05", "inj-5", "inj 5", "inj05", "injection_05", "run_05", "run-5", "run 5", "run05"
+    const explicitMatch = base.match(/(?:^|[\s_\-./])(?:inj(?:ection)?|run)[\s_\-.:]*(\d+)/i);
+    if (explicitMatch) {
+      const num = Number(explicitMatch[1]);
+      if (Number.isFinite(num) && num > 0) return Math.floor(num);
+    }
+
+    // 3. Group-injection pattern: e.g. "GR09_05", "GR09 05", "Group1-Inj2", "G02-04"
+    const groupMatch = base.match(/(?:^|[\s_\-./])[A-Za-z]+\d*[\s_\-](\d+)/i);
+    if (groupMatch) {
+      const num = Number(groupMatch[1]);
+      if (Number.isFinite(num) && num > 0) return Math.floor(num);
+    }
+
+    // 4. Leading number pattern: e.g. "05_chromatogram", "05-run", "5"
+    const leadingMatch = base.match(/^(\d+)[\s_\-.](?!\d)/);
+    if (leadingMatch) {
+      const num = Number(leadingMatch[1]);
+      // Exclude typical wavelength ranges (e.g. 190-400 nm) or year numbers
+      if (Number.isFinite(num) && num > 0 && num < 200) return Math.floor(num);
+    }
+
+    return null;
+  };
+
+  const fromName = fromString(fileName);
+  if (fromName != null) return fromName;
+
+  if (content) {
+    let text = "";
+    if (typeof content === "string") {
+      text = content.slice(0, 4096);
+    } else if (content instanceof ArrayBuffer) {
+      try {
+        const slice = content.slice(0, 4096);
+        text = new TextDecoder("utf-8", { fatal: false }).decode(slice);
+      } catch {
+        // ignore
+      }
+    }
+
+    if (text) {
+      const dataFileMatch = text.match(/Data File Name[,\t:= ]+([^\r\n]+)/i);
+      if (dataFileMatch) {
+        const val = dataFileMatch[1].trim();
+        const base = val.replace(/^.*[/\\]/, "");
+        const num = fromString(base) ?? fromString(val);
+        if (num != null) return num;
+      }
+
+      const sampleNameMatch = text.match(/Sample Name[,\t:= ]+([^\r\n]+)/i);
+      if (sampleNameMatch) {
+        const val = sampleNameMatch[1].trim();
+        const base = val.replace(/^.*[/\\]/, "");
+        const num = fromString(base) ?? fromString(val);
+        if (num != null) return num;
+      }
+
+      const injLineMatch = text.match(/(?:Injection(?: Number)?|Inj(?:[\s.]*No)?)[,\t:= ]+(\d+)/i);
+      if (injLineMatch) {
+        const num = Number(injLineMatch[1]);
+        if (Number.isFinite(num) && num > 0) return Math.floor(num);
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Sorts an array of items by their parsed injection number in ascending order.
+ * Items with an injection number come first, sorted numerically.
+ * Items without an injection number retain their original relative order at the end.
+ */
+export function sortFilesByInjection<T extends { fileName: string; buffer?: ArrayBuffer | string }>(
+  files: readonly T[],
+): T[] {
+  const decorated = files.map((file, originalIndex) => ({
+    file,
+    originalIndex,
+    injection: parseInjectionNumber(file.fileName, file.buffer),
+  }));
+
+  decorated.sort((a, b) => {
+    if (a.injection != null && b.injection != null) {
+      if (a.injection !== b.injection) return a.injection - b.injection;
+      return a.originalIndex - b.originalIndex;
+    }
+    if (a.injection != null && b.injection == null) return -1;
+    if (a.injection == null && b.injection != null) return 1;
+    return a.originalIndex - b.originalIndex;
+  });
+
+  return decorated.map((d) => d.file);
+}
+
 function nextInjection(raw: string): string {
   const value = Number(raw) + 1;
   const text = String(value);

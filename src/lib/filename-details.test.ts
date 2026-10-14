@@ -10,7 +10,9 @@ import {
   detailsFromFileNameIfEnabled,
   copyableNextRunFileName,
   nextRunFileName,
+  parseInjectionNumber,
   parseRunFileName,
+  sortFilesByInjection,
 } from "@/lib/filename-details";
 import { solventNomograph } from "@/lib/selectivity";
 import { readLabFile } from "@/lib/lab-file";
@@ -554,5 +556,69 @@ describe("run file names", () => {
         wavelength: "254",
       });
     }
+  });
+
+  describe("injection number extraction and multi-file sorting", () => {
+    it("parses injection numbers from standard 15-part filenames", () => {
+      expect(parseInjectionNumber("GR09-05-3-ACN-3-ISO-90-1.5-20-CP-0.1-C18aqP-150x4.6x5-amb-254.xlsx")).toBe(5);
+      expect(parseInjectionNumber("GR09-06-3-ACN-3-ISO-80-1.5-20-CP-0.1-C18aqP-150x4.6x5-amb-254_2191.xlsx")).toBe(6);
+      expect(parseInjectionNumber("GR09-10-3-ACN-3-ISO-40-1.5-20-CP-0.1-C18aqP-150x4.6x5-amb-254.xlsx")).toBe(10);
+      expect(parseInjectionNumber("GR09-14-4-ACN-3-ISO-35-1.5-20u-CP-0.1-C18aqP-150x4.6x5-amb-254.xlsx")).toBe(14);
+      expect(parseInjectionNumber("GR41-06-5-ACN-3-ISO-70-1.5-20u-CP-0.1-BiphP-150x4.6x5-amb-254 (3).csv")).toBe(6);
+    });
+
+    it("parses injection numbers from short filenames and variants", () => {
+      expect(parseInjectionNumber("GR41-04-90.csv")).toBe(4);
+      expect(parseInjectionNumber("GR41-06-70-good.csv")).toBe(6);
+      expect(parseInjectionNumber("GR41-15-38-40C.csv")).toBe(15);
+      expect(parseInjectionNumber("GR41-09-40-ambient.csv")).toBe(9);
+    });
+
+    it("parses explicit injection and run markers", () => {
+      expect(parseInjectionNumber("sample_inj03.csv")).toBe(3);
+      expect(parseInjectionNumber("inj-7.txt")).toBe(7);
+      expect(parseInjectionNumber("run_02.csv")).toBe(2);
+      expect(parseInjectionNumber("run 12.csv")).toBe(12);
+      expect(parseInjectionNumber("GR09_08_sample.csv")).toBe(8);
+      expect(parseInjectionNumber("01_chromatogram.csv")).toBe(1);
+    });
+
+    it("falls back to content inspection when filename is generic", () => {
+      const csvContent = "[Header]\r\nData File Name,C:\\LabSolutions\\GR41-04-5-ACN-3-ISO-90.lcd\r\n";
+      expect(parseInjectionNumber("export.csv", csvContent)).toBe(4);
+
+      const sampleNameContent = "[Sample Information]\r\nSample Name,GR09-08-3-ACN-3-ISO-60\r\n";
+      expect(parseInjectionNumber("data.csv", sampleNameContent)).toBe(8);
+
+      const injLineContent = "Injection Number\t11\r\nSample\tTest\r\n";
+      expect(parseInjectionNumber("unknown.txt", injLineContent)).toBe(11);
+    });
+
+    it("returns null for filenames without an injection indicator", () => {
+      expect(parseInjectionNumber("report.pdf")).toBeNull();
+      expect(parseInjectionNumber("chromatogram.csv")).toBeNull();
+      expect(parseInjectionNumber("")).toBeNull();
+    });
+
+    it("sorts multiple files numerically by injection number", () => {
+      const files = [
+        { fileName: "GR09-10-3-ACN-3-ISO-40-1.5-20-CP-0.1-C18aqP-150x4.6x5-amb-254.xlsx" },
+        { fileName: "GR09-05-3-ACN-3-ISO-90-1.5-20-CP-0.1-C18aqP-150x4.6x5-amb-254.xlsx" },
+        { fileName: "run_2.csv" },
+        { fileName: "GR09-14-4-ACN-3-ISO-35-1.5-20u-CP-0.1-C18aqP-150x4.6x5-amb-254.xlsx" },
+        { fileName: "GR09-06-3-ACN-3-ISO-80-1.5-20-CP-0.1-C18aqP-150x4.6x5-amb-254_2191.xlsx" },
+        { fileName: "unrecognized.csv" },
+      ];
+
+      const sorted = sortFilesByInjection(files);
+      expect(sorted.map((f) => f.fileName)).toEqual([
+        "run_2.csv",
+        "GR09-05-3-ACN-3-ISO-90-1.5-20-CP-0.1-C18aqP-150x4.6x5-amb-254.xlsx",
+        "GR09-06-3-ACN-3-ISO-80-1.5-20-CP-0.1-C18aqP-150x4.6x5-amb-254_2191.xlsx",
+        "GR09-10-3-ACN-3-ISO-40-1.5-20-CP-0.1-C18aqP-150x4.6x5-amb-254.xlsx",
+        "GR09-14-4-ACN-3-ISO-35-1.5-20u-CP-0.1-C18aqP-150x4.6x5-amb-254.xlsx",
+        "unrecognized.csv",
+      ]);
+    });
   });
 });

@@ -5,35 +5,68 @@ import { UploadCloud } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
+export type DroppedFile = {
+  fileName: string;
+  buffer: ArrayBuffer;
+};
+
 type FileDropProps = {
   prompt: string;
   reading: boolean;
   onBegin: (fileName: string) => void;
   onBuffer: (fileName: string, buffer: ArrayBuffer) => void;
   onProblem: (fileName: string, message: string) => void;
+  onBatch?: (files: DroppedFile[]) => void;
 };
 
-export function FileDrop({ prompt, reading, onBegin, onBuffer, onProblem }: FileDropProps) {
+export function FileDrop({ prompt, reading, onBegin, onBuffer, onProblem, onBatch }: FileDropProps) {
   const inputId = useId();
   const [dragging, setDragging] = useState(false);
 
-  async function takeFile(file: File | undefined) {
-    if (!file || reading) return;
-    const lower = file.name.toLowerCase();
-    if (!lower.endsWith(".csv") && !lower.endsWith(".txt") && !lower.endsWith(".xlsx")) {
-      onProblem(file.name, "Choose a LabSolutions export. It should be a .csv, .txt, or .xlsx file.");
+  async function takeFiles(fileList: FileList | File[] | null | undefined) {
+    if (!fileList || reading) return;
+    const rawFiles = Array.from(fileList);
+    if (rawFiles.length === 0) return;
+
+    const validFiles: File[] = [];
+    for (const file of rawFiles) {
+      const lower = file.name.toLowerCase();
+      if (!lower.endsWith(".csv") && !lower.endsWith(".txt") && !lower.endsWith(".xlsx")) {
+        onProblem(file.name, "Choose a LabSolutions export. It should be a .csv, .txt, or .xlsx file.");
+        continue;
+      }
+      if (file.size === 0) {
+        onProblem(file.name, "This file is empty.");
+        continue;
+      }
+      validFiles.push(file);
+    }
+
+    if (validFiles.length === 0) return;
+
+    if (onBatch) {
+      const items: DroppedFile[] = [];
+      for (const file of validFiles) {
+        try {
+          const buffer = await file.arrayBuffer();
+          items.push({ fileName: file.name, buffer });
+        } catch {
+          onProblem(file.name, "This file could not be opened. Please try again.");
+        }
+      }
+      if (items.length > 0) {
+        onBatch(items);
+      }
       return;
     }
-    if (file.size === 0) {
-      onProblem(file.name, "This file is empty.");
-      return;
-    }
-    onBegin(file.name);
+
+    const first = validFiles[0];
+    onBegin(first.name);
     try {
-      const buffer = await file.arrayBuffer();
-      onBuffer(file.name, buffer);
+      const buffer = await first.arrayBuffer();
+      onBuffer(first.name, buffer);
     } catch {
-      onProblem(file.name, "This file could not be opened. Please try again.");
+      onProblem(first.name, "This file could not be opened. Please try again.");
     }
   }
 
@@ -56,8 +89,9 @@ export function FileDrop({ prompt, reading, onBegin, onBuffer, onProblem }: File
         }}
         onDrop={(event) => {
           event.preventDefault();
+          event.stopPropagation();
           setDragging(false);
-          void takeFile(event.dataTransfer.files?.[0]);
+          void takeFiles(event.dataTransfer.files);
         }}
         className="relative flex min-h-[24rem] flex-1 flex-col items-center justify-center p-4 sm:p-8 text-center transition-all"
       >
@@ -77,7 +111,7 @@ export function FileDrop({ prompt, reading, onBegin, onBuffer, onProblem }: File
               {reading ? "Reading your chromatogram…" : prompt}
             </p>
             <p className="max-w-md text-xs sm:text-sm text-muted-foreground">
-              LabSolutions export (.csv, .txt, or .xlsx). Drag and drop your file here, or click to browse.
+              LabSolutions export (.csv, .txt, or .xlsx). Drag and drop one or multiple files here, or click to browse. Multiple files are automatically sorted by injection number.
             </p>
           </div>
           <div
@@ -87,18 +121,19 @@ export function FileDrop({ prompt, reading, onBegin, onBuffer, onProblem }: File
               reading && "opacity-50",
             )}
           >
-            <span>{reading ? "Processing file…" : "Choose a file"}</span>
+            <span>{reading ? "Processing file(s)…" : "Choose file(s)"}</span>
           </div>
         </div>
         <input
           id={inputId}
           type="file"
+          multiple
           accept=".csv,.txt,.xlsx,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-          aria-label="Choose a file"
+          aria-label="Choose file(s)"
           disabled={reading}
           className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
           onChange={(event) => {
-            void takeFile(event.target.files?.[0]);
+            void takeFiles(event.target.files);
             event.target.value = "";
           }}
         />

@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { ArrowRight, Gauge, GitBranch, Info, Moon, PanelLeftClose, PanelLeftOpen, Settings, Sliders, Sun, TableProperties, Trash2, type LucideIcon } from "lucide-react";
+import { ArrowRight, Gauge, GitBranch, Info, Moon, PanelLeftClose, PanelLeftOpen, Settings, Sliders, Sun, TableProperties, Trash2, UploadCloud, type LucideIcon } from "lucide-react";
 import { RunDataPanel } from "@/components/run-data-panel";
-import { FileDrop } from "@/components/file-drop";
+import { FileDrop, type DroppedFile } from "@/components/file-drop";
 import { AboutPanel } from "@/components/about-panel";
 import { SettingsPanel } from "@/components/settings-panel";
 import { BackwardsChoiceButtons, BackwardsRetentionView, EfficiencyChoiceButtons, EfficiencyChoiceView, LeaveSelectivityAsk, LeaveSelectivityButtons, LeaveSelectivityDone } from "@/components/leave-selectivity";
@@ -20,7 +20,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { THEME_STORAGE_KEY } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import { evaluateRun, parseUserCount, parseUserNumber, type RuleNumbers } from "@/lib/evaluate";
-import { detailsFromFileNameIfEnabled, parseRunFileName } from "@/lib/filename-details";
+import { detailsFromFileNameIfEnabled, parseInjectionNumber, parseRunFileName, sortFilesByInjection } from "@/lib/filename-details";
 import { type LabFileRead } from "@/lib/lab-file";
 import {
   decideRetention,
@@ -527,6 +527,61 @@ export function HplcApp() {
     setIntermediateMode(null);
     setFileNameNotes({});
     setFillFromFileName(true);
+    setIsWindowDragging(false);
+    dragCounter.current = 0;
+  }
+
+  const [isWindowDragging, setIsWindowDragging] = useState(false);
+  const dragCounter = useRef(0);
+
+  function handleWindowDragEnter(event: React.DragEvent) {
+    if (event.dataTransfer?.types?.includes("Files")) {
+      event.preventDefault();
+      dragCounter.current += 1;
+      setIsWindowDragging(true);
+    }
+  }
+
+  function handleWindowDragOver(event: React.DragEvent) {
+    if (event.dataTransfer?.types?.includes("Files")) {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "copy";
+    }
+  }
+
+  function handleWindowDragLeave(event: React.DragEvent) {
+    if (event.dataTransfer?.types?.includes("Files")) {
+      event.preventDefault();
+      dragCounter.current = Math.max(0, dragCounter.current - 1);
+      if (dragCounter.current === 0) {
+        setIsWindowDragging(false);
+      }
+    }
+  }
+
+  async function handleWindowDrop(event: React.DragEvent) {
+    event.preventDefault();
+    dragCounter.current = 0;
+    setIsWindowDragging(false);
+    const fileList = event.dataTransfer?.files;
+    if (!fileList || fileList.length === 0) return;
+
+    const validFiles: DroppedFile[] = [];
+    for (const file of Array.from(fileList)) {
+      const lower = file.name.toLowerCase();
+      if (!lower.endsWith(".csv") && !lower.endsWith(".txt") && !lower.endsWith(".xlsx")) continue;
+      if (file.size === 0) continue;
+      try {
+        const buffer = await file.arrayBuffer();
+        validFiles.push({ fileName: file.name, buffer });
+      } catch {
+        // ignore unreadable files
+      }
+    }
+
+    if (validFiles.length > 0) {
+      void acceptBatch(shown, validFiles);
+    }
   }
 
   const checks = useMemo(() => toRuleNumbers(rules), [rules]);
@@ -868,32 +923,219 @@ export function HplcApp() {
     patchRun(index, { status: "reading", fileName, read: null, message: null });
   }
 
-  async function acceptBuffer(index: number, fileName: string, buffer: ArrayBuffer) {
-    const generation = readGeneration.current;
-    applyAddedFile(index, fileName, fillFromFileName);
-    patchRun(index, { status: "reading", fileName, read: null, message: null });
-    uploadControllers.current.get(index)?.abort();
-    const controller = new AbortController();
-    uploadControllers.current.set(index, controller);
-    try {
-      const read = await readLabFileAsync(buffer, controller.signal);
-      if (controller.signal.aborted || generation !== readGeneration.current) return;
-      if (read.blockingMessage) {
-        patchRun(index, { status: "error", fileName, read: null, message: read.blockingMessage });
-        return;
+  function determineTargetStart(
+    startIndex: number,
+    sortedFiles: DroppedFile[],
+    existingRuns: RunState[],
+  ): number {
+    if (startIndex <= 0 || existingRuns.length === 0 || sortedFiles.length <= 1) return startIndex;
+
+    const firstDropInj = parseInjectionNumber(sortedFiles[0].fileName, sortedFiles[0].buffer);
+    if (firstDropInj == null) return startIndex;
+
+    const existingInjections = existingRuns.map((r) =>
+      r.fileName ? parseInjectionNumber(r.fileName) : null,
+    );
+
+    // If an existing run already has this exact injection number, align with it:
+    for (let i = 0; i < existingInjections.length; i++) {
+      const exInj = existingInjections[i];
+      if (exInj != null && firstDropInj === exInj) {
+        return i;
       }
-      patchRun(index, { status: "ready", fileName, read, message: null });
-    } catch (error) {
-      if (controller.signal.aborted || generation !== readGeneration.current) return;
-      patchRun(index, {
-        status: "error",
-        fileName,
-        read: null,
-        message: error instanceof Error ? error.message : "This file could not be read.",
-      });
-    } finally {
-      if (uploadControllers.current.get(index) === controller) uploadControllers.current.delete(index);
     }
+
+    // If lowest dropped injection is <= the first existing run's injection, reset to 0:
+    const firstExistingInj = existingInjections.find((inj): inj is number => inj != null);
+    if (firstExistingInj != null && firstDropInj <= firstExistingInj) {
+      return 0;
+    }
+
+    return startIndex;
+  }
+
+  async function acceptBatch(startIndex: number, rawFiles: DroppedFile[]) {
+    if (rawFiles.length === 0) return;
+    const sortedFiles = sortFilesByInjection(rawFiles);
+    const targetStart = determineTargetStart(startIndex, sortedFiles, runsRef.current);
+
+    // Abort existing uploads from targetStart onward
+    for (const [runIndex, controller] of uploadControllers.current) {
+      if (runIndex >= targetStart) {
+        controller.abort();
+        uploadControllers.current.delete(runIndex);
+      }
+    }
+
+    const generation = readGeneration.current;
+    const nextRuns = runsRef.current.slice(0, targetStart);
+    let currentDetails = detailsRef.current;
+    const updatedNotes: Record<number, string | null> = {};
+
+    for (let i = 0; i < sortedFiles.length; i++) {
+      const runIdx = targetStart + i;
+      const file = sortedFiles[i];
+
+      if (runIdx === 0) {
+        if (fillFromFileName) {
+          const parsed = detailsFromFileNameIfEnabled(currentDetails, file.fileName, true);
+          const next = parsed.apply ? { ...parsed, details: withoutUltraColumn(parsed.details, columns) } : parsed;
+          if (next.apply) {
+            currentDetails = next.details;
+            updatedNotes[0] = null;
+            nextRuns[0] = {
+              ...emptyRun(),
+              status: "reading",
+              fileName: file.fileName,
+              percentB: next.details.percentB,
+              percentEdited: true,
+              temperature: next.details.temperature,
+              temperatureEdited: next.details.temperature.trim() !== "",
+              solvent: next.details.solvent,
+              solventEdited: next.details.solvent.trim() !== "",
+              ligand: next.details.ligand,
+              ligandEdited: next.details.ligand.trim() !== "",
+              rest: pickRest(next.details),
+            };
+          } else {
+            updatedNotes[0] = next.note;
+            nextRuns[0] = {
+              ...emptyRun(),
+              status: "reading",
+              fileName: file.fileName,
+            };
+          }
+        } else {
+          nextRuns[0] = {
+            ...emptyRun(),
+            status: "reading",
+            fileName: file.fileName,
+          };
+        }
+      } else {
+        if (fillFromFileName) {
+          const inherited = inheritedRest(runIdx, nextRuns, currentDetails);
+          const baseForRun: RunDetails = {
+            ...currentDetails,
+            ...inherited,
+          };
+          const parsed = detailsFromFileNameIfEnabled(baseForRun, file.fileName, true);
+          const next = parsed.apply ? { ...parsed, details: withoutUltraColumn(parsed.details, columns) } : parsed;
+          if (next.apply) {
+            updatedNotes[runIdx] = null;
+            const rest: RestDetails = {
+              coreShell: next.details.coreShell,
+              poreSize: next.details.poreSize,
+              carbonLoad: next.details.carbonLoad,
+              lengthMm: next.details.lengthMm,
+              diameterMm: next.details.diameterMm,
+              particleSize: next.details.particleSize,
+              ph: next.details.ph,
+              method: next.details.method,
+              flowRate: next.details.flowRate,
+              injectionVolume: next.details.injectionVolume,
+              sampleType: next.details.sampleType,
+              sampleConcentration: next.details.sampleConcentration,
+              wavelength: next.details.wavelength,
+            };
+            nextRuns[runIdx] = {
+              ...emptyRun(),
+              status: "reading",
+              fileName: file.fileName,
+              percentB: next.details.percentB,
+              percentEdited: true,
+              temperature: next.details.temperature,
+              temperatureEdited: true,
+              solvent: next.details.solvent,
+              solventEdited: true,
+              ligand: next.details.ligand,
+              ligandEdited: true,
+              rest,
+            };
+          } else {
+            updatedNotes[runIdx] = next.note;
+            nextRuns[runIdx] = {
+              ...emptyRun(),
+              status: "reading",
+              fileName: file.fileName,
+            };
+          }
+        } else {
+          nextRuns[runIdx] = {
+            ...emptyRun(),
+            status: "reading",
+            fileName: file.fileName,
+          };
+        }
+      }
+    }
+
+    if (targetStart === 0 && fillFromFileName) {
+      onDetails(currentDetails);
+    }
+    setFileNameNotes((curr) => ({ ...curr, ...updatedNotes }));
+    setRuns(nextRuns);
+    setActive(targetStart + sortedFiles.length - 1);
+
+    // Set up AbortControllers for each run in the batch
+    sortedFiles.forEach((_, i) => {
+      const runIdx = targetStart + i;
+      const controller = new AbortController();
+      uploadControllers.current.set(runIdx, controller);
+    });
+
+    // Start all workers in parallel
+    const parsePromises = sortedFiles.map((file, i) => {
+      const runIdx = targetStart + i;
+      const controller = uploadControllers.current.get(runIdx)!;
+      return readLabFileAsync(file.buffer, controller.signal)
+        .then((read) => ({ runIdx, fileName: file.fileName, read, error: null }))
+        .catch((error) => ({
+          runIdx,
+          fileName: file.fileName,
+          read: null,
+          error: error instanceof Error ? error.message : "This file could not be read.",
+        }));
+    });
+
+    // Resolve in order to ensure monotonically increasing ready prefix
+    for (let i = 0; i < parsePromises.length; i++) {
+      const result = await parsePromises[i];
+      if (generation !== readGeneration.current) return;
+      const controller = uploadControllers.current.get(result.runIdx);
+      if (controller?.signal.aborted) return;
+
+      if (uploadControllers.current.get(result.runIdx) === controller) {
+        uploadControllers.current.delete(result.runIdx);
+      }
+
+      if (result.error || result.read?.blockingMessage) {
+        patchRun(result.runIdx, {
+          status: "error",
+          fileName: result.fileName,
+          read: null,
+          message: result.error ?? result.read?.blockingMessage ?? "This file could not be read.",
+        });
+        setActive(result.runIdx);
+        for (let j = i + 1; j < parsePromises.length; j++) {
+          const remIdx = targetStart + j;
+          uploadControllers.current.get(remIdx)?.abort();
+          uploadControllers.current.delete(remIdx);
+        }
+        break;
+      } else {
+        patchRun(result.runIdx, {
+          status: "ready",
+          fileName: result.fileName,
+          read: result.read,
+          message: null,
+        });
+      }
+    }
+  }
+
+  async function acceptBuffer(index: number, fileName: string, buffer: ArrayBuffer) {
+    await acceptBatch(index, [{ fileName, buffer }]);
   }
 
   function acceptProblem(index: number, fileName: string, message: string) {
@@ -934,7 +1176,26 @@ export function HplcApp() {
   });
 
   return (
-    <div className="flex h-dvh max-h-dvh w-full flex-none flex-col overflow-hidden">
+    <div
+      className="relative flex h-dvh max-h-dvh w-full flex-none flex-col overflow-hidden"
+      onDragEnter={handleWindowDragEnter}
+      onDragOver={handleWindowDragOver}
+      onDragLeave={handleWindowDragLeave}
+      onDrop={handleWindowDrop}
+    >
+      {isWindowDragging ? (
+        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-background/90 backdrop-blur-xs border-4 border-dashed border-[var(--hp-brand)] p-8 text-center pointer-events-none animate-in fade-in-0 duration-150">
+          <div className="flex size-20 items-center justify-center rounded-full bg-[var(--hp-soft)] text-[var(--hp-brand)] ring-2 ring-[var(--hp-brand)]/40 mb-4 animate-bounce">
+            <UploadCloud className="size-10" aria-hidden="true" />
+          </div>
+          <h2 className="font-heading text-2xl font-bold text-foreground">
+            Drop LabSolutions files here
+          </h2>
+          <p className="max-w-md text-sm text-muted-foreground mt-2">
+            Files are automatically ordered by injection number and loaded into your runs.
+          </p>
+        </div>
+      ) : null}
       {/* Topmost Title Bar */}
       <div
         id="top-title-bar"
@@ -1104,6 +1365,7 @@ export function HplcApp() {
                 onChooseLigand={(value) => setRunLigand(index + 1, value)}
                 tempPath={(runActivePos >= 0 ? tempPathByRun[runActivePos] : undefined) ?? tempPathByRun[index] ?? null}
                 onTempPath={(path) => chooseTempPath(index, path)}
+                onBatch={acceptBatch}
                 onBegin={beginRead}
                 onBuffer={acceptBuffer}
                 onProblem={acceptProblem}
@@ -1368,6 +1630,7 @@ function RunPane({
   onChooseLigand,
   tempPath,
   onTempPath,
+  onBatch,
   onBegin,
   onBuffer,
   onProblem,
@@ -1410,6 +1673,7 @@ function RunPane({
   onChooseLigand: (value: string) => void;
   tempPath: TempPath | null;
   onTempPath: (path: TempPath) => void;
+  onBatch?: (startIndex: number, files: DroppedFile[]) => void;
   onBegin: (index: number, fileName: string) => void;
   onBuffer: (index: number, fileName: string, buffer: ArrayBuffer) => void;
   onProblem: (index: number, fileName: string, message: string) => void;
@@ -1736,6 +2000,7 @@ function RunPane({
                     : "Drop in the lab file from the run at this %B."
               }
               reading={run.status === "reading"}
+              onBatch={onBatch ? (files) => void onBatch(index, files) : undefined}
               onBegin={(fileName) => onBegin(index, fileName)}
               onBuffer={(fileName, buffer) => void onBuffer(index, fileName, buffer)}
               onProblem={(fileName, message) => onProblem(index, fileName, message)}
