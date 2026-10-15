@@ -1029,7 +1029,7 @@ function plan40(
       ? res != null && Number.isFinite(res)
         ? `Critical pair resolution is ${formatResolution(res)} (${res + 1e-9 >= args.setup.minResolution ? "Rs ≥ spec" : "Rs < spec"}).`
         : "Critical pair resolution is not assessable."
-      : "";
+      : "You did not type a minimum resolution, so how close the worst pair is cannot be judged against the specification.";
 
   const leadWhy = [
     `Condition: ${tag}.\n\nWhat this means: Baseline run at ${percent}% B has ${formatCount(args.baseline.peakCount ?? 0)} detected peaks (${args.setup.requiredPeaks ? `${formatCount(args.baseline.peakCount ?? 0)} of ${formatCount(args.setup.requiredPeaks)} spec` : "no peak spec"}). The last peak elutes at ${args.baseline.lastPeakTimeMin != null ? `${formatMinutes(args.baseline.lastPeakTimeMin)} min` : "unknown time"}, and back-pressure is ${args.baseline.maxBackPressurePsi != null ? `${formatDecimal(args.baseline.maxBackPressurePsi, 1)} psi` : "unrecorded"}. ${resPhrase}`.trim(),
@@ -1037,11 +1037,9 @@ function plan40(
   ];
 
   const moreWhy = [
-    `The next chromatogram is 40°C, still at ${percent}% B.`,
-    onceChecks(args.baseline, args.setup),
-    onceReason(args.baseline, args.setup),
+    `Thermal selectivity screening at 40°C: When retention adjustments at ambient temperature do not resolve all critical pairs, temperature elevation provides the first selectivity axis. In reversed-phase chromatography under the van 't Hoff relationship (ln k = −ΔH°/(RT) + ΔS°/R + ln Φ), individual analytes possess unique standard enthalpies of transfer (ΔH°) between the stationary and mobile phases. Increasing column temperature to 40°C alters the partition coefficients at differential rates, shifting critical pair relative retention (α = k2/k1) while simultaneously reducing mobile phase viscosity and accelerating elution. Maintaining ${percent}% B preserves the retention foundation while thermal effects separate co-eluting peaks.`,
     args.ambient.assumed ? args.ambient.sentence : "",
-    "Why temperature (40°C) is the first selectivity step: Column thermostatting is rapid, non-destructive, and requires no solvent changeover or line flushing. Under the van 't Hoff relationship (ln k = −ΔH°/(RT) + ΔS°/R + ln Φ), different analytes possess distinct standard molar enthalpies of transfer (ΔH°) between mobile and stationary phases. Elevating temperature alters retention factors at different rates, changing relative selectivity between critical pairs while lowering mobile phase viscosity and column back-pressure.",
+    "Why temperature (40°C) is the first selectivity step: Column thermostatting is rapid, non-destructive, and requires no solvent changeover or line flushing. Elevating temperature alters retention factors at different rates, changing relative selectivity between critical pairs while lowering mobile phase viscosity and column back-pressure.",
   ].filter((line) => line.trim().length > 0);
 
   return {

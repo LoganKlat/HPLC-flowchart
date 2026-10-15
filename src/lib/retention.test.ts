@@ -1108,7 +1108,7 @@ describe("which run to carry forward after the calculated %B", () => {
     expect(normalPath.tableAction).toBe("SELECTIVITY");
     expect(normalPath.nextTemperature).toBe("40");
     expect(normalPath.nextPercentB).toBe(40);
-    expect(normalPath.why).toContain("Row 7");
+    expect(normalPath.why).toContain("Resolution below floor");
     expect(normalPath.why).toContain("significantly under the specification");
     expect(normalPath.why).toContain("optimise retention and selectivity first");
 
@@ -1674,7 +1674,7 @@ describe("12-row chromatographic decision table with dynamic resolution floor", 
     expect(dec.tableAction).toContain("Change selectivity");
     expect(dec.tableAction).toContain("intermediate %B");
     expect(dec.nextTemperature).toBe("40");
-    expect(dec.why).toContain("Row 3");
+    expect(dec.why).toContain("Minimum %B completed");
   });
 
   it("Row 4: Peaks = 7, tR << spec, Rs < floor -> Increase L (watch BP)", () => {
@@ -1689,7 +1689,7 @@ describe("12-row chromatographic decision table with dynamic resolution floor", 
     const dec = decideRetention([s], tableRules);
     expect(dec.status).toBe("efficiency");
     expect(dec.tableAction).toBe("Increase L (watch BP)");
-    expect(dec.why).toContain("Row 4");
+    expect(dec.why).toContain("Resolution below floor with extensive run-time headroom");
     expect(dec.awesomeFloor).not.toBeNull();
     expect(dec.awesomeFloor?.verdict).toBe("impossible-selectivity-needed");
   });
@@ -1706,7 +1706,7 @@ describe("12-row chromatographic decision table with dynamic resolution floor", 
     const dec = decideRetention([s], tableRules);
     expect(dec.status).toBe("efficiency");
     expect(dec.tableAction).toBe("Increase L (BP) OR decrease F OR decrease PS (BP) OR SPP");
-    expect(dec.why).toContain("Row 5");
+    expect(dec.why).toContain("Resolution above floor with extensive run-time headroom");
   });
 
   it("Row 6: Peaks = 7, tR << spec, Rs >= spec -> MET. Optionally increase F to shorten the run", () => {
@@ -1721,7 +1721,7 @@ describe("12-row chromatographic decision table with dynamic resolution floor", 
     const dec = decideRetention([s], tableRules);
     expect(dec.status).toBe("specs-met");
     expect(dec.tableAction).toBe("MET. Optionally increase F to shorten the run");
-    expect(dec.why).toContain("Row 6");
+    expect(dec.why).toContain("All specifications met with extensive run-time headroom");
   });
 
   it("Row 7: Peaks = 7, tR < spec, Rs < floor -> SELECTIVITY", () => {
@@ -1737,7 +1737,7 @@ describe("12-row chromatographic decision table with dynamic resolution floor", 
     expect(dec.status).toBe("recommend");
     expect(dec.tableAction).toBe("SELECTIVITY");
     expect(dec.nextTemperature).toBe("40");
-    expect(dec.why).toContain("Row 7");
+    expect(dec.why).toContain("Resolution below floor");
   });
 
   it("Row 8: Peaks = 7, tR < spec, floor <= Rs < spec -> Decrease F OR decrease PS (BP) OR SPP", () => {
@@ -1752,7 +1752,7 @@ describe("12-row chromatographic decision table with dynamic resolution floor", 
     const dec = decideRetention([s], tableRules);
     expect(dec.status).toBe("efficiency");
     expect(dec.tableAction).toBe("Decrease F OR decrease PS (BP) OR SPP");
-    expect(dec.why).toContain("Row 8");
+    expect(dec.why).toContain("Resolution above floor within run-time limit");
   });
 
   it("Row 9: Peaks = 7, tR < spec, Rs >= spec -> MET. Optionally increase F to shorten the run", () => {
@@ -1767,7 +1767,7 @@ describe("12-row chromatographic decision table with dynamic resolution floor", 
     const dec = decideRetention([s], tableRules);
     expect(dec.status).toBe("specs-met");
     expect(dec.tableAction).toBe("MET. Optionally increase F to shorten the run");
-    expect(dec.why).toContain("Row 9");
+    expect(dec.why).toContain("All specifications met");
   });
 
   it("Row 10: Peaks = 7, tR > spec, Rs < floor -> SELECTIVITY", () => {
@@ -1783,7 +1783,7 @@ describe("12-row chromatographic decision table with dynamic resolution floor", 
     expect(dec.status).toBe("recommend");
     expect(dec.tableAction).toBe("SELECTIVITY");
     expect(dec.nextTemperature).toBe("40");
-    expect(dec.why).toContain("Row 10");
+    expect(dec.why).toContain("Resolution below floor with late elution");
   });
 
   it("Row 11: Peaks = 7, tR > spec, floor <= Rs < spec -> Decrease PS (BP), then increase F to shorten the run", () => {
@@ -1798,7 +1798,7 @@ describe("12-row chromatographic decision table with dynamic resolution floor", 
     const dec = decideRetention([s], tableRules);
     expect(dec.status).toBe("efficiency");
     expect(dec.tableAction).toBe("Decrease PS (BP), then increase F to shorten the run");
-    expect(dec.why).toContain("Row 11");
+    expect(dec.why).toContain("Resolution above floor with late elution");
   });
 
   it("Row 12: Peaks = 7, tR > spec, Rs >= spec -> Increase F to shorten the run", () => {
@@ -1813,7 +1813,7 @@ describe("12-row chromatographic decision table with dynamic resolution floor", 
     const dec = decideRetention([s], tableRules);
     expect(dec.status).toBe("efficiency");
     expect(dec.tableAction).toBe("Increase F to shorten the run");
-    expect(dec.why).toContain("Row 12");
+    expect(dec.why).toContain("Resolution met with late elution");
   });
 });
 

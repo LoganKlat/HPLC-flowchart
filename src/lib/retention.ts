@@ -335,7 +335,6 @@ export function decideRetention(
     const moreWhy = [
       `The pressure is already too high to lower %B. This run reached ${measured} psi. The specification is ${limit} psi. A lower %B is a weaker solvent, so the compounds stay on the column longer and the back-pressure usually rises. That longer stay is higher retention. Selectivity and efficiency are not why this step stops.`,
       `In reversed-phase HPLC, decreasing %B increases the aqueous fraction of the mobile phase. Water-organic mixtures exhibit significantly higher dynamic viscosity than pure organic solvent (viscosity reaches a maximum at intermediate water-organic ratios due to extensive hydrogen-bonding networks). According to the Darcy equation (ΔP = η·u·L / K0), column pressure drop is directly proportional to mobile phase viscosity (η). Lowering %B would therefore increase both analyte retention and column back-pressure, worsening the pressure violation and risking column packing compaction, system fitting leaks, or pump pressure cutoffs.`,
-      ...ruleLines(current, complete, judgeEqualPeaks(current, complete)),
     ];
     return blocked(
       "pressure",
@@ -521,18 +520,16 @@ function minimumAlreadyRun(sample?: RetentionSample, rules?: CompleteRules): Ret
     specBP: rules.maxBackPressurePsi,
   }) : `(Peaks < ${req}, tR > spec, BP < spec)`;
 
+  const currentPercent = sample?.percentB != null ? formatPercentB(sample.percentB) : "50";
+
   const leadWhy = [
-    `Condition: ${tag}.\n\nWhat this means: The minimum %B from the last-peak line has already been evaluated. Peak count is ${sample?.peakCount != null ? formatCount(sample.peakCount) : "short"} of ${formatCount(req)} required peaks (Peaks < ${req}), and retention adjustments alone cannot resolve the remaining overlapping peaks.`,
-    `Influence & Decision: Row 3 (Peaks < ${req}, tR > spec): Change selectivity (solvent, temperature, ligand). Staying in retention does not calculate another minimum %B, and it does not refit the last-peak line. Action: Select a %B of your choosing and proceed to selectivity at 40°C at that %B.`,
+    `Condition: ${tag}.\n\nWhat this means: The minimum %B targeting the specified run time has already been evaluated. Peak count is ${sample?.peakCount != null ? formatCount(sample.peakCount) : "short"} of ${formatCount(req)} required peaks (Peaks < ${req}), and retention adjustments alone cannot resolve the remaining overlapping peaks.`,
+    `Influence & Decision: Minimum %B completed (Peaks < ${req}, tR > spec): Change selectivity (solvent, temperature, ligand) or select a %B of your choosing. The calculated minimum %B has been run once; staying in retention does not calculate another minimum %B, and it does not refit the last-peak line. Action: Select a %B of your choosing where separation is greatest, or proceed to selectivity at 40°C at ${currentPercent}% B.`,
   ];
 
   const moreWhy = [
-    `Row 3 (Peaks < ${req}, tR > spec): Change selectivity (solvent, temperature, ligand).`,
-    "The minimum %B from the last-peak line has already been run.",
-    "Staying in retention does not calculate another minimum %B, and it does not refit the last-peak line.",
-    "Select a %B of your choosing. With that %B, selectivity starts at 40°C.",
-    sample && rules ? ruleLines(sample, rules, judgeEqualPeaks(sample, rules)).join("\n\n") : "",
-  ].filter(Boolean);
+    `The minimum %B targeting the specified run time has already been evaluated. Because peak count remains below the required mixture specification, retention adjustments alone cannot resolve the remaining co-eluting peaks. In reversed-phase HPLC, analytes with identical hydrophobic partition coefficients under ambient conditions cannot be resolved simply by altering solvent strength. You may select a %B of your choosing between previously tested runs to inspect where chromatographic separation is greatest, or proceed to selectivity at 40°C. Elevating column temperature to 40°C alters relative analyte retention (α = k2/k1) to separate overlapping peaks while simultaneously accelerating elution and reducing mobile phase viscosity.`,
+  ];
 
   return {
     status: "recommend",
@@ -543,7 +540,7 @@ function minimumAlreadyRun(sample?: RetentionSample, rules?: CompleteRules): Ret
     pickOwnPercent: true,
     actionText: "Run at 40°C (Change selectivity)",
     tableAction,
-    nextChange: "Select a %B of your choosing. The next run is selectivity at 40°C at that %B.",
+    nextChange: "Select an intermediate %B of your choosing, or proceed to selectivity at 40°C.",
     following: SELECTIVITY_ORDER,
     leadWhy,
     moreWhy,
@@ -708,8 +705,8 @@ function sevenPeaksSelectivity(
 
   const rowDescription =
     rowNumber === 7
-      ? `Row 7 (Peaks = ${rules.requiredPeaks}, tR < spec, Rs < floor):`
-      : `Row 10 (Peaks = ${rules.requiredPeaks}, tR > spec, Rs < floor):`;
+      ? `Resolution below floor (Peaks = ${rules.requiredPeaks}, tR < spec, Rs < floor):`
+      : `Resolution below floor with late elution (Peaks = ${rules.requiredPeaks}, tR > spec, Rs < floor):`;
 
   const timeDesc =
     rowNumber === 7
@@ -722,11 +719,11 @@ function sevenPeaksSelectivity(
   ];
 
   const moreWhy = [
+    ...ruleLines(sample, rules, judged),
     calc
       ? `Theoretical plate count & resolution floor analysis: With current theoretical plates N1 = ${Math.round(calc.n1)}, the maximum theoretical plates achievable within run time and pressure limits are Nmax,FPP = ${Math.round(calc.nMaxFpp)} (fully porous) and Nmax,SPP = ${Math.round(calc.nMaxSpp)} (superficially porous). Headroom HR = ${calc.headroom.toFixed(3)}. The minimum resolution required to reach the specification via efficiency levers is Rs,floor,SPP = ${floorRs}. Verdict: ${calc.verdictText}.`
       : `Resolution scaling analysis: When critical pair resolution is below the resolution floor, efficiency levers alone cannot mathematically rescue separation within practical constraints.`,
     `Thermal selectivity mechanism: In reversed-phase chromatography, changing column temperature from ambient to 40°C alters standard transfer enthalpies (ΔH°) differently for each analyte, shifting overlapping peak positions relative to each other (selectivity factor α = k2/k1) while simultaneously decreasing mobile phase viscosity and accelerating elution.`,
-    ...ruleLines(sample, rules, judged),
   ];
 
   return {
@@ -777,35 +774,35 @@ function efficiencyDecision(
 
   switch (rowNumber) {
     case 4:
-      rowHeading = `Row 4 (Peaks = ${rules.requiredPeaks}, tR ≪ spec, Rs < floor):`;
+      rowHeading = `Resolution below floor with extensive run-time headroom (Peaks = ${rules.requiredPeaks}, tR ≪ spec, Rs < floor):`;
       actionText = "Increase L (watch BP)";
       timeDesc = `The last peak elutes at ${formatMinutes(sample.lastPeakTimeMin!)} min, substantially under the specification limit of ${formatTypedMinutes(rules.lastPeakTimeMin)} min (tR ≪ spec).`;
       rsDesc = `Critical pair resolution (${measuredRs}) is below the standard resolution floor (${floorRs}), but the extensive run-time headroom allows column length to be increased.`;
       decisionWhy = `Although critical pair resolution (${measuredRs}) is below the standard resolution floor for the current column length, the substantial run-time headroom allows increasing column length (L). Increasing L increases theoretical plates (N) and resolution (Rs) while run time remains safely within specification, provided column back-pressure is monitored.`;
       break;
     case 5:
-      rowHeading = `Row 5 (Peaks = ${rules.requiredPeaks}, tR ≪ spec, floor ≤ Rs < spec):`;
+      rowHeading = `Resolution above floor with extensive run-time headroom (Peaks = ${rules.requiredPeaks}, tR ≪ spec, floor ≤ Rs < spec):`;
       actionText = "Increase L (BP) OR decrease F OR decrease PS (BP) OR SPP";
       timeDesc = `The last peak elutes at ${formatMinutes(sample.lastPeakTimeMin!)} min, substantially under the specification limit of ${formatTypedMinutes(rules.lastPeakTimeMin)} min (tR ≪ spec).`;
       rsDesc = `Critical pair resolution (${measuredRs}) is at or above the resolution floor (${floorRs} ≤ Rs < ${specRs}), meaning column efficiency can mathematically achieve baseline separation.`;
       decisionWhy = `Multiple efficiency levers can reach the target resolution: increase column length (L) while watching back-pressure, decrease flow rate (F) toward the Van Deemter optimum, decrease particle size (PS) while watching back-pressure, or switch to a superficially porous (SPP / core-shell) column (verdict: ${calc.verdictText}).`;
       break;
     case 8:
-      rowHeading = `Row 8 (Peaks = ${rules.requiredPeaks}, tR < spec, floor ≤ Rs < spec):`;
+      rowHeading = `Resolution above floor within run-time limit (Peaks = ${rules.requiredPeaks}, tR < spec, floor ≤ Rs < spec):`;
       actionText = "Decrease F OR decrease PS (BP) OR SPP";
       timeDesc = `The last peak elutes at ${formatMinutes(sample.lastPeakTimeMin!)} min, within the specified run time of ${formatTypedMinutes(rules.lastPeakTimeMin)} min (tR < spec).`;
       rsDesc = `Critical pair resolution (${measuredRs}) is at or above the resolution floor (${floorRs} ≤ Rs < ${specRs}), meaning column efficiency can mathematically achieve baseline separation.`;
       decisionWhy = `Run time is approaching the specification limit (${formatTypedMinutes(rules.lastPeakTimeMin)} min, tR < spec), so column length cannot be increased without exceeding the run-time ceiling. Reach target resolution using efficiency levers that do not increase column length: decrease flow rate (F), decrease particle size (PS) while monitoring back-pressure, or switch to a superficially porous (SPP / core-shell) column (verdict: ${calc.verdictText}).`;
       break;
     case 11:
-      rowHeading = `Row 11 (Peaks = ${rules.requiredPeaks}, tR > spec, floor ≤ Rs < spec):`;
+      rowHeading = `Resolution above floor with late elution (Peaks = ${rules.requiredPeaks}, tR > spec, floor ≤ Rs < spec):`;
       actionText = "Decrease PS (BP), then increase F to shorten the run";
       timeDesc = `The last peak elutes at ${formatMinutes(sample.lastPeakTimeMin!)} min, exceeding the specified run time limit of ${formatTypedMinutes(rules.lastPeakTimeMin)} min (tR > spec).`;
       rsDesc = `Critical pair resolution (${measuredRs}) is below specification but at or above the resolution floor (${floorRs} ≤ Rs < ${specRs}).`;
       decisionWhy = `To simultaneously gain resolution and recover run-time throughput: decrease particle size (PS) to generate the required theoretical plates, watching back-pressure limits, then increase flow rate (F) to accelerate elution and shorten run time back inside the specification window.`;
       break;
     case 12:
-      rowHeading = `Row 12 (Peaks = ${rules.requiredPeaks}, tR > spec, Rs ≥ spec):`;
+      rowHeading = `Resolution met with late elution (Peaks = ${rules.requiredPeaks}, tR > spec, Rs ≥ spec):`;
       actionText = "Increase F to shorten the run";
       timeDesc = `The last peak elutes at ${formatMinutes(sample.lastPeakTimeMin!)} min, exceeding the throughput limit of ${formatTypedMinutes(rules.lastPeakTimeMin)} min (tR > spec).`;
       rsDesc = `Critical pair resolution (${measuredRs}) meets or exceeds the target specification (${specRs}, Rs ≥ spec).`;
@@ -841,10 +838,10 @@ function efficiencyDecision(
   ];
 
   const moreWhy = [
-    `Theoretical plate count & resolution floor analysis: With current theoretical plates N1 = ${Math.round(calc.n1)}, achievable plates within limits are Nmax,FPP = ${Math.round(calc.nMaxFpp)} (fully porous) and Nmax,SPP = ${Math.round(calc.nMaxSpp)} (superficially porous). Headroom HR = ${calc.headroom.toFixed(3)}. Resolution floor Rs,floor,SPP = ${floorRs}, Rs,floor,FPP = ${floorFppRs}. Verdict: ${calc.verdictText}.`,
-    `Column efficiency mechanism: Retention (k) and selectivity (α) are established once all peaks are present and detected. Further reducing %B would yield diminishing returns on retention while prolonging run time. Adjusting column efficiency (theoretical plate count N) via flow velocity along the van Deemter curve, smaller particle size packing, column length, or superficially porous particles achieves baseline resolution or shorter run times without altering retention chemistry.`,
     leadLine,
     ...ruleLines(sample, rules, judged),
+    `Theoretical plate count & resolution floor analysis: With current theoretical plates N1 = ${Math.round(calc.n1)}, achievable plates within limits are Nmax,FPP = ${Math.round(calc.nMaxFpp)} (fully porous) and Nmax,SPP = ${Math.round(calc.nMaxSpp)} (superficially porous). Headroom HR = ${calc.headroom.toFixed(3)}. Resolution floor Rs,floor,SPP = ${floorRs}, Rs,floor,FPP = ${floorFppRs}. Verdict: ${calc.verdictText}.`,
+    `Column efficiency mechanism: Retention (k) and selectivity (α) are established once all peaks are present and detected. Further reducing %B would yield diminishing returns on retention while prolonging run time. Adjusting column efficiency (theoretical plate count N) via flow velocity along the van Deemter curve, smaller particle size packing, column length, or superficially porous particles achieves baseline resolution or shorter run times without altering retention chemistry.`,
   ];
 
   return {
@@ -1053,8 +1050,8 @@ function specsMet(
 ): RetentionDecision {
   const rowHeading =
     rowNumber === 6
-      ? `Row 6 (Peaks = ${rules.requiredPeaks}, tR ≪ spec, Rs ≥ spec):`
-      : `Row 9 (Peaks = ${rules.requiredPeaks}, tR < spec, Rs ≥ spec):`;
+      ? `All specifications met with extensive run-time headroom (Peaks = ${rules.requiredPeaks}, tR ≪ spec, Rs ≥ spec):`
+      : `All specifications met (Peaks = ${rules.requiredPeaks}, tR < spec, Rs ≥ spec):`;
   const actionText = "MET. Optionally increase F to shorten the run";
   const nextChange = "The specifications are met.";
 
@@ -1080,7 +1077,6 @@ function specsMet(
       ? `Theoretical plate count & resolution floor analysis: Headroom HR = ${calc.headroom.toFixed(3)}. Current plates N1 = ${Math.round(calc.n1)}. Verdict: ${calc.verdictText}.`
       : "",
     "Method Development Complete: Every analytical performance requirement is satisfied under these isocratic conditions. All expected sample components are fully separated, the critical pair resolution exceeds the specification threshold, total analysis time is within the target throughput window, and column back-pressure operates safely below system pressure limits. Further modifications to mobile phase composition, temperature, or column chemistry are unnecessary. Optionally, you may increase flow rate (F) to shorten the run time if faster throughput is desired.",
-    ...ruleLines(sample, rules, judged),
   ].filter(Boolean);
 
   return {
@@ -1113,13 +1109,12 @@ function chooseOwnPercentDecision(sample: RetentionSample, rules: CompleteRules)
 
   const leadWhy = [
     `Condition: ${tag}.\n\nWhat this means: The retention space has been explored, but peaks remain unresolved (${formatCount(sample.peakCount ?? 0)} of ${formatCount(rules.requiredPeaks)} peaks). Staying in retention does not calculate another minimum %B, and it does not refit the last-peak line.`,
-    `Influence & Decision: Row 3 (Peaks < ${rules.requiredPeaks}): Change selectivity (solvent, temperature, ligand). Action: Select a %B of your choosing. With that %B, selectivity starts at 40°C.`,
+    `Influence & Decision: Selectivity transition (Peaks < ${rules.requiredPeaks}): Change selectivity (solvent, temperature, ligand) or select an intermediate %B. Action: Select a %B of your choosing and proceed to selectivity at 40°C at that %B.`,
   ];
 
   const moreWhy = [
-    ...ruleLines(sample, rules, judgeEqualPeaks(sample, rules)),
     "Staying in retention does not calculate another minimum %B, and it does not refit the last-peak line.",
-    "Select a %B of your choosing. With that %B, selectivity starts at 40°C.",
+    "Select an intermediate %B of your choosing where peak spacing is greatest, or proceed to selectivity at 40°C. Elevating column temperature to 40°C alters relative analyte retention (α = k2/k1) to separate overlapping peaks while simultaneously accelerating elution and reducing mobile phase viscosity.",
   ];
 
   return {
@@ -1353,8 +1348,8 @@ function dropPoints(
   const leadWhy = [
     `Condition: ${tag}.\n\nWhat this means: Peak count is ${formatCount(current.peakCount ?? 0)} of ${formatCount(rules.requiredPeaks)} required peaks (${current.peakCount != null && current.peakCount === rules.requiredPeaks ? `Peaks = ${rules.requiredPeaks}` : `Peaks < ${rules.requiredPeaks}`}). The last peak elutes at ${formatMinutes(current.lastPeakTimeMin!)} min, ${reason === "drop-10" ? "significantly under the specified run time" : "close to the specified run time"} of ${formatTypedMinutes(rules.lastPeakTimeMin)} min (${reason === "drop-10" ? "tR ≪ spec" : "tR < spec"}). Back-pressure is ${formatDecimal(current.maxBackPressurePsi ?? 0, 1)} psi, safely below the ${formatTypedPressure(rules.maxBackPressurePsi)} psi limit (BP < spec).`,
     reason === "drop-10"
-      ? `Influence & Decision: Row 1 (Peaks < ${rules.requiredPeaks}, tR ≪ spec): Decrease %B by 10%. With the last peak eluting significantly under the run time ceiling, there is extensive retention headroom. Action: Decrease %B by 10%. Run the next chromatogram at ${to}% B to increase retention and expand peak separation.`
-      : `Influence & Decision: Row 2 (Peaks < ${rules.requiredPeaks}, tR < spec, single run): Lower %B by 5%. Because this is the first chromatogram, at least two runs are required to fit the log k retention line to calculate the minimum %B. Action: Lower %B by 5 percentage points (${from}% B to ${to}% B). A conservative 5% drop safely increases retention without overshooting the run-time limit, providing the second isocratic data point needed to calculate the target %B.`,
+      ? `Influence & Decision: Retention scouting (Peaks < ${rules.requiredPeaks}, tR ≪ spec): Decrease %B by 10%. With the last peak eluting significantly under the run time ceiling, there is extensive retention headroom. Action: Decrease %B by 10%. Run the next chromatogram at ${to}% B to increase retention and expand peak separation.`
+      : `Influence & Decision: Single run approaching run-time limit (Peaks < ${rules.requiredPeaks}, tR < spec, single run): Lower %B by 5%. Because this is the first chromatogram, at least two runs are required to fit the log k retention line to calculate the minimum %B. Action: Lower %B by 5 percentage points (${from}% B to ${to}% B). A conservative 5% drop safely increases retention without overshooting the run-time limit, providing the second isocratic data point needed to calculate the target %B.`,
   ];
 
   const moreWhy: string[] = [];
@@ -1369,7 +1364,6 @@ function dropPoints(
       `In reversed-phase systems, retention factor (k) increases exponentially as %B decreases (log k varies linearly with mobile phase composition). Because the last peak is already approaching the specified run time limit, taking another 10% reduction could push the final peak beyond the ${formatTypedMinutes(rules.lastPeakTimeMin)} min ceiling or generate excessive column back-pressure. A conservative 5 percentage point reduction safely increases retention while providing the second distinct isocratic data point required to establish a Linear Solvent Strength (LSS) calibration line.`,
     );
   }
-  moreWhy.push(...whyParts);
 
   return {
     status: "recommend",
@@ -1410,13 +1404,11 @@ function returnToSelectivity(samples: RetentionSample[], rules: CompleteRules): 
 
   const leadWhy = [
     `Condition: ${tag}.\n\nWhat this means: Peak count is ${formatCount(current.peakCount!)} of ${formatCount(rules.requiredPeaks)} required peaks (Peaks < ${rules.requiredPeaks}). The last peak elutes at ${formatMinutes(current.lastPeakTimeMin!)} min, exceeding the specified run time of ${formatMinutes(rules.lastPeakTimeMin)} min (tR > spec). Back-pressure is ${formatDecimal(current.maxBackPressurePsi ?? 0, 1)} psi, safely below the ${formatTypedPressure(rules.maxBackPressurePsi)} psi limit (BP < spec).`,
-    `Influence & Decision: Row 3 (Peaks < ${rules.requiredPeaks}, tR > spec): Change selectivity (solvent, temperature, ligand). Lowering %B further cannot resolve the mixture because the run time already exceeds the specification. Action: SELECTIVITY (Run at 40°C). ${lead} and change selectivity. Elevating column temperature to 40°C alters relative analyte retention (α = k2/k1) to separate overlapping peaks while simultaneously accelerating elution and reducing mobile phase viscosity.`,
+    `Influence & Decision: Late elution beyond run-time limit (Peaks < ${rules.requiredPeaks}, tR > spec): Change selectivity (solvent, temperature, ligand) or select an intermediate %B. Retention adjustments alone cannot resolve this mixture because the run time already exceeds the specification. Action: SELECTIVITY (Run at 40°C) or an intermediate %B. Select an intermediate %B where separation is greatest, or proceed to selectivity at 40°C. Elevating column temperature to 40°C alters relative analyte retention (α = k2/k1) to separate overlapping peaks while simultaneously accelerating elution and reducing mobile phase viscosity.`,
   ];
 
   const moreWhy = [
-    `This run has ${formatCount(current.peakCount!)} peaks, still under the specification of ${formatCount(rules.requiredPeaks)}.`,
-    `The last peak is at ${formatMinutes(current.lastPeakTimeMin!)} min, later than the specification of ${formatMinutes(rules.lastPeakTimeMin)} min. A lower %B would hold the compounds even longer. ${lead} and change selectivity instead.`,
-    `Retention adjustments alone cannot resolve this mixture. Lowering %B further would only prolong elution beyond the ${formatMinutes(rules.lastPeakTimeMin)} min specification. Because the peak count (${formatCount(current.peakCount!)}) is still below the mixture specification (${formatCount(rules.requiredPeaks)}), the unresolved peaks are co-eluting due to identical hydrophobic partition coefficients under ambient conditions. Elevating column temperature to 40°C alters standard transfer enthalpies (ΔH°) differently for each analyte, allowing overlapping peaks to shift relative to each other (changing selectivity factor α = k2/k1) while simultaneously shortening retention time and reducing mobile phase viscosity.`,
+    `Retention adjustments alone cannot resolve this mixture. Lowering %B further would only prolong elution beyond the ${formatMinutes(rules.lastPeakTimeMin)} min specification. Because the peak count (${formatCount(current.peakCount!)}) is still below the mixture specification (${formatCount(rules.requiredPeaks)}), the unresolved peaks are co-eluting due to identical hydrophobic partition coefficients under ambient conditions. Elevating column temperature to 40°C alters standard transfer enthalpies (ΔH°) differently for each analyte, allowing overlapping peaks to shift relative to each other (changing selectivity factor α = k2/k1) while simultaneously shortening retention time and reducing mobile phase viscosity. You may also test an intermediate %B between previously tested compositions to determine if a specific solvent strength maximizes resolution between unresolved pairs.`,
   ];
 
   return {
@@ -1425,9 +1417,10 @@ function returnToSelectivity(samples: RetentionSample[], rules: CompleteRules): 
     move: null,
     nextPercentB: back,
     nextTemperature: "40",
+    pickOwnPercent: true,
     actionText: "Run at 40°C (Change selectivity)",
     tableAction: "Change selectivity (solvent, temperature, ligand) OR an intermediate %B",
-    nextChange: `${lead} and change selectivity. Run the next chromatogram at 40°C, still at ${percent}% B. The goal is to change the conditions so the selectivity changes and the overlapping peaks separate. A higher temperature shortens retention. The %B stays the same. ${TEMPERATURE_SENTENCE} Do not lower %B. The last peak is already past the time and the peak count is still short.`,
+    nextChange: `${lead} and change selectivity. Run the next chromatogram at 40°C, still at ${percent}% B, or select an intermediate %B of your choosing. The goal is to change the conditions so the selectivity changes and the overlapping peaks separate. A higher temperature shortens retention. The %B stays the same. ${TEMPERATURE_SENTENCE} Do not lower %B. The last peak is already past the time and the peak count is still short.`,
     following: SELECTIVITY_ORDER,
     leadWhy,
     moreWhy,
@@ -1471,7 +1464,6 @@ function calculatePercentB(samples: RetentionSample[], rules: CompleteRules): Re
     : "";
 
   const intro = [
-    ...situationSentences(samples, rules),
     closeToSpecSentence(current.lastPeakTimeMin!, rules.lastPeakTimeMin, rsNote),
   ];
 
@@ -1607,9 +1599,10 @@ function calculatePercentB(samples: RetentionSample[], rules: CompleteRules): Re
     specBP: rules.maxBackPressurePsi,
   });
 
+  const timeTag = isPast(current.lastPeakTimeMin!, rules.lastPeakTimeMin) ? "tR > spec" : "tR < spec";
   const leadWhy = [
-    `Condition: ${tag}.\n\nWhat this means: Peak count is ${formatCount(current.peakCount ?? 0)} of ${formatCount(rules.requiredPeaks)} required peaks (${current.peakCount != null && current.peakCount === rules.requiredPeaks ? `Peaks = ${rules.requiredPeaks}` : `Peaks < ${rules.requiredPeaks}`}). The last peak elutes at ${formatMinutes(current.lastPeakTimeMin!)} min, approaching the specified run time of ${formatTypedMinutes(rules.lastPeakTimeMin)} min (tR < spec). Back-pressure is ${formatDecimal(current.maxBackPressurePsi ?? 0, 1)} psi, safely below the ${formatTypedPressure(rules.maxBackPressurePsi)} psi limit (BP < spec).`,
-    `Influence & Decision: Row 2 (Peaks < ${rules.requiredPeaks}, tR < spec): Calculate minimum %B. The last peak is approaching the specified run time ceiling. Action: Run at ${percent}% B. Instead of taking another fixed drop, the Linear Solvent Strength (LSS) model calculates the exact %B (${percent}% B) that targets the specified run time of ${formatTypedMinutes(rules.lastPeakTimeMin)} min, maximizing the retention window for peak separation.`,
+    `Condition: ${tag}.\n\nWhat this means: Peak count is ${formatCount(current.peakCount ?? 0)} of ${formatCount(rules.requiredPeaks)} required peaks (${current.peakCount != null && current.peakCount === rules.requiredPeaks ? `Peaks = ${rules.requiredPeaks}` : `Peaks < ${rules.requiredPeaks}`}). The last peak elutes at ${formatMinutes(current.lastPeakTimeMin!)} min, ${timeTag === "tR > spec" ? "exceeding the specified run time" : "approaching the specified run time"} of ${formatTypedMinutes(rules.lastPeakTimeMin)} min (${timeTag}). Back-pressure is ${formatDecimal(current.maxBackPressurePsi ?? 0, 1)} psi, safely below the ${formatTypedPressure(rules.maxBackPressurePsi)} psi limit (BP < spec).`,
+    `Influence & Decision: Retention line calculation (Peaks < ${rules.requiredPeaks}, ${timeTag}): Calculate minimum %B. The Linear Solvent Strength (LSS) model calculates the exact %B (${percent}% B) that targets the specified run time of ${formatTypedMinutes(rules.lastPeakTimeMin)} min, maximizing the retention window for peak separation. Action: Run at ${percent}% B.`,
   ];
 
   const moreWhy = [...intro, fitMembershipSentence(samples, fit, spec, picked.checks, picked.r2Dropped)];

@@ -44,7 +44,7 @@ describe("Test with GR09-05-3-ACN-3-ISO-35-1.5-20-CP-0.1-C18aqP-150x4.6x5-40-254
       expect(decision.status).toBe("recommend");
       expect(decision.tableAction).toBe("Decrease %B by 10");
       expect(decision.nextChange).toContain("25% B");
-      expect(decision.why).toContain("Row 1 (Peaks < 7, tR ≪ spec): Decrease %B by 10%");
+      expect(decision.why).toContain("Retention scouting (Peaks < 7, tR ≪ spec): Decrease %B by 10%");
       expect(decision.why).toContain("Condition: (Peaks < 7, tR << spec, BP < spec)");
     });
 
@@ -59,7 +59,7 @@ describe("Test with GR09-05-3-ACN-3-ISO-35-1.5-20-CP-0.1-C18aqP-150x4.6x5-40-254
       const decision = decideRetention([baseSample], rules);
       expect(decision.status).toBe("recommend");
       expect(decision.nextChange).toContain("30% B"); // 35 - 5 = 30% B
-      expect(decision.why).toContain("Row 2 (Peaks < 7, tR < spec, single run): Lower %B by 5%");
+      expect(decision.why).toContain("Single run approaching run-time limit (Peaks < 7, tR < spec, single run): Lower %B by 5%");
       expect(decision.why).toContain("Condition: (Peaks < 7, tR < spec, BP < spec)");
     });
 
@@ -75,7 +75,7 @@ describe("Test with GR09-05-3-ACN-3-ISO-35-1.5-20-CP-0.1-C18aqP-150x4.6x5-40-254
       expect(decision.status).toBe("recommend");
       expect(decision.tableAction).toBe("Change selectivity (solvent, temperature, ligand) OR an intermediate %B");
       expect(decision.nextChange).toContain("40°C");
-      expect(decision.why).toContain("Row 3 (Peaks < 7, tR > spec): Change selectivity");
+      expect(decision.why).toContain("Late elution beyond run-time limit (Peaks < 7, tR > spec): Change selectivity");
       expect(decision.why).toContain("Condition: (Peaks < 7, tR > spec, BP < spec)");
     });
   });
@@ -92,7 +92,7 @@ describe("Test with GR09-05-3-ACN-3-ISO-35-1.5-20-CP-0.1-C18aqP-150x4.6x5-40-254
       expect(decision.status).toBe("efficiency");
       expect(decision.tableAction).toBe("Increase L (watch BP)");
       expect(decision.nextChange).toContain("Increase L (watch BP)");
-      expect(decision.why).toContain("Row 4 (Peaks = 6, tR ≪ spec, Rs < floor)");
+      expect(decision.why).toContain("Resolution below floor with extensive run-time headroom (Peaks = 6, tR ≪ spec, Rs < floor)");
       expect(decision.why).toContain("Action: Increase L (watch BP)");
       expect(decision.why).toContain("Condition: (Peaks = 6, tR << spec, Rs < floor, BP < spec)");
     });
@@ -108,7 +108,7 @@ describe("Test with GR09-05-3-ACN-3-ISO-35-1.5-20-CP-0.1-C18aqP-150x4.6x5-40-254
       expect(decision.status).toBe("efficiency");
       expect(decision.tableAction).toBe("Increase L (BP) OR decrease F OR decrease PS (BP) OR SPP");
       expect(decision.nextChange).toContain("Increase L (BP) OR decrease F OR decrease PS (BP) OR SPP");
-      expect(decision.why).toContain("Row 5 (Peaks = 6, tR ≪ spec, floor ≤ Rs < spec):");
+      expect(decision.why).toContain("Resolution above floor with extensive run-time headroom (Peaks = 6, tR ≪ spec, floor ≤ Rs < spec):");
       expect(decision.why).toContain("Condition: (Peaks = 6, tR << spec, floor ≤ Rs < spec, BP < spec)");
     });
 
@@ -123,7 +123,7 @@ describe("Test with GR09-05-3-ACN-3-ISO-35-1.5-20-CP-0.1-C18aqP-150x4.6x5-40-254
       expect(decision.status).toBe("specs-met");
       expect(decision.tableAction).toBe("MET. Optionally increase F to shorten the run");
       expect(decision.nextChange).toBe("The specifications are met.");
-      expect(decision.why).toContain("Row 6 (Peaks = 6, tR ≪ spec, Rs ≥ spec): All specifications are met");
+      expect(decision.why).toContain("All specifications met with extensive run-time headroom (Peaks = 6, tR ≪ spec, Rs ≥ spec): All specifications are met");
       expect(decision.why).toContain("Condition: (Peaks = 6, tR << spec, Rs ≥ spec, BP < spec)");
     });
   });
@@ -140,7 +140,7 @@ describe("Test with GR09-05-3-ACN-3-ISO-35-1.5-20-CP-0.1-C18aqP-150x4.6x5-40-254
       expect(decision.status).toBe("recommend");
       expect(decision.tableAction).toBe("SELECTIVITY");
       expect(decision.nextChange).toContain("Run at 40°C (Change selectivity)");
-      expect(decision.why).toContain("Row 7 (Peaks = 6, tR < spec, Rs < floor):");
+      expect(decision.why).toContain("Resolution below floor (Peaks = 6, tR < spec, Rs < floor):");
       expect(decision.why).toContain("Action: SELECTIVITY (Run at 40°C)");
       expect(decision.why).toContain("Condition: (Peaks = 6, tR < spec, Rs < floor, BP < spec)");
     });
@@ -156,7 +156,7 @@ describe("Test with GR09-05-3-ACN-3-ISO-35-1.5-20-CP-0.1-C18aqP-150x4.6x5-40-254
       expect(decision.status).toBe("efficiency");
       expect(decision.tableAction).toBe("Decrease F OR decrease PS (BP) OR SPP");
       expect(decision.nextChange).toContain("Decrease F OR decrease PS (BP) OR SPP");
-      expect(decision.why).toContain("Row 8 (Peaks = 6, tR < spec, floor ≤ Rs < spec):");
+      expect(decision.why).toContain("Resolution above floor within run-time limit (Peaks = 6, tR < spec, floor ≤ Rs < spec):");
       expect(decision.why).toContain("Condition: (Peaks = 6, tR < spec, floor ≤ Rs < spec, BP < spec)");
     });
 
@@ -171,7 +171,7 @@ describe("Test with GR09-05-3-ACN-3-ISO-35-1.5-20-CP-0.1-C18aqP-150x4.6x5-40-254
       expect(decision.status).toBe("specs-met");
       expect(decision.tableAction).toBe("MET. Optionally increase F to shorten the run");
       expect(decision.nextChange).toBe("The specifications are met.");
-      expect(decision.why).toContain("Row 9 (Peaks = 6, tR < spec, Rs ≥ spec): All specifications are met");
+      expect(decision.why).toContain("All specifications met (Peaks = 6, tR < spec, Rs ≥ spec): All specifications are met");
       expect(decision.why).toContain("Condition: (Peaks = 6, tR < spec, Rs ≥ spec, BP < spec)");
     });
   });
@@ -188,7 +188,7 @@ describe("Test with GR09-05-3-ACN-3-ISO-35-1.5-20-CP-0.1-C18aqP-150x4.6x5-40-254
       expect(decision.status).toBe("recommend");
       expect(decision.tableAction).toBe("SELECTIVITY");
       expect(decision.nextChange).toContain("Run at 40°C (Change selectivity)");
-      expect(decision.why).toContain("Row 10 (Peaks = 6, tR > spec, Rs < floor):");
+      expect(decision.why).toContain("Resolution below floor with late elution (Peaks = 6, tR > spec, Rs < floor):");
       expect(decision.why).toContain("Action: SELECTIVITY (Run at 40°C)");
       expect(decision.why).toContain("Condition: (Peaks = 6, tR > spec, Rs < floor, BP < spec)");
     });
@@ -204,7 +204,7 @@ describe("Test with GR09-05-3-ACN-3-ISO-35-1.5-20-CP-0.1-C18aqP-150x4.6x5-40-254
       expect(decision.status).toBe("efficiency");
       expect(decision.tableAction).toBe("Decrease PS (BP), then increase F to shorten the run");
       expect(decision.nextChange).toContain("Decrease PS (BP), then increase F to shorten the run");
-      expect(decision.why).toContain("Row 11 (Peaks = 6, tR > spec, floor ≤ Rs < spec):");
+      expect(decision.why).toContain("Resolution above floor with late elution (Peaks = 6, tR > spec, floor ≤ Rs < spec):");
       expect(decision.why).toContain("Action: Decrease PS (BP), then increase F to shorten the run");
       expect(decision.why).toContain("Condition: (Peaks = 6, tR > spec, floor ≤ Rs < spec, BP < spec)");
     });
@@ -220,7 +220,7 @@ describe("Test with GR09-05-3-ACN-3-ISO-35-1.5-20-CP-0.1-C18aqP-150x4.6x5-40-254
       expect(decision.status).toBe("efficiency");
       expect(decision.tableAction).toBe("Increase F to shorten the run");
       expect(decision.nextChange).toContain("Increase F to shorten the run");
-      expect(decision.why).toContain("Row 12 (Peaks = 6, tR > spec, Rs ≥ spec):");
+      expect(decision.why).toContain("Resolution met with late elution (Peaks = 6, tR > spec, Rs ≥ spec):");
       expect(decision.why).toContain("Action: Increase F to shorten the run");
       expect(decision.why).toContain("Condition: (Peaks = 6, tR > spec, Rs ≥ spec, BP < spec)");
     });
