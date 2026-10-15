@@ -24,7 +24,7 @@ export function SelectivityDecisionView({
       <section className="rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10">
         <h2 className="font-heading text-base">Why</h2>
         <div className="mt-1 flex flex-col gap-2 text-sm leading-relaxed text-foreground">
-          {lead.map((paragraph, index) => (
+          {lead.flatMap((p) => p.split("\n\n").map((s) => s.trim()).filter(Boolean)).map((paragraph, index) => (
             <p key={index}>{paragraph}</p>
           ))}
           {details.length > 0 ? (

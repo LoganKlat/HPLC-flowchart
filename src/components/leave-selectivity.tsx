@@ -69,8 +69,13 @@ export function EfficiencyChoiceView({ why }: { why: string }) {
   let lead: string[];
   let more: string[];
   if (hasConditionTag && paragraphs.length >= 2) {
-    lead = [paragraphs[0], paragraphs[1]];
-    more = paragraphs.slice(2);
+    if (paragraphs[2]?.startsWith("Influence & Decision:")) {
+      lead = [paragraphs[0], paragraphs[1], paragraphs[2]];
+      more = paragraphs.slice(3);
+    } else {
+      lead = [paragraphs[0], paragraphs[1]];
+      more = paragraphs.slice(2);
+    }
   } else {
     const leadIdx = paragraphs.findIndex(
       (p) => p.startsWith("Efficiency is next") || p.startsWith("Why efficiency"),
