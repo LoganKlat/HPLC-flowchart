@@ -1820,9 +1820,7 @@ function RunPane({
     pickedPercent: pickedPercent ?? null,
     intermediateMode: intermediateMode ?? null,
   });
-  const nextLabel = next?.status === "ready"
-    ? `Review Run ${index + 2}${isBlankRun(index + 1, runs, details) ? " (Blank)" : ""}: ${runSettingLine(next)}`
-    : recommendedNextLabel;
+  const nextLabel = recommendedNextLabel;
   const canOpenNext = Boolean(next) && !ask && !leftSelectivity;
   const decisionIndex = activeIndicesUpTo(runs, index, details).at(-1) ?? index;
   const currentLigand = (
