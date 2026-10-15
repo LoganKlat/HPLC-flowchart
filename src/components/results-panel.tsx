@@ -1,7 +1,5 @@
 import type { ReactNode } from "react";
-import { Info } from "lucide-react";
 import { ChromatogramChart } from "@/components/chromatogram-chart";
-import { ChromatogramAnalysisComparison } from "@/components/chromatogram-analysis-comparison";
 import { Button } from "@/components/ui/button";
 import type { ResultRow } from "@/lib/evaluate";
 import type { LabFileRead } from "@/lib/lab-file";
@@ -115,21 +113,6 @@ export function ResultsPanel({ fileName, read, rows, aside, onRemove, isBlank = 
         </div>
         {aside ? <div className="contents">{aside}</div> : null}
       </div>
-
-      {/* Expandable Marking Guide for Direct vs Calculated Analysis */}
-      <details className="group rounded-xl border border-border/80 bg-card p-3 sm:p-4 transition-all shadow-2xs">
-        <summary className="flex cursor-pointer items-center justify-between text-xs font-semibold text-foreground">
-          <span className="inline-flex items-center gap-2">
-            <Info className="size-4 text-[var(--hp-brand)]" />
-            <span>Marking Guide: Direct vs. Calculated Chromatogram Responses</span>
-          </span>
-          <span className="text-[11px] text-[var(--hp-brand)] font-medium group-open:hidden">Show Guide</span>
-          <span className="text-[11px] text-[var(--hp-brand)] font-medium hidden group-open:inline">Hide Guide</span>
-        </summary>
-        <div className="mt-3 pt-3 border-t border-border/60">
-          <ChromatogramAnalysisComparison />
-        </div>
-      </details>
     </div>
   );
 }
