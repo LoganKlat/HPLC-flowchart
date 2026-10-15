@@ -1346,7 +1346,10 @@ export function HplcApp() {
             Drop LabSolutions files here
           </h2>
           <p className="pointer-events-none max-w-md text-sm text-muted-foreground mt-2">
-            Files are automatically ordered by injection number and loaded into your runs.
+            <span className="font-bold text-red-600 dark:text-red-400">
+              Multiple files are automatically sorted by injection number
+            </span>{" "}
+            and loaded into your runs.
           </p>
         </div>
       ) : null}

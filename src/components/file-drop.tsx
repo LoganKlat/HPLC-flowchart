@@ -111,7 +111,10 @@ export function FileDrop({ prompt, reading, onBegin, onBuffer, onProblem, onBatc
               {reading ? "Reading your chromatogram…" : prompt}
             </p>
             <p className="max-w-md text-xs sm:text-sm text-muted-foreground">
-              LabSolutions export (.csv, .txt, or .xlsx). Drag and drop one or multiple files here, or click to browse. Multiple files are automatically sorted by injection number.
+              LabSolutions export (.csv, .txt, or .xlsx). Drag and drop one or multiple files here, or click to browse.{" "}
+              <span className="font-bold text-red-600 dark:text-red-400">
+                Multiple files are automatically sorted by injection number.
+              </span>
             </p>
           </div>
           <div
