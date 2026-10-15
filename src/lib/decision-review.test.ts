@@ -593,7 +593,7 @@ describe("Decision engine multi-rule & user-input verification on GR09/GR11 data
       maxBackPressurePsi: 4000,
     };
 
-    // 1. Upload 40°C run (GR09-05 40°C at 35% B, index 7) directly into Run 1
+    // 1. Upload 40°C run (GR09-08 40°C at 36% B, index 7) directly into Run 1
     const file40Name = DECISION_EXAMPLE_FILES[7];
     const file40Path = path.join(process.cwd(), "public/decision-example", file40Name);
     const parsed40 = detailsFromFileName(emptyRunDetails(), file40Name);
@@ -619,8 +619,8 @@ describe("Decision engine multi-rule & user-input verification on GR09/GR11 data
     expect(exp40?.kind).toBe("selectivity");
     if (exp40?.kind === "selectivity") {
       expect(exp40.plan.step).toBe("temp-60");
-      expect(exp40.plan.prefill).toMatchObject({ percentB: "35", temperature: "60", solvent: "ACN" });
-      expect(exp40.plan.why).toContain("Run 1 is a 40°C selectivity run at 35% B");
+      expect(exp40.plan.prefill).toMatchObject({ percentB: "36", temperature: "60", solvent: "ACN" });
+      expect(exp40.plan.why).toContain("Run 1 is a 40°C selectivity run at 36% B");
     }
 
     const synced40 = syncNextRun([run40], parsed40.details, checks, {
@@ -633,9 +633,9 @@ describe("Decision engine multi-rule & user-input verification on GR09/GR11 data
     });
     expect(synced40).toHaveLength(2);
     expect(synced40[1].temperature).toBe("60");
-    expect(synced40[1].percentB).toBe("35");
+    expect(synced40[1].percentB).toBe("36");
 
-    // 2. Upload 60°C run (GR09-05 60°C at 35% B, index 8) directly into Run 1
+    // 2. Upload 60°C run (GR09-09 60°C at 36% B, index 8) directly into Run 1
     const file60Name = DECISION_EXAMPLE_FILES[8];
     const file60Path = path.join(process.cwd(), "public/decision-example", file60Name);
     const parsed60 = detailsFromFileName(emptyRunDetails(), file60Name);
@@ -676,8 +676,8 @@ describe("Decision engine multi-rule & user-input verification on GR09/GR11 data
     expect(synced60).toHaveLength(2);
     expect(synced60[1].temperature).toBe("ambient");
 
-    // 3. Upload ambient 40% B run (GR09-10, tR = 11.633 min, 6 peaks) into Run 1 and test live spec changes
-    const fileAmb40Name = DECISION_EXAMPLE_FILES[5]; // GR09-10 (40% B, amb, 6 peaks, tR 11.633 min)
+    // 3. Upload ambient 40% B run (GR09-06, tR = 11.633 min, 6 peaks) into Run 1 and test live spec changes
+    const fileAmb40Name = DECISION_EXAMPLE_FILES[5]; // GR09-06 (40% B, amb, 6 peaks, tR 11.633 min)
     const fileAmb40Path = path.join(process.cwd(), "public/decision-example", fileAmb40Name);
     const parsedAmb40 = detailsFromFileName(emptyRunDetails(), fileAmb40Name);
     expect(parsedAmb40.ok).toBe(true);

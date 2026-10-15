@@ -10,7 +10,7 @@ describe("preloaded decision example", () => {
     expect(DECISION_EXAMPLE_FILES).toHaveLength(18);
     expect(new Set(DECISION_EXAMPLE_FILES).size).toBe(18);
     expect(DECISION_EXAMPLE_FILES[0]).toContain("ISO-90");
-    expect(DECISION_EXAMPLE_FILES[17]).toContain("ISO-37");
+    expect(DECISION_EXAMPLE_FILES[17]).toContain("ISO-36");
   });
   for (const fileName of DECISION_EXAMPLE_FILES) {
     it(`reads results and conditions for ${fileName}`, () => {
