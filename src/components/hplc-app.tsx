@@ -534,6 +534,38 @@ export function HplcApp() {
   const [isWindowDragging, setIsWindowDragging] = useState(false);
   const dragCounter = useRef(0);
 
+  useEffect(() => {
+    function onGlobalDrop() {
+      setIsWindowDragging(false);
+      dragCounter.current = 0;
+    }
+    function onGlobalDragLeave(e: DragEvent) {
+      if (
+        e.clientX <= 0 ||
+        e.clientY <= 0 ||
+        e.clientX >= window.innerWidth ||
+        e.clientY >= window.innerHeight ||
+        !e.relatedTarget
+      ) {
+        setIsWindowDragging(false);
+        dragCounter.current = 0;
+      }
+    }
+    function onGlobalDragEnd() {
+      setIsWindowDragging(false);
+      dragCounter.current = 0;
+    }
+
+    window.addEventListener("drop", onGlobalDrop, true);
+    window.addEventListener("dragleave", onGlobalDragLeave, true);
+    window.addEventListener("dragend", onGlobalDragEnd, true);
+    return () => {
+      window.removeEventListener("drop", onGlobalDrop, true);
+      window.removeEventListener("dragleave", onGlobalDragLeave, true);
+      window.removeEventListener("dragend", onGlobalDragEnd, true);
+    };
+  }, []);
+
   function handleWindowDragEnter(event: React.DragEvent) {
     if (event.dataTransfer?.types?.includes("Files")) {
       event.preventDefault();
@@ -552,6 +584,12 @@ export function HplcApp() {
   function handleWindowDragLeave(event: React.DragEvent) {
     if (event.dataTransfer?.types?.includes("Files")) {
       event.preventDefault();
+      const related = event.relatedTarget;
+      if (!related || (related instanceof Node && !event.currentTarget.contains(related))) {
+        dragCounter.current = 0;
+        setIsWindowDragging(false);
+        return;
+      }
       dragCounter.current = Math.max(0, dragCounter.current - 1);
       if (dragCounter.current === 0) {
         setIsWindowDragging(false);
@@ -1184,14 +1222,19 @@ export function HplcApp() {
       onDrop={handleWindowDrop}
     >
       {isWindowDragging ? (
-        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-background/90 backdrop-blur-xs border-4 border-dashed border-[var(--hp-brand)] p-8 text-center pointer-events-none animate-in fade-in-0 duration-150">
-          <div className="flex size-20 items-center justify-center rounded-full bg-[var(--hp-soft)] text-[var(--hp-brand)] ring-2 ring-[var(--hp-brand)]/40 mb-4 animate-bounce">
+        <div
+          className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-background/90 backdrop-blur-xs border-4 border-dashed border-[var(--hp-brand)] p-8 text-center animate-in fade-in-0 duration-150"
+          onDragOver={handleWindowDragOver}
+          onDragLeave={handleWindowDragLeave}
+          onDrop={handleWindowDrop}
+        >
+          <div className="pointer-events-none flex size-20 items-center justify-center rounded-full bg-[var(--hp-soft)] text-[var(--hp-brand)] ring-2 ring-[var(--hp-brand)]/40 mb-4 animate-bounce">
             <UploadCloud className="size-10" aria-hidden="true" />
           </div>
-          <h2 className="font-heading text-2xl font-bold text-foreground">
+          <h2 className="pointer-events-none font-heading text-2xl font-bold text-foreground">
             Drop LabSolutions files here
           </h2>
-          <p className="max-w-md text-sm text-muted-foreground mt-2">
+          <p className="pointer-events-none max-w-md text-sm text-muted-foreground mt-2">
             Files are automatically ordered by injection number and loaded into your runs.
           </p>
         </div>
