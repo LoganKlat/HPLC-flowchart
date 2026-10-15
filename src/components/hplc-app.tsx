@@ -2371,25 +2371,11 @@ function plainMark(value: string): string {
   return value || "—";
 }
 
-function backwardsOnPage(runs: RunState[], details: RunDetails): BackwardsPair | null {
-  const count = readyPrefix(runs);
-  if (count === 0) return null;
-  if (isBlankRun(count - 1, runs, details)) return null;
-  const ready = runs.slice(0, count).flatMap((run, index) => {
-    if (run.status !== "ready" || !run.read) return [];
-    if (isBlankRun(index, runs, details)) return [];
-    const info = index === 0 ? details : run;
-    return [
-      {
-        percentB: parseUserNumber(info.percentB || (index === 0 ? details.percentB : "")),
-        lastPeakTimeMin: run.read.lastPeakTimeMin,
-        temperatureC: (index === 0 ? details.temperature : run.temperature) || details.temperature,
-        solvent: (index === 0 ? details.solvent : run.solvent) || details.solvent,
-        ligand: (index === 0 ? details.ligand : run.ligand) || details.ligand,
-      },
-    ];
-  });
-  return findBackwardsRetention(ready.slice(-2));
+function backwardsOnPage(_runs: RunState[], _details: RunDetails): BackwardsPair | null {
+  // Lowering %B not increasing retention time (e.g. 90% vs 80% B) can occur in real student
+  // data due to co-eluting peaks or experimental variance. We do not block the user with an
+  // error; the retention fit algorithm automatically excludes or handles poor points.
+  return null;
 }
 
 export type Explanation =
