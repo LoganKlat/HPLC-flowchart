@@ -1,7 +1,7 @@
 "use client";
 
 import { useLayoutEffect, useRef, useState, type CSSProperties } from "react";
-import { Activity, Cylinder, LineChart, Atom } from "lucide-react";
+import { Activity, Cylinder, LineChart, Atom, Calculator } from "lucide-react";
 import { ChromatogramExplorer } from "@/components/chromatogram-explorer";
 import { ChromatogramAnalysisComparison } from "@/components/chromatogram-analysis-comparison";
 import { BeadDiagram } from "@/components/bead-diagram";
@@ -336,6 +336,7 @@ const equipmentTabs = [
   { id: "column", label: "Column Dimensions", icon: Cylinder },
   { id: "beads", label: "Silica Beads", icon: Atom },
   { id: "chromatogram", label: "Chromatograms", icon: LineChart },
+  { id: "parameters", label: "Parameters", icon: Calculator },
 ] as const;
 
 function NameColumn({
@@ -575,8 +576,14 @@ export function EquipmentPanel({
       {/* Chromatogram Subtab */}
       {view === "chromatogram" ? (
         <div className="flex flex-col gap-6">
-          <ChromatogramAnalysisComparison />
           <ChromatogramExplorer />
+        </div>
+      ) : null}
+
+      {/* Parameters Subtab */}
+      {view === "parameters" ? (
+        <div className="flex flex-col gap-6">
+          <ChromatogramAnalysisComparison />
         </div>
       ) : null}
 
