@@ -483,9 +483,45 @@ function afterInBetweenFile(
     if (judged.resolutionMeets && !judged.timeLate && !judged.pressureOver) return specsMet(current, rules, judged);
     if (choice?.continueToLook) return lookDecision(samples, rules, "between-then-heat");
     if (choice?.continueRetention) return chooseOwnPercentDecision(current, rules);
+    if (isResolutionFarBelow(judged.resolution, rules.minResolution)) {
+      return sevenPeaksSelectivity(current, rules, judged);
+    }
     return efficiencyStop(current, rules, judged, true);
   }
   return lookDecision(samples, rules, "picker");
+}
+
+export function isResolutionFarBelow(resolution: number | null, spec: number | null): boolean {
+  if (spec == null || !(spec > 0)) return false;
+  return resolution == null || !Number.isFinite(resolution) || resolution <= 0;
+}
+
+function sevenPeaksSelectivity(
+  sample: RetentionSample,
+  rules: CompleteRules,
+  judged: EqualJudgment,
+): RetentionDecision {
+  const percent = sample.percentB != null ? formatPercentB(sample.percentB) : "the current";
+  const measuredRs =
+    judged.resolution != null && Number.isFinite(judged.resolution)
+      ? formatResolution(judged.resolution)
+      : "not assessable";
+  const specRs = rules.minResolution != null ? formatResolution(rules.minResolution) : "spec";
+  return {
+    status: "recommend",
+    reason: "drop-10",
+    move: null,
+    nextPercentB: sample.percentB ?? null,
+    nextTemperature: "40",
+    nextChange: `Run at 40°C (Change selectivity). Resolution (${measuredRs}) is far below the specification (${specRs}), so selectivity must be changed before efficiency. Run the next chromatogram at 40°C, still at ${percent}% B.`,
+    following: SELECTIVITY_ORDER,
+    why: [
+      ...ruleLines(sample, rules, judged),
+      `Selectivity is the next stage because resolution is far below the specification (Rs = ${measuredRs} vs spec ${specRs}). Under the Purnell resolution equation (Rs = (√N / 4) × ((α − 1) / α) × (k2 / (1 + k2))), resolution scales with the square root of column efficiency (√N). When resolution is far below the specification, efficiency levers alone (particle size, column length, flow rate) cannot mathematically rescue the critical pair separation within practical pressure and run-time constraints (falling below the Rs floor).`,
+      `Therefore, selectivity (α) must be adjusted first. The method development sequence begins selectivity by introducing thermal selectivity at 40°C while maintaining ${percent}% B. Differential temperature coefficients of retention (ΔH°) alter relative band spacing (α) to resolve the co-eluting or critical pair.`,
+    ].join("\n\n"),
+    fit: null,
+  };
 }
 
 function equalPeakCount(
@@ -495,8 +531,7 @@ function equalPeakCount(
 ): RetentionDecision {
   const current = samples[samples.length - 1];
   const judged = judgeEqualPeaks(current, rules);
-  // Peaks already match the specification: leave retention. Specs-met stops
-  // everything; otherwise efficiency is next (not another %B, not selectivity).
+  // 1. Run time within spec and Rs above spec -> MET, the method is complete.
   if (judged.resolutionMeets && !judged.timeLate && !judged.pressureOver) return specsMet(current, rules, judged);
   if (choice?.continueToLook) return lookDecision(samples, rules, "between-then-heat");
   if (choice?.continueRetention) {
@@ -526,6 +561,11 @@ function equalPeakCount(
     }
     return chooseOwnPercentDecision(current, rules);
   }
+  // 2. Rs far below spec -> SELECTIVITY, as in the table.
+  if (isResolutionFarBelow(judged.resolution, rules.minResolution)) {
+    return sevenPeaksSelectivity(current, rules, judged);
+  }
+  // 3. Every other 7-peak run -> N (efficiency).
   return efficiencyStop(current, rules, judged, samples.length > 1);
 }
 

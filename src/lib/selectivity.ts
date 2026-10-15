@@ -569,7 +569,10 @@ export function planHistory(
       !explicitHeat &&
       !ovenSplit &&
       (beforeHeat?.reason === "second-minimum" || beforeHeat?.reason === "choose-percent");
-    const ownPercentThenHeat = !explicitHeat && !ovenSplit && beforeHeat?.status === "efficiency";
+    const ownPercentThenHeat =
+      !explicitHeat &&
+      !ovenSplit &&
+      (beforeHeat?.status === "efficiency" || beforeHeat?.nextTemperature === "40");
     if (ovenSplit || secondMinThenHeat || ownPercentThenHeat) {
       const splitAt = ovenSplit ? raise : fortyAt;
       finishedOffset = splitAt - 1;

@@ -9,6 +9,9 @@ export function retentionChangeLabel(
   decision: RetentionDecision,
   percentB?: number | null,
 ): string {
+  if (decision.status === "specs-met" || decision.reason === "specs-met") {
+    return "MET (Method complete)";
+  }
   if (decision.status === "efficiency" || decision.reason === "efficiency") {
     return "Move on to efficiency";
   }
@@ -17,7 +20,12 @@ export function retentionChangeLabel(
     if (percent != null) return `Run at 40°C at ${formatPercentB(percent)}% B`;
     if (decision.reason === "choose-percent") return "Select a %B";
   }
-  if (decision.nextTemperature) return temperatureWords(decision.nextTemperature);
+  if (decision.nextTemperature) {
+    if (decision.nextChange.includes("Change selectivity")) {
+      return "Run at 40°C (Change selectivity)";
+    }
+    return temperatureWords(decision.nextTemperature);
+  }
   const percent = percentB ?? decision.nextPercentB;
   if (decision.status === "recommend" && percent != null) return percentWords(percent);
   return NO_CHANGE_YET;

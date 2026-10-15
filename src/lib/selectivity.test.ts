@@ -3,7 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { evaluateRun, resolutionForDecision } from "@/lib/evaluate";
 import { readLabFile } from "@/lib/lab-file";
-import { selectivityChangeLabel } from "@/lib/change-label";
+import { retentionChangeLabel, selectivityChangeLabel } from "@/lib/change-label";
 import { nextRunFileName } from "@/lib/filename-details";
 import { emptyRunDetails } from "@/lib/run-details";
 import { carryForwardIndex, decideRetention, formatPercentB } from "@/lib/retention";
@@ -207,7 +207,38 @@ describe("selectivity checks", () => {
     })).toBeNull();
   });
 
-  it("moves on to efficiency when the peak count matches and resolution is under the specification", () => {
+  it("recommends SELECTIVITY (Run at 40°C) when 7 peaks match and resolution is far below spec (unassessable / 0)", () => {
+    const sample = {
+      percentB: 40,
+      temperatureC: 25,
+      solvent: "ACN",
+      ligand: "C18",
+      peakCount: 7,
+      lastPeakTimeMin: 11.6,
+      firstPeakTimeMin: 1.09,
+      minResolutionExcludingFirst: 0, // unassessable co-eluting worst pair
+      maxBackPressurePsi: 1200,
+    };
+    const rules = {
+      requiredPeaks: 7,
+      lastPeakTimeMin: 15,
+      minResolution: 1,
+      maxBackPressurePsi: 4000,
+      ambientTemperatureC: 25,
+      originalSolvent: "ACN",
+      originalLigand: "C18",
+    };
+    const decision = decideRetention([sample], rules);
+    expect(decision.status).toBe("recommend");
+    expect(decision.nextTemperature).toBe("40");
+    expect(decision.nextChange).toContain("Run at 40°C (Change selectivity)");
+    expect(retentionChangeLabel(decision)).toBe("Run at 40°C (Change selectivity)");
+    expect(decision.why).toContain("Peaks: 7. The specification is 7. Met.");
+    expect(decision.why).toContain("resolution is far below the specification");
+    expect(decision.why).toContain("Selectivity is the next stage");
+  });
+
+  it("moves on to efficiency (→ N) when 7 peaks match and resolution is positive but under spec (e.g. ambient 40% B run)", () => {
     const ambient = readLabFile(readFileSync(path.join(process.cwd(), "fixtures/selectivity/GR41-09-40-ambient.csv")));
     expect(ambient.peakCount).toBe(7);
     expect(ambient.minResolutionExcludingFirst).toBeCloseTo(0.324, 3);
@@ -235,18 +266,68 @@ describe("selectivity checks", () => {
     expect(decision.status).toBe("efficiency");
     expect(decision.reason).toBe("efficiency");
     expect(decision.nextChange).toContain("Move on to efficiency");
-    expect(decision.efficiencyChoice?.recommendedSentence).toContain("peak count equals the specification");
+    expect(retentionChangeLabel(decision)).toBe("Move on to efficiency");
     expect(decision.why).toContain("Peaks: 7. The specification is 7. Met.");
     expect(decision.why).toContain("Minimum resolution: 0.324. Under the specification of 1.000.");
     expect(decision.why).toContain("Efficiency is next for the resolution.");
-    expect(decision.efficiencyNow ?? null).toBeNull();
-    expect(decision.nextPercentB).toBeNull();
-    const history = planHistory([sample], rules);
-    expect(history.phase).toBe("retention");
-    const continued = planHistory([sample], rules, { continuePastEfficiency: true });
-    expect(continued.phase).toBe("selectivity");
-    if (continued.phase !== "selectivity") return;
-    expect(continued.plan.step).toBe("temp-40");
+  });
+
+  it("moves on to efficiency (→ N) when 7 peaks match and resolution is close to spec (not far below)", () => {
+    const sample = {
+      percentB: 40,
+      temperatureC: 25,
+      solvent: "ACN",
+      ligand: "C18",
+      peakCount: 7,
+      lastPeakTimeMin: 11.6,
+      firstPeakTimeMin: 1.09,
+      minResolutionExcludingFirst: 0.75, // >= 0.5 * 1.0, can be rescued by N
+      maxBackPressurePsi: 1200,
+    };
+    const rules = {
+      requiredPeaks: 7,
+      lastPeakTimeMin: 15,
+      minResolution: 1,
+      maxBackPressurePsi: 4000,
+      ambientTemperatureC: 25,
+      originalSolvent: "ACN",
+      originalLigand: "C18",
+    };
+    const decision = decideRetention([sample], rules);
+    expect(decision.status).toBe("efficiency");
+    expect(decision.reason).toBe("efficiency");
+    expect(decision.nextChange).toContain("Move on to efficiency");
+    expect(retentionChangeLabel(decision)).toBe("Move on to efficiency");
+    expect(decision.why).toContain("Efficiency is next for the resolution.");
+  });
+
+  it("recommends MET when 7 peaks match, run time is within spec, and resolution meets spec", () => {
+    const sample = {
+      percentB: 40,
+      temperatureC: 25,
+      solvent: "ACN",
+      ligand: "C18",
+      peakCount: 7,
+      lastPeakTimeMin: 11.6,
+      firstPeakTimeMin: 1.09,
+      minResolutionExcludingFirst: 1.25, // >= 1.0
+      maxBackPressurePsi: 1200,
+    };
+    const rules = {
+      requiredPeaks: 7,
+      lastPeakTimeMin: 15,
+      minResolution: 1,
+      maxBackPressurePsi: 4000,
+      ambientTemperatureC: 25,
+      originalSolvent: "ACN",
+      originalLigand: "C18",
+    };
+    const decision = decideRetention([sample], rules);
+    expect(decision.status).toBe("specs-met");
+    expect(decision.reason).toBe("specs-met");
+    expect(decision.nextChange).toContain("specifications are met");
+    expect(retentionChangeLabel(decision)).toBe("MET (Method complete)");
+    expect(decision.why).toContain("Method Development Complete");
   });
 
   it("does not ask just because a short run has 7 peaks", () => {

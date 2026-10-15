@@ -2183,6 +2183,20 @@ function RunSummary({
                     </span>
                     <span>{nextLabel}</span>
                   </span>
+                ) : nextLabel.startsWith("MET") ? (
+                  <span className="inline-flex items-center gap-2">
+                    <span className="inline-flex items-center rounded bg-emerald-500/35 px-2 py-0.5 font-mono text-xs font-black tracking-wider text-white shadow-2xs">
+                      MET
+                    </span>
+                    <span>(Method complete)</span>
+                  </span>
+                ) : nextLabel.includes("Change selectivity") ? (
+                  <span className="inline-flex items-center gap-2">
+                    <span className="inline-flex items-center rounded bg-amber-500/35 px-2 py-0.5 font-mono text-xs font-black tracking-wider text-white shadow-2xs">
+                      SELECTIVITY
+                    </span>
+                    <span>Run at 40°C</span>
+                  </span>
                 ) : (
                   nextLabel
                 )}
@@ -2206,6 +2220,20 @@ function RunSummary({
                   → N
                 </span>
                 <span>{nextLabel}</span>
+              </p>
+            ) : nextLabel.startsWith("MET") ? (
+              <p className="mt-0.5 flex items-center gap-2 text-sm sm:text-base font-extrabold text-emerald-600 dark:text-emerald-400">
+                <span className="inline-flex items-center rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 font-mono text-xs font-black">
+                  MET
+                </span>
+                <span>(Method complete)</span>
+              </p>
+            ) : nextLabel.includes("Change selectivity") ? (
+              <p className="mt-0.5 flex items-center gap-2 text-sm sm:text-base font-extrabold text-amber-600 dark:text-amber-400">
+                <span className="inline-flex items-center rounded bg-amber-500/15 text-amber-600 dark:text-amber-400 px-2 py-0.5 font-mono text-xs font-black">
+                  SELECTIVITY
+                </span>
+                <span>Run at 40°C</span>
               </p>
             ) : (
               <p className="mt-0.5 text-sm sm:text-base font-bold text-foreground">{nextLabel}</p>

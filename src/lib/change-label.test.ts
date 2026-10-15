@@ -40,10 +40,30 @@ describe("next change wording", () => {
         }),
       ),
     ).toBe("Move on to efficiency");
+    expect(
+      retentionChangeLabel(
+        retention({
+          status: "specs-met",
+          reason: "specs-met",
+          move: null,
+          nextPercentB: null,
+          nextChange: "MET: Method complete. The specifications are met.",
+        }),
+      ),
+    ).toBe("MET (Method complete)");
   });
 
   it("names temperature, solvent, and ligand the same way", () => {
     expect(retentionChangeLabel(retention({ nextTemperature: "40", nextPercentB: 60 }))).toBe("Run at 40°C");
+    expect(
+      retentionChangeLabel(
+        retention({
+          nextTemperature: "40",
+          nextPercentB: 40,
+          nextChange: "Run at 40°C (Change selectivity).",
+        }),
+      ),
+    ).toBe("Run at 40°C (Change selectivity)");
     expect(
       retentionChangeLabel(
         retention({ reason: "second-minimum", nextTemperature: "40", nextPercentB: 36, move: null }),
