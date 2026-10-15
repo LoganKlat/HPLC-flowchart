@@ -277,6 +277,7 @@ function splitRetentionWhy(
     const decisionIdx = paragraphs.findIndex((p) => {
       const t = p.trim();
       return (
+        t.includes("significantly under the specification") ||
         t.includes("Decrease %B") ||
         t.includes("close to the specified run time") ||
         t.includes("Another run is needed before that %B can be calculated") ||
@@ -558,6 +559,7 @@ function MinimumPercentFit({
           ) : null}
         </div>
         <div className="mt-1 flex flex-col gap-2 text-sm leading-relaxed text-foreground">
+          {fit.rsFarBelowNote ? <p>{fit.rsFarBelowNote}</p> : null}
           <p>{MINIMUM_PERCENT_SENTENCE}</p>
           {!solved ? (
             <p className="text-orange-800 dark:text-orange-200">

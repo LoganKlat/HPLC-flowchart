@@ -133,6 +133,7 @@ export type RetentionFit = {
   nextPercentB: number;
   oneDecimal: boolean;
   clamped: "low" | "high" | null;
+  rsFarBelowNote?: string | null;
 };
 
 export type MinimumFit = {
@@ -496,6 +497,18 @@ export function isResolutionFarBelow(resolution: number | null, spec: number | n
   return resolution == null || !Number.isFinite(resolution) || resolution < 0.5 * spec;
 }
 
+export function rsFarBelowExplanation(
+  peaks: number,
+  resolution: number | null,
+  spec: number,
+): string {
+  const measuredRs =
+    resolution != null && Number.isFinite(resolution) ? formatResolution(resolution) : "not assessable";
+  const specRs = formatResolution(spec);
+  const halfSpecRs = formatResolution(0.5 * spec);
+  return `All ${formatCount(peaks)} peaks are detected, but the critical pair resolution (${measuredRs}) is still significantly under the specification (${specRs}, below 0.5 × spec = ${halfSpecRs}). Under the Purnell resolution equation (Rs = (√N / 4) × ((α − 1) / α) × (k2 / (1 + k2))), resolution scales with the square root of column efficiency (√N). When resolution is below 0.5 × spec, efficiency levers alone (particle size, column length, flow rate) cannot mathematically rescue the critical pair separation within practical pressure and run-time constraints (falling below the Rs floor). Therefore, we continue the normal decision pathway to optimise retention and selectivity first rather than moving to efficiency.`;
+}
+
 function sevenPeaksSelectivity(
   sample: RetentionSample,
   rules: CompleteRules,
@@ -518,7 +531,7 @@ function sevenPeaksSelectivity(
     following: SELECTIVITY_ORDER,
     why: [
       ...ruleLines(sample, rules, judged),
-      `Selectivity is the next stage because resolution is far below the specification (Rs = ${measuredRs} vs spec ${specRs}, below 0.5 × spec = ${halfSpecRs}). Under the Purnell resolution equation (Rs = (√N / 4) × ((α − 1) / α) × (k2 / (1 + k2))), resolution scales with the square root of column efficiency (√N). When resolution is below 0.5 × spec, efficiency levers alone (particle size, column length, flow rate) cannot mathematically rescue the critical pair separation within practical pressure and run-time constraints (falling below the Rs floor).`,
+      `All ${formatCount(sample.peakCount ?? rules.requiredPeaks)} peaks are detected, but resolution (${measuredRs}) is still significantly under the specification (${specRs}, below 0.5 × spec = ${halfSpecRs}). Under the Purnell resolution equation (Rs = (√N / 4) × ((α − 1) / α) × (k2 / (1 + k2))), resolution scales with the square root of column efficiency (√N). When resolution is below 0.5 × spec, efficiency levers alone (particle size, column length, flow rate) cannot mathematically rescue the critical pair separation within practical pressure and run-time constraints (falling below the Rs floor). Therefore, we must optimise retention and selectivity first before moving to efficiency. Selectivity is the next stage because resolution is far below the specification.`,
       `Therefore, selectivity (α) must be adjusted first. The method development sequence begins selectivity by introducing thermal selectivity at 40°C while maintaining ${percent}% B. Differential temperature coefficients of retention (ΔH°) alter relative band spacing (α) to resolve the co-eluting or critical pair.`,
     ].join("\n\n"),
     fit: null,
@@ -665,8 +678,15 @@ function efficiencyStop(
   judged: EqualJudgment,
   continueShowsLook = false,
 ): RetentionDecision {
+  const measuredRs =
+    judged.resolution != null && Number.isFinite(judged.resolution)
+      ? formatResolution(judged.resolution)
+      : "not assessable";
+  const specRs = rules.minResolution != null ? formatResolution(rules.minResolution) : "spec";
+  const halfSpecRs = rules.minResolution != null ? formatResolution(0.5 * rules.minResolution) : "0.5 × spec";
+
   const nextLine = !judged.resolutionMeets
-    ? "Efficiency is next for the resolution. The peaks are there, but the worst pair is still too close. The next change is meant to pull them apart."
+    ? `Efficiency is next for the resolution. The peak count meets the specification (${formatCount(sample.peakCount ?? rules.requiredPeaks)} peaks), and the resolution (${measuredRs}) is above 0.5 × spec (${halfSpecRs}). Because resolution is high enough to be rescued by efficiency (above the Rs floor), we move to efficiency (→ N) to optimize column efficiency rather than continuing retention or selectivity changes.`
     : judged.timeLate && judged.pressureOver
       ? "Efficiency is next to bring the last peak time and the back-pressure to the specification. The peaks are already there and the worst pair is already far enough apart."
       : judged.pressureOver
@@ -884,16 +904,26 @@ function dropPoints(
       : `Run the next one at ${to}% B.${clampNote} ${PERCENT_B_SENTENCE}`;
 
   const whyParts = situationSentences(samples, rules);
+  const isFarUnder =
+    current.peakCount != null &&
+    current.peakCount >= rules.requiredPeaks &&
+    rules.minResolution != null &&
+    rules.minResolution > 0 &&
+    isResolutionFarBelow(usableResolution(current, rules.requiredPeaks), rules.minResolution);
+  const rsExplanation = isFarUnder
+    ? `${rsFarBelowExplanation(rules.requiredPeaks, usableResolution(current, rules.requiredPeaks), rules.minResolution!)} `
+    : "";
+
   if (reason === "drop-10") {
     whyParts.push(
-      `The last peak is at ${formatMinutes(current.lastPeakTimeMin!)} min, still significantly under the specified run time of ${formatTypedMinutes(rules.lastPeakTimeMin)} min. Decrease %B by 10% to increase retention and peak separation.`,
+      `${rsExplanation}The last peak is at ${formatMinutes(current.lastPeakTimeMin!)} min, still significantly under the specified run time of ${formatTypedMinutes(rules.lastPeakTimeMin)} min. Decrease %B by 10% to increase retention and peak separation.`,
     );
     whyParts.push(
       `In reversed-phase HPLC, solvent B is the strong organic eluent (such as acetonitrile). Decreasing %B increases the aqueous proportion, strengthening hydrophobic partitioning between the analytes and the stationary phase. This increases retention factors (k) across all peaks, expanding the total retention window so closely eluting or overlapping peaks have more column residence time to resolve. Because the final peak eluted well under the specified run time and column pressure is comfortably below the limit, a standard 10 percentage point reduction systematically scouts the retention space without risking exceeding the run time or back-pressure specifications.`,
     );
   } else {
     whyParts.push(
-      `The last peak is at ${formatMinutes(current.lastPeakTimeMin!)} min, close to the specified run time of ${formatTypedMinutes(rules.lastPeakTimeMin)} min. Minimum %B: N/A (at least two runs are required to fit the logK line). This is the only chromatogram so far, so the %B that would hit that time is not calculated. ${from}% B minus 5 percentage points is ${to}% B. Another run is needed before that %B can be calculated. A larger drop is not used, because retention grows quickly as %B goes down.`,
+      `${rsExplanation}The last peak is at ${formatMinutes(current.lastPeakTimeMin!)} min, close to the specified run time of ${formatTypedMinutes(rules.lastPeakTimeMin)} min. Minimum %B: N/A (at least two runs are required to fit the logK line). This is the only chromatogram so far, so the %B that would hit that time is not calculated. ${from}% B minus 5 percentage points is ${to}% B. Another run is needed before that %B can be calculated. A larger drop is not used, because retention grows quickly as %B goes down.`,
     );
     whyParts.push(
       `In reversed-phase systems, retention factor (k) increases exponentially as %B decreases (log k varies linearly with mobile phase composition). Because the last peak is already approaching the specified run time limit, taking another 10% reduction could push the final peak beyond the ${formatTypedMinutes(rules.lastPeakTimeMin)} min ceiling or generate excessive column back-pressure. A conservative 5 percentage point reduction safely increases retention while providing the second distinct isocratic data point required to establish a Linear Solvent Strength (LSS) calibration line.`,
@@ -939,8 +969,9 @@ function returnToSelectivity(samples: RetentionSample[], rules: CompleteRules): 
   };
 }
 
-function closeToSpecSentence(lastPeakMin: number, specMin: number): string {
-  return `The last peak is at ${formatMinutes(lastPeakMin)} min, close to the specified run time of ${formatTypedMinutes(specMin)} min. Another 10% drop would make retention much longer, because retention grows quickly as %B goes down. The next %B is calculated instead.`;
+function closeToSpecSentence(lastPeakMin: number, specMin: number, rsNote = ""): string {
+  const prefix = rsNote ? `${rsNote} ` : "";
+  return `${prefix}The last peak is at ${formatMinutes(lastPeakMin)} min, close to the specified run time of ${formatTypedMinutes(specMin)} min. Another 10% drop would make retention much longer, because retention grows quickly as %B goes down. The next %B is calculated instead.`;
 }
 
 function resolutionChangeSentence(previous: number | null, current: number | null): string {
@@ -961,9 +992,20 @@ function resolutionChangeSentence(previous: number | null, current: number | nul
 
 function calculatePercentB(samples: RetentionSample[], rules: CompleteRules): RetentionDecision {
   const current = samples[samples.length - 1];
+  const isFarUnder =
+    current.peakCount != null &&
+    current.peakCount >= rules.requiredPeaks &&
+    rules.minResolution != null &&
+    rules.minResolution > 0 &&
+    isResolutionFarBelow(usableResolution(current, rules.requiredPeaks), rules.minResolution);
+
+  const rsNote = isFarUnder
+    ? rsFarBelowExplanation(rules.requiredPeaks, usableResolution(current, rules.requiredPeaks), rules.minResolution!)
+    : "";
+
   const intro = [
     ...situationSentences(samples, rules),
-    closeToSpecSentence(current.lastPeakTimeMin!, rules.lastPeakTimeMin),
+    closeToSpecSentence(current.lastPeakTimeMin!, rules.lastPeakTimeMin, rsNote),
   ];
 
   if (!isBelow(current.lastPeakTimeMin!, rules.lastPeakTimeMin)) {
@@ -1071,6 +1113,7 @@ function calculatePercentB(samples: RetentionSample[], rules: CompleteRules): Re
     nextPercentB: rounded.value,
     oneDecimal: rounded.oneDecimal,
     clamped: rounded.clamped,
+    rsFarBelowNote: rsNote || null,
   };
 
   const percent = formatPercentB(rounded.value);
@@ -1114,7 +1157,19 @@ function briefLines(sample: RetentionSample, rules: CompleteRules): string[] {
     sample.lastPeakTimeMin == null
       ? "Last peak: not in this file."
       : `Last peak: ${formatMinutes(sample.lastPeakTimeMin)} min. The set time is ${formatTypedMinutes(rules.lastPeakTimeMin)} min.`;
-  return [peaks, pressure, last];
+  const lines = [peaks, pressure, last];
+  if (
+    sample.peakCount != null &&
+    sample.peakCount >= rules.requiredPeaks &&
+    rules.minResolution != null &&
+    rules.minResolution > 0 &&
+    isResolutionFarBelow(usableResolution(sample, rules.requiredPeaks), rules.minResolution)
+  ) {
+    lines.push(
+      rsFarBelowExplanation(rules.requiredPeaks, usableResolution(sample, rules.requiredPeaks), rules.minResolution),
+    );
+  }
+  return lines;
 }
 
 export const MINIMUM_PERCENT_SENTENCE =

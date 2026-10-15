@@ -64,9 +64,12 @@ export function EfficiencyChoiceButtons({
 }
 
 export function EfficiencyChoiceView({ why }: { why: string }) {
-  const paragraphs = why.split("\n\n").filter(Boolean);
-  const summary = paragraphs[0] ?? why;
-  const more = paragraphs.slice(1);
+  const paragraphs = why.split("\n\n").map((p) => p.trim()).filter(Boolean);
+  const leadIdx = paragraphs.findIndex(
+    (p) => p.startsWith("Efficiency is next") || p.startsWith("Why efficiency"),
+  );
+  const summary = leadIdx >= 0 ? paragraphs[leadIdx] : paragraphs[0] ?? why;
+  const more = paragraphs.filter((_, i) => (leadIdx >= 0 ? i !== leadIdx : i !== 0));
   return (
     <div className="contents" id="efficiency-choice">
       <section className="rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10">

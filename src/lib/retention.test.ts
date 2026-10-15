@@ -1106,6 +1106,8 @@ describe("which run to carry forward after the calculated %B", () => {
     const normalPath = decideRetention(series, rules);
     expect(normalPath.move).toBe("calculated");
     expect(normalPath.nextPercentB).toBe(36);
+    expect(normalPath.why).toContain("significantly under the specification");
+    expect(normalPath.why).toContain("optimise retention and selectivity first");
 
     // Once Rs >= 0.5 * spec (e.g. minResolution: 0.6 where 0.324 >= 0.30), moves on to efficiency
     const matched = decideRetention(series, { ...rules, minResolution: 0.6 });
@@ -1115,6 +1117,8 @@ describe("which run to carry forward after the calculated %B", () => {
     expect(retentionChangeLabel(matched)).toBe("Move on to efficiency");
     expect(matched.why).toContain("Peaks: 7. The specification is 7. Met.");
     expect(matched.why).toContain("Efficiency is next for the resolution.");
+    expect(matched.why).toContain("above 0.5 × spec");
+    expect(matched.why).toContain("above the Rs floor");
 
     // With peaks still short, the same series still calculates a minimum %B.
     const calculated = decideRetention(series, shortRules);

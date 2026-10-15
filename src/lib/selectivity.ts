@@ -360,8 +360,12 @@ function efficiencyWhy(input: {
     pressureSentence(input.maxBackPressurePsi, input.maxBackPressureSpec),
   ];
   if (!resolutionMet) {
+    const halfSpec = 0.5 * input.spec;
+    const isAboveFloor = input.measured >= halfSpec - 1e-9;
     parts.push(
-      "The peaks are there, but the worst pair is still too close. Not every specification is met. The next change is meant to pull them apart. Efficiency and gradient may still bring the resolution up to the specification.",
+      isAboveFloor
+        ? `The peak count meets the specification, and the minimum resolution (${formatResolution(input.measured)}) is above 0.5 × spec (${formatResolution(halfSpec)}). Because resolution is above the Rs floor, efficiency levers (N) can mathematically rescue the critical pair separation without further changing selectivity chemistry.`
+        : `The peak count meets the specification, but resolution (${formatResolution(input.measured)}) is still significantly under the specification (${formatResolution(input.spec)}, below 0.5 × spec = ${formatResolution(halfSpec)}). Efficiency levers alone cannot practically rescue resolution when it is far below specification, so retention and selectivity should be optimized first.`,
     );
   } else if (lastPeakLate && input.specifiedRunTimeMin != null) {
     parts.push(
