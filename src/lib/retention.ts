@@ -1,6 +1,9 @@
 import { formatDecimal, resolutionForDecision } from "@/lib/evaluate";
 import { PERCENT_B_SENTENCE, SELECTIVITY_ORDER, TEMPERATURE_SENTENCE } from "@/lib/setting-kind";
 import type { PeakMeasurement } from "@/lib/lab-file";
+import { calculateAwesomeFloor, type AwesomeCalculatorResult } from "@/lib/awesome-calculator";
+
+export { calculateAwesomeFloor, type AwesomeCalculatorResult } from "@/lib/awesome-calculator";
 
 /**
  * Retention step: choose the next %B, or say retention is finished.
@@ -24,6 +27,11 @@ export type RetentionSample = {
   peaks?: PeakMeasurement[];
   /** Optional 1-based UI run number when blank runs are interleaved. */
   displayRunNumber?: number;
+  lengthMm?: number | null;
+  diameterMm?: number | null;
+  particleSize?: number | null;
+  flowRate?: number | null;
+  coreShell?: boolean | null;
 };
 
 export type RetentionChoice = {
@@ -202,6 +210,14 @@ export type RetentionDecision = {
   continueShowsLook?: boolean;
   /** The second minimum %B: use the recommendation, or type another %B, then run at 40°C. */
   choosePercent?: boolean;
+  /** The specific action string from the 12-row decision table. */
+  actionText?: string;
+  /** Exact rule table action name (e.g. Decrease %B by 10, Min %B ..., SELECTIVITY, Increase L (watch BP), etc.). */
+  tableAction?: string;
+  /** Specific efficiency action recommended for peak count met runs. */
+  efficiencyAction?: string;
+  /** Full calculations from the Awesome Rainbow Calculator. */
+  awesomeFloor?: AwesomeCalculatorResult | null;
   /** Stay in retention: ask for a %B, then start selectivity at 40°C. No new minimum is fitted. */
   pickOwnPercent?: boolean;
 };
@@ -452,6 +468,7 @@ function ranRecommendedMinimum(percentB: number, prior: RetentionDecision): bool
 }
 
 function minimumAlreadyRun(): RetentionDecision {
+  const tableAction = "Change selectivity (solvent, temperature, ligand) OR an intermediate %B";
   return {
     status: "recommend",
     reason: "choose-percent",
@@ -459,9 +476,12 @@ function minimumAlreadyRun(): RetentionDecision {
     nextPercentB: null,
     nextTemperature: "40",
     pickOwnPercent: true,
+    actionText: "Run at 40°C (Change selectivity)",
+    tableAction,
     nextChange: "Select a %B of your choosing. The next run is selectivity at 40°C at that %B.",
     following: SELECTIVITY_ORDER,
     why: [
+      "Row 3 (Peaks < 7, tR > spec): Change selectivity (solvent, temperature, ligand).",
       "The minimum %B from the last-peak line has already been run.",
       "Staying in retention does not calculate another minimum %B, and it does not refit the last-peak line.",
       "Select a %B of your choosing. With that %B, selectivity starts at 40°C.",
@@ -480,39 +500,62 @@ function afterInBetweenFile(
     return investigateDecision(current, rules);
   }
   if (current.peakCount === rules.requiredPeaks) {
-    const judged = judgeEqualPeaks(current, rules);
-    if (judged.resolutionMeets && !judged.timeLate && !judged.pressureOver) return specsMet(current, rules, judged);
-    if (choice?.continueToLook) return lookDecision(samples, rules, "between-then-heat");
-    if (choice?.continueRetention) return chooseOwnPercentDecision(current, rules);
-    if (isResolutionFarBelow(judged.resolution, rules.minResolution)) {
-      return sevenPeaksSelectivity(current, rules, judged);
-    }
-    return efficiencyStop(current, rules, judged, true);
+    return equalPeakCount(samples, rules, choice, true);
   }
   return lookDecision(samples, rules, "picker");
 }
 
-export function isResolutionFarBelow(resolution: number | null, spec: number | null): boolean {
+export function isResolutionFarBelow(
+  resolution: number | null,
+  spec: number | null,
+  sample?: RetentionSample,
+  rules?: RetentionRules,
+): boolean {
   if (spec == null || !(spec > 0)) return false;
-  return resolution == null || !Number.isFinite(resolution) || resolution < 0.5 * spec;
+  if (resolution == null || !Number.isFinite(resolution)) return true;
+  if (sample && rules && rules.lastPeakTimeMin && rules.maxBackPressurePsi) {
+    const calc = calculateAwesomeFloor({
+      column: {
+        lengthMm: sample.lengthMm,
+        diameterMm: sample.diameterMm,
+        particleSize: sample.particleSize,
+        flowRate: sample.flowRate,
+        sppFactor: sample.coreShell ? 1.5 : 1.0,
+      },
+      t0Min: sample.firstPeakTimeMin,
+      tRMin: sample.lastPeakTimeMin ?? rules.lastPeakTimeMin,
+      backPressurePsi: sample.maxBackPressurePsi ?? rules.maxBackPressurePsi,
+      resolution,
+      specTimeMin: rules.lastPeakTimeMin,
+      specPressurePsi: rules.maxBackPressurePsi,
+      specResolution: spec,
+    });
+    return resolution + 1e-9 < calc.rsFloorSpp;
+  }
+  return resolution + 1e-9 < 0.5 * spec;
 }
 
 export function rsFarBelowExplanation(
   peaks: number,
   resolution: number | null,
   spec: number,
+  calc?: AwesomeCalculatorResult,
 ): string {
   const measuredRs =
     resolution != null && Number.isFinite(resolution) ? formatResolution(resolution) : "not assessable";
   const specRs = formatResolution(spec);
-  const halfSpecRs = formatResolution(0.5 * spec);
-  return `All ${formatCount(peaks)} peaks are detected, but the critical pair resolution (${measuredRs}) is still significantly under the specification (${specRs}, below 0.5 × spec = ${halfSpecRs}). Under the Purnell resolution equation (Rs = (√N / 4) × ((α − 1) / α) × (k2 / (1 + k2))), resolution scales with the square root of column efficiency (√N). When resolution is below 0.5 × spec, efficiency levers alone (particle size, column length, flow rate) cannot mathematically rescue the critical pair separation within practical pressure and run-time constraints (falling below the Rs floor). Therefore, we continue the normal decision pathway to optimise retention and selectivity first rather than moving to efficiency.`;
+  const floorRs = calc ? formatResolution(calc.rsFloorSpp) : formatResolution(0.5 * spec);
+  const fppFloorRs = calc ? formatResolution(calc.rsFloorFpp) : null;
+  const fppText = fppFloorRs ? ` (FPP floor = ${fppFloorRs}, SPP floor = ${floorRs})` : "";
+  return `All ${formatCount(peaks)} peaks are detected, but the critical pair resolution (${measuredRs}) is below the resolution floor (${floorRs}${fppText}, spec = ${specRs}). Under the Purnell resolution equation (Rs = (√N / 4) × ((α − 1) / α) × (k2 / (1 + k2))), resolution scales with the square root of column efficiency (√N). When resolution is below the resolution floor, efficiency levers alone (particle size, column length, flow rate) cannot mathematically rescue the critical pair separation within practical pressure and run-time constraints. Therefore, selectivity must be optimized first.`;
 }
 
 function sevenPeaksSelectivity(
   sample: RetentionSample,
   rules: CompleteRules,
   judged: EqualJudgment,
+  calc?: AwesomeCalculatorResult,
+  rowNumber: 7 | 10 = 7,
 ): RetentionDecision {
   const percent = sample.percentB != null ? formatPercentB(sample.percentB) : "the current";
   const measuredRs =
@@ -520,33 +563,164 @@ function sevenPeaksSelectivity(
       ? formatResolution(judged.resolution)
       : "not assessable";
   const specRs = rules.minResolution != null ? formatResolution(rules.minResolution) : "spec";
-  const halfSpecRs = rules.minResolution != null ? formatResolution(0.5 * rules.minResolution) : "0.5 × spec";
+  const floorRs = calc ? formatResolution(calc.rsFloorSpp) : (rules.minResolution != null ? formatResolution(0.5 * rules.minResolution) : "floor");
+  const floorFppRs = calc ? formatResolution(calc.rsFloorFpp) : null;
+  const fppText = floorFppRs ? ` (FPP floor = ${floorFppRs}, SPP floor = ${floorRs})` : ` (${floorRs})`;
+
+  const actionText = "Run at 40°C (Change selectivity)";
+  const nextChange = `Run at 40°C (Change selectivity). Resolution (${measuredRs}) is below the resolution floor${fppText}, so selectivity must be changed before efficiency. Run the next chromatogram at 40°C, still at ${percent}% B.`;
+
+  const rowDescription =
+    rowNumber === 7
+      ? "Row 7 (Peaks = 7, tR < spec, Rs < floor):"
+      : "Row 10 (Peaks = 7, tR > spec, Rs < floor):";
+
+  const why = [
+    ...ruleLines(sample, rules, judged),
+    `${rowDescription} All ${formatCount(sample.peakCount ?? rules.requiredPeaks)} peaks are detected, but critical pair resolution (${measuredRs}) is significantly under the specification (${specRs}, below the resolution floor of ${floorRs}). Under the Purnell resolution equation (Rs = (√N / 4) × ((α − 1) / α) × (k2 / (1 + k2))), resolution scales with the square root of column efficiency (√N). When resolution is below the resolution floor, efficiency levers alone cannot mathematically rescue separation within practical constraints (resolution is far below the specification). Therefore, we must optimise retention and selectivity first before moving to efficiency. Selectivity is the next stage because resolution is far below the specification.`,
+    calc
+      ? `Awesome Rainbow Calculator Analysis: Headroom HR = ${calc.headroom.toFixed(3)}. With current plates N1 = ${Math.round(calc.n1)}, the maximum theoretical plates achievable within run time and pressure limits are Nmax,FPP = ${Math.round(calc.nMaxFpp)} (fully porous) and Nmax,SPP = ${Math.round(calc.nMaxSpp)} (superficially porous). The minimum resolution required to reach the specification via efficiency levers is Rs,floor,SPP = ${floorRs}. Verdict: ${calc.verdictText}.`
+      : `Under the Purnell resolution equation (Rs = (√N / 4) × ((α − 1) / α) × (k2 / (1 + k2))), resolution scales with the square root of column efficiency (√N). When resolution is below the resolution floor, efficiency levers alone cannot mathematically rescue separation within practical constraints.`,
+    `Therefore, selectivity must be changed first (Action: SELECTIVITY). The method development sequence begins selectivity by introducing thermal selectivity at 40°C while maintaining ${percent}% B. Differential temperature coefficients of retention (ΔH°) alter relative band spacing (α) to resolve the co-eluting or critical pair.`,
+  ].join("\n\n");
+
   return {
     status: "recommend",
     reason: "drop-10",
     move: null,
     nextPercentB: sample.percentB ?? null,
     nextTemperature: "40",
-    nextChange: `Run at 40°C (Change selectivity). Resolution (${measuredRs}) is far below the specification (${specRs}, below 0.5 × spec = ${halfSpecRs}), so selectivity must be changed before efficiency. Run the next chromatogram at 40°C, still at ${percent}% B.`,
+    actionText,
+    tableAction: "SELECTIVITY",
+    nextChange,
     following: SELECTIVITY_ORDER,
-    why: [
-      ...ruleLines(sample, rules, judged),
-      `All ${formatCount(sample.peakCount ?? rules.requiredPeaks)} peaks are detected, but resolution (${measuredRs}) is still significantly under the specification (${specRs}, below 0.5 × spec = ${halfSpecRs}). Under the Purnell resolution equation (Rs = (√N / 4) × ((α − 1) / α) × (k2 / (1 + k2))), resolution scales with the square root of column efficiency (√N). When resolution is below 0.5 × spec, efficiency levers alone (particle size, column length, flow rate) cannot mathematically rescue the critical pair separation within practical pressure and run-time constraints (falling below the Rs floor). Therefore, we must optimise retention and selectivity first before moving to efficiency. Selectivity is the next stage because resolution is far below the specification.`,
-      `Therefore, selectivity (α) must be adjusted first. The method development sequence begins selectivity by introducing thermal selectivity at 40°C while maintaining ${percent}% B. Differential temperature coefficients of retention (ΔH°) alter relative band spacing (α) to resolve the co-eluting or critical pair.`,
-    ].join("\n\n"),
+    why,
     fit: null,
+    awesomeFloor: calc ?? null,
   };
+}
+
+function efficiencyDecision(
+  sample: RetentionSample,
+  rules: CompleteRules,
+  judged: EqualJudgment,
+  calc: AwesomeCalculatorResult,
+  rowNumber: 4 | 5 | 8 | 11 | 12,
+  continueShowsLook = false,
+): RetentionDecision {
+  const measuredRs =
+    judged.resolution != null && Number.isFinite(judged.resolution)
+      ? formatResolution(judged.resolution)
+      : "not assessable";
+  const specRs = rules.minResolution != null ? formatResolution(rules.minResolution) : "spec";
+  const floorRs = formatResolution(calc.rsFloorSpp);
+  const floorFppRs = formatResolution(calc.rsFloorFpp);
+
+  let actionText = "";
+  let rowHeading = "";
+  let rationale = "";
+
+  switch (rowNumber) {
+    case 4:
+      rowHeading = "Row 4 (Peaks = 7, tR ≪ spec, Rs < floor):";
+      actionText = "Increase L (watch BP)";
+      rationale = `Run time (${formatMinutes(sample.lastPeakTimeMin!)} min) is well under half the specification limit (${formatTypedMinutes(rules.lastPeakTimeMin)} min, tR ≪ spec). Although critical pair resolution (${measuredRs}) is below the standard resolution floor for the current column length, the substantial run-time headroom allows increasing column length (L). Increasing L increases theoretical plates (N ∝ L) and resolution (Rs ∝ √L) while run time remains safely within specification, provided column back-pressure is monitored (ΔP ∝ L).`;
+      break;
+    case 5:
+      rowHeading = "Row 5 (Peaks = 7, tR ≪ spec, floor ≤ Rs < spec):";
+      actionText = "Increase L (BP) OR decrease F OR decrease PS (BP) OR SPP";
+      rationale = `Run time (${formatMinutes(sample.lastPeakTimeMin!)} min) is well under specification (tR ≪ spec) and critical pair resolution (${measuredRs}) is at or above the resolution floor (${floorRs} ≤ Rs < ${specRs}). Multiple efficiency levers can reach the target resolution: increase column length (L) while watching back-pressure, decrease flow rate (F) toward the Van Deemter optimum, decrease particle size (PS) while watching back-pressure, or switch to a superficially porous (SPP / core-shell) column (verdict: ${calc.verdictText}).`;
+      break;
+    case 8:
+      rowHeading = "Row 8 (Peaks = 7, tR < spec, floor ≤ Rs < spec):";
+      actionText = "Decrease F OR decrease PS (BP) OR SPP";
+      rationale = `Run time (${formatMinutes(sample.lastPeakTimeMin!)} min) is approaching the specification limit (${formatTypedMinutes(rules.lastPeakTimeMin)} min, tR < spec), so column length cannot be increased without exceeding the run-time ceiling. Critical pair resolution (${measuredRs}) is at or above the resolution floor (${floorRs} ≤ Rs < ${specRs}). Reach target resolution using efficiency levers that do not increase column length: decrease flow rate (F), decrease particle size (PS) while monitoring back-pressure, or switch to a superficially porous (SPP / core-shell) column (verdict: ${calc.verdictText}).`;
+      break;
+    case 11:
+      rowHeading = "Row 11 (Peaks = 7, tR > spec, floor ≤ Rs < spec):";
+      actionText = "Decrease PS (BP), then increase F to shorten the run";
+      rationale = `Run time (${formatMinutes(sample.lastPeakTimeMin!)} min) exceeds the specification limit (${formatTypedMinutes(rules.lastPeakTimeMin)} min, tR > spec), and resolution (${measuredRs}) is below specification but at or above the resolution floor (${floorRs} ≤ Rs < ${specRs}). To simultaneously gain resolution and recover run-time throughput: decrease particle size (PS) to generate the required theoretical plates (N ∝ 1/PS), watching back-pressure limits (ΔP ∝ 1/PS²), then increase flow rate (F) to accelerate elution and shorten run time back inside the specification window.`;
+      break;
+    case 12:
+      rowHeading = "Row 12 (Peaks = 7, tR > spec, Rs ≥ spec):";
+      actionText = "Increase F to shorten the run";
+      rationale = `Critical pair resolution (${measuredRs}) meets or exceeds the specification (${specRs}), but run time (${formatMinutes(sample.lastPeakTimeMin!)} min) exceeds the throughput limit (${formatTypedMinutes(rules.lastPeakTimeMin)} min, tR > spec). Because separation chemistry is already satisfactory, increase flow rate (F) to shorten analysis time and bring the run inside the throughput limit without altering retention chemistry.`;
+      break;
+  }
+
+  const nextChange = `${EFFICIENCY_MOVE_ON} ${actionText}`;
+
+  const leadLine = !judged.resolutionMeets
+    ? `Efficiency is next for the resolution. The peak count meets the specification (${formatCount(sample.peakCount ?? rules.requiredPeaks)} peaks), and the resolution (${measuredRs}) is above the resolution floor (${floorRs}). Because resolution is high enough to be rescued by efficiency (above the Rs floor), we move to efficiency (→ N) to optimize column efficiency rather than continuing retention or selectivity changes.`
+    : judged.timeLate && judged.pressureOver
+      ? "Efficiency is next to bring the last peak time and the back-pressure to the specification. The peaks are already there and the worst pair is already far enough apart."
+      : judged.pressureOver
+        ? "Efficiency is next to bring the back-pressure to the specification. The peaks are already there, the worst pair is already far enough apart, and the last peak is inside the specified time."
+        : "Efficiency is next to bring the last peak time to the specification. The peaks are already there and the worst pair is already far enough apart. Efficiency can shorten the run without changing the separation you already have.";
+
+  const why = [
+    ...ruleLines(sample, rules, judged),
+    leadLine,
+    `${rowHeading} All ${formatCount(sample.peakCount ?? rules.requiredPeaks)} peaks are detected. Action: ${actionText}.`,
+    `Awesome Rainbow Calculator Analysis: Headroom HR = ${calc.headroom.toFixed(3)}. Achievable plate count Nmax,FPP = ${Math.round(calc.nMaxFpp)}, Nmax,SPP = ${Math.round(calc.nMaxSpp)}. Resolution floors: Rs,floor,SPP = ${floorRs}, Rs,floor,FPP = ${floorFppRs}. Verdict: ${calc.verdictText}.`,
+    rationale,
+    "Why efficiency is the next stage: Under the Fundamental Resolution Equation (Rs = (√N / 4) × ((α − 1) / α) × (k2 / (1 + k2))), retention (k) and selectivity (α) are established once all peaks are present and detected. Further reducing %B would yield diminishing returns on retention while prolonging run time. Adjusting column efficiency (theoretical plate count N = L / HETP) via flow velocity along the van Deemter curve, smaller particle size packing, column length, or superficially porous particles achieves baseline resolution or shorter run times without altering retention chemistry.",
+  ].join("\n\n");
+
+  return {
+    status: "efficiency",
+    reason: "efficiency",
+    move: null,
+    nextPercentB: null,
+    actionText,
+    tableAction: actionText,
+    efficiencyAction: actionText,
+    nextChange,
+    why,
+    fit: null,
+    awesomeFloor: calc,
+    efficiencyChoice: {
+      recommendedSentence: `${EFFICIENCY_MOVE_ON} Action: ${actionText}`,
+      continueLabel: EFFICIENCY_CONTINUE,
+    },
+    continueShowsLook,
+  };
+}
+
+function efficiencyStop(
+  sample: RetentionSample,
+  rules: CompleteRules,
+  judged: EqualJudgment,
+  continueShowsLook = false,
+): RetentionDecision {
+  const calc = calculateAwesomeFloor({
+    column: {
+      lengthMm: sample.lengthMm,
+      diameterMm: sample.diameterMm,
+      particleSize: sample.particleSize,
+      flowRate: sample.flowRate,
+      sppFactor: sample.coreShell ? 1.5 : 1.0,
+    },
+    t0Min: sample.firstPeakTimeMin,
+    tRMin: sample.lastPeakTimeMin ?? rules.lastPeakTimeMin,
+    backPressurePsi: sample.maxBackPressurePsi ?? rules.maxBackPressurePsi,
+    resolution: judged.resolution,
+    specTimeMin: rules.lastPeakTimeMin,
+    specPressurePsi: rules.maxBackPressurePsi,
+    specResolution: rules.minResolution ?? 1.5,
+  });
+  return efficiencyDecision(sample, rules, judged, calc, 8, continueShowsLook);
 }
 
 function equalPeakCount(
   samples: RetentionSample[],
   rules: CompleteRules,
   choice: RetentionChoice | undefined,
+  continueShowsLook = false,
 ): RetentionDecision {
   const current = samples[samples.length - 1];
   const judged = judgeEqualPeaks(current, rules);
-  // 1. Run time within spec and Rs above spec -> MET, the method is complete.
-  if (judged.resolutionMeets && !judged.timeLate && !judged.pressureOver) return specsMet(current, rules, judged);
+
   if (choice?.continueToLook) return lookDecision(samples, rules, "between-then-heat");
   if (choice?.continueRetention) {
     const rawPrior = samples.length >= 2 ? decideRetention(samples.slice(0, -1), rules) : null;
@@ -575,38 +749,91 @@ function equalPeakCount(
     }
     return chooseOwnPercentDecision(current, rules);
   }
-  // 2. Rs far below spec (Rs < 0.5 * spec) -> continue normal decision pathway:
-  // going from retention -> selectivity
-  if (isResolutionFarBelow(judged.resolution, rules.minResolution)) {
-    const rawPrior = samples.length >= 2 ? decideRetention(samples.slice(0, -1), rules) : null;
-    const prior =
-      rawPrior && rawPrior.status === "efficiency"
-        ? decideRetention(samples.slice(0, -1), rules, { continueRetention: true })
-        : rawPrior;
-    const alreadyRanMin =
-      prior != null &&
-      current.percentB != null &&
-      ranRecommendedMinimum(current.percentB, prior);
-    if (
-      !judged.timeLate &&
-      !alreadyRanMin &&
-      current.lastPeakTimeMin != null &&
-      current.maxBackPressurePsi != null &&
-      pressureIsUnder(current.maxBackPressurePsi, rules.maxBackPressurePsi)
-    ) {
-      const line = retentionLine(rules.lastPeakTimeMin);
-      if (!isPast(current.lastPeakTimeMin, line)) {
-        return dropPoints(samples, rules, 10, "drop-10");
-      }
-      if (samples.length >= 2) {
-        return calculatePercentB(samples, rules);
-      }
-      return sevenPeaksSelectivity(current, rules, judged);
+
+  const calc = calculateAwesomeFloor({
+    column: {
+      lengthMm: current.lengthMm,
+      diameterMm: current.diameterMm,
+      particleSize: current.particleSize,
+      flowRate: current.flowRate,
+      sppFactor: current.coreShell ? 1.5 : 1.0,
+    },
+    t0Min: current.firstPeakTimeMin,
+    tRMin: current.lastPeakTimeMin ?? rules.lastPeakTimeMin,
+    backPressurePsi: current.maxBackPressurePsi ?? rules.maxBackPressurePsi,
+    resolution: judged.resolution,
+    specTimeMin: rules.lastPeakTimeMin,
+    specPressurePsi: rules.maxBackPressurePsi,
+    specResolution: rules.minResolution ?? 1.5,
+  });
+
+  const timeSpec = rules.lastPeakTimeMin;
+  const timeMeasured = current.lastPeakTimeMin ?? 0;
+  // tR << spec: at or under 0.5 * spec
+  const timeUnderHalf = !isPast(timeMeasured, retentionLine(timeSpec));
+  // tR > spec: later than spec
+  const timePastSpec = isPast(timeMeasured, timeSpec);
+  // tR < spec: between 0.5 * spec and spec
+  const timeUnderSpec = !timeUnderHalf && !timePastSpec;
+
+  const hasResSpec = rules.minResolution != null && rules.minResolution > 0;
+  const resMeets = judged.resolutionMeets;
+  const rsFloor = calc.rsFloorSpp;
+  const resBelowFloor = hasResSpec && (judged.resolution == null || judged.resolution + 1e-9 < rsFloor);
+  const resFloorToSpec = hasResSpec && !resMeets && !resBelowFloor;
+
+  // 1. tR << spec
+  if (timeUnderHalf) {
+    if (resBelowFloor) {
+      // Row 4: Increase L (watch BP)
+      return efficiencyDecision(current, rules, judged, calc, 4, continueShowsLook || samples.length > 1);
     }
-    return sevenPeaksSelectivity(current, rules, judged);
+    if (resFloorToSpec) {
+      // Row 5: Increase L (BP) OR decrease F OR decrease PS (BP) OR SPP
+      return efficiencyDecision(current, rules, judged, calc, 5, continueShowsLook || samples.length > 1);
+    }
+    // Row 6: MET. Optionally increase F to shorten the run (unless pressure is over)
+    if (judged.pressureOver) {
+      return efficiencyDecision(current, rules, judged, calc, 5, continueShowsLook || samples.length > 1);
+    }
+    return specsMet(current, rules, judged, calc, 6);
   }
-  // 3. Every other 7-peak run (Rs >= 0.5 * spec) -> N (efficiency).
-  return efficiencyStop(current, rules, judged, samples.length > 1);
+
+  // 2. tR < spec
+  if (timeUnderSpec) {
+    if (resBelowFloor) {
+      // Row 7: SELECTIVITY
+      return sevenPeaksSelectivity(current, rules, judged, calc, 7);
+    }
+    if (resFloorToSpec) {
+      // Row 8: Decrease F OR decrease PS (BP) OR SPP
+      return efficiencyDecision(current, rules, judged, calc, 8, continueShowsLook || samples.length > 1);
+    }
+    // Row 9: MET. Optionally increase F to shorten the run (unless pressure is over)
+    if (judged.pressureOver) {
+      return efficiencyDecision(current, rules, judged, calc, 8, continueShowsLook || samples.length > 1);
+    }
+    return specsMet(current, rules, judged, calc, 9);
+  }
+
+  // 3. tR > spec
+  if (timePastSpec) {
+    if (resBelowFloor) {
+      // Row 10: SELECTIVITY
+      return sevenPeaksSelectivity(current, rules, judged, calc, 10);
+    }
+    if (resFloorToSpec) {
+      // Row 11: Decrease PS (BP), then increase F to shorten the run
+      return efficiencyDecision(current, rules, judged, calc, 11, continueShowsLook || samples.length > 1);
+    }
+    // Row 12: Increase F to shorten the run
+    return efficiencyDecision(current, rules, judged, calc, 12, continueShowsLook || samples.length > 1);
+  }
+
+  if (resMeets && !judged.pressureOver) {
+    return specsMet(current, rules, judged, calc, 9);
+  }
+  return efficiencyDecision(current, rules, judged, calc, 8, continueShowsLook || samples.length > 1);
 }
 
 type EqualJudgment = {
@@ -635,21 +862,39 @@ function judgeEqualPeaks(sample: RetentionSample, rules: CompleteRules): EqualJu
   return { resolution, resolutionMeets, resolutionPositive, timeLate, pressureOver };
 }
 
-function specsMet(sample: RetentionSample, rules: CompleteRules, judged: EqualJudgment): RetentionDecision {
+function specsMet(
+  sample: RetentionSample,
+  rules: CompleteRules,
+  judged: EqualJudgment,
+  calc?: AwesomeCalculatorResult,
+  rowNumber: 6 | 9 = 9,
+): RetentionDecision {
+  const rowHeading =
+    rowNumber === 6
+      ? "Row 6 (Peaks = 7, tR ≪ spec, Rs ≥ spec):"
+      : "Row 9 (Peaks = 7, tR < spec, Rs ≥ spec):";
+  const actionText = "MET. Optionally increase F to shorten the run";
+  const nextChange = "The specifications are met.";
+  const why = [
+    ...ruleLines(sample, rules, judged),
+    `${rowHeading} The specifications are met. All ${formatCount(sample.peakCount ?? rules.requiredPeaks)} peaks are detected, critical pair resolution meets or exceeds the specification, run time is within limits, and back-pressure is under the limit. Action: ${actionText}.`,
+    calc
+      ? `Awesome Rainbow Calculator Analysis: Headroom HR = ${calc.headroom.toFixed(3)}. Current plates N1 = ${Math.round(calc.n1)}. Verdict: ${calc.verdictText}.`
+      : "",
+    "Method Development Complete: Every analytical performance requirement is satisfied under these isocratic conditions. All expected sample components are fully separated, the critical pair resolution exceeds the specification threshold, total analysis time is within the target throughput window, and column back-pressure operates safely below system pressure limits. Further modifications to mobile phase composition, temperature, or column chemistry are unnecessary. Optionally, you may increase flow rate (F) to shorten the run time if faster throughput is desired.",
+  ].filter(Boolean).join("\n\n");
+
   return {
     status: "specs-met",
     reason: "specs-met",
     move: null,
     nextPercentB: null,
-    nextChange: "The specifications are met.",
-    why: [
-      ...ruleLines(sample, rules, judged),
-      rules.minResolution != null && rules.minResolution > 0
-        ? "The specifications are met. Do not keep going. The peaks are there, the worst pair is far enough apart, the last peak is inside the specified time, and the back-pressure is inside the specification. Retention, selectivity, and efficiency already meet the specification, so none of them is changed."
-        : "The specifications are met. Do not keep going. The peaks are there, the last peak is inside the specified time, and the back-pressure is inside the specification. Retention is already inside the specified time, so it is not changed. Selectivity is not the next step either.",
-      "Method Development Complete: Every analytical performance requirement is satisfied under these isocratic conditions. All expected sample components are fully separated, the critical pair resolution exceeds the specification threshold, total analysis time is within the target throughput window, and column back-pressure operates safely below system pressure limits. Further modifications to mobile phase composition, temperature, or column chemistry are unnecessary.",
-    ].join("\n\n"),
+    actionText,
+    tableAction: actionText,
+    nextChange,
+    why,
     fit: null,
+    awesomeFloor: calc ?? null,
   };
 }
 
@@ -669,47 +914,6 @@ function chooseOwnPercentDecision(sample: RetentionSample, rules: CompleteRules)
       "Select a %B of your choosing. With that %B, selectivity starts at 40°C.",
     ].join("\n\n"),
     fit: null,
-  };
-}
-
-function efficiencyStop(
-  sample: RetentionSample,
-  rules: CompleteRules,
-  judged: EqualJudgment,
-  continueShowsLook = false,
-): RetentionDecision {
-  const measuredRs =
-    judged.resolution != null && Number.isFinite(judged.resolution)
-      ? formatResolution(judged.resolution)
-      : "not assessable";
-  const specRs = rules.minResolution != null ? formatResolution(rules.minResolution) : "spec";
-  const halfSpecRs = rules.minResolution != null ? formatResolution(0.5 * rules.minResolution) : "0.5 × spec";
-
-  const nextLine = !judged.resolutionMeets
-    ? `Efficiency is next for the resolution. The peak count meets the specification (${formatCount(sample.peakCount ?? rules.requiredPeaks)} peaks), and the resolution (${measuredRs}) is above 0.5 × spec (${halfSpecRs}). Because resolution is high enough to be rescued by efficiency (above the Rs floor), we move to efficiency (→ N) to optimize column efficiency rather than continuing retention or selectivity changes.`
-    : judged.timeLate && judged.pressureOver
-      ? "Efficiency is next to bring the last peak time and the back-pressure to the specification. The peaks are already there and the worst pair is already far enough apart."
-      : judged.pressureOver
-        ? "Efficiency is next to bring the back-pressure to the specification. The peaks are already there, the worst pair is already far enough apart, and the last peak is inside the specified time."
-        : "Efficiency is next to bring the last peak time to the specification. The peaks are already there and the worst pair is already far enough apart. Efficiency can shorten the run without changing the separation you already have.";
-  return {
-    status: "efficiency",
-    reason: "efficiency",
-    move: null,
-    nextPercentB: null,
-    nextChange: EFFICIENCY_MOVE_ON,
-    why: [
-      ...ruleLines(sample, rules, judged),
-      nextLine,
-      "Why efficiency is the next stage: Under the Fundamental Resolution Equation (Rs = (√N / 4) × ((α − 1) / α) × (k2 / (1 + k2))), retention (k) and selectivity (α) are established once all peaks are present and detected. Further reducing %B would yield diminishing returns on retention while prolonging run time. Adjusting column efficiency (theoretical plate count N = L / HETP) via flow velocity along the van Deemter curve, smaller particle size packing, column length, or gradient elution narrows peak widths (W), achieving baseline resolution or shorter run times without altering retention chemistry.",
-      "Efficiency is not built yet. This recommendation does not change %B, temperature, solvent, or the column.",
-    ].join("\n\n"),
-    fit: null,
-    efficiencyChoice: {
-      recommendedSentence: EFFICIENCY_MOVE_ON,
-      continueLabel: EFFICIENCY_CONTINUE,
-    },
-    continueShowsLook,
   };
 }
 
@@ -936,6 +1140,7 @@ function dropPoints(
     move: reason,
     nextPercentB: next,
     nextChange,
+    tableAction: reason === "drop-10" ? "Decrease %B by 10" : undefined,
     following: SELECTIVITY_ORDER,
     why: whyParts.join("\n\n"),
     fit: null,
@@ -958,6 +1163,8 @@ function returnToSelectivity(samples: RetentionSample[], rules: CompleteRules): 
     move: null,
     nextPercentB: back,
     nextTemperature: "40",
+    actionText: "Run at 40°C (Change selectivity)",
+    tableAction: "Change selectivity (solvent, temperature, ligand) OR an intermediate %B",
     nextChange: `${lead} and change selectivity. Run the next chromatogram at 40°C, still at ${percent}% B. The goal is to change the conditions so the selectivity changes and the overlapping peaks separate. A higher temperature shortens retention. The %B stays the same. ${TEMPERATURE_SENTENCE} Do not lower %B. The last peak is already past the time and the peak count is still short.`,
     following: SELECTIVITY_ORDER,
     why: [
@@ -1137,6 +1344,7 @@ function calculatePercentB(samples: RetentionSample[], rules: CompleteRules): Re
     move: "calculated",
     nextPercentB: rounded.value,
     nextChange,
+    tableAction: "Min %B (the value that puts the last peak exactly at the spec) OR an intermediate %B",
     following: SELECTIVITY_ORDER,
     why,
     brief: briefLines(current, rules),

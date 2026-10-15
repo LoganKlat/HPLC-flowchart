@@ -274,7 +274,7 @@ describe("retention %B along the four lab files", () => {
           peakCount: pathRules.requiredPeaks!,
           lastPeakTimeMin: 12,
           firstPeakTimeMin: 1.09,
-          minResolutionExcludingFirst: 0.7,
+          minResolutionExcludingFirst: 0.85,
           maxBackPressurePsi: 1400,
         }),
       ],
@@ -1102,22 +1102,25 @@ describe("which run to carry forward after the calculated %B", () => {
     expect(past.find((row) => row.id === "last-peak")?.measured).toBe("18.258 min");
     expect(past.find((row) => row.id === "last-peak")?.status).toBe("not-met");
 
-    // With 7 peaks required and Rs < 0.5 * spec (0.324 < 0.70), continues normal decision pathway (calculates 36% B)
+    // With 7 peaks required and Rs < floor (0.324 < floor for spec 1.4), Row 7 recommends SELECTIVITY (Run at 40°C)
     const normalPath = decideRetention(series, rules);
-    expect(normalPath.move).toBe("calculated");
-    expect(normalPath.nextPercentB).toBe(36);
+    expect(normalPath.status).toBe("recommend");
+    expect(normalPath.tableAction).toBe("SELECTIVITY");
+    expect(normalPath.nextTemperature).toBe("40");
+    expect(normalPath.nextPercentB).toBe(40);
+    expect(normalPath.why).toContain("Row 7");
     expect(normalPath.why).toContain("significantly under the specification");
     expect(normalPath.why).toContain("optimise retention and selectivity first");
 
-    // Once Rs >= 0.5 * spec (e.g. minResolution: 0.6 where 0.324 >= 0.30), moves on to efficiency
-    const matched = decideRetention(series, { ...rules, minResolution: 0.6 });
+    // Once Rs >= floor (e.g. minResolution: 0.5 where 0.324 >= floor ~0.295), moves on to efficiency (Row 8)
+    const matched = decideRetention(series, { ...rules, minResolution: 0.5 });
     expect(matched.status).toBe("efficiency");
     expect(matched.nextPercentB).toBeNull();
     expect(matched.nextChange).toContain("Move on to efficiency");
     expect(retentionChangeLabel(matched)).toBe("Move on to efficiency");
     expect(matched.why).toContain("Peaks: 7. The specification is 7. Met.");
     expect(matched.why).toContain("Efficiency is next for the resolution.");
-    expect(matched.why).toContain("above 0.5 × spec");
+    expect(matched.why).toContain("above the resolution floor");
     expect(matched.why).toContain("above the Rs floor");
 
     // With peaks still short, the same series still calculates a minimum %B.
@@ -1587,6 +1590,230 @@ describe("extra peaks and the in-between choice", () => {
     expect(overPressure.status).toBe("efficiency");
     expect(overPressure.why).toContain("Back-pressure: 3500.0 psi. Over the specification of 3000 psi. Not met.");
     expect(overPressure.why).toContain("Efficiency is next to bring the back-pressure to the specification.");
+  });
+});
+
+describe("12-row chromatographic decision table with dynamic resolution floor", () => {
+  const tableRules: RetentionRules = {
+    requiredPeaks: 7,
+    lastPeakTimeMin: 15,
+    minResolution: 1.5,
+    maxBackPressurePsi: 4000,
+  };
+
+  it("Row 1: Peaks < 7, tR << spec -> Decrease %B by 10", () => {
+    const s1 = sample({
+      percentB: 80,
+      peakCount: 4,
+      lastPeakTimeMin: 5,
+      firstPeakTimeMin: 1.1,
+      minResolutionExcludingFirst: 0.5,
+      maxBackPressurePsi: 2000,
+    });
+    const dec = decideRetention([s1], tableRules);
+    expect(dec.status).toBe("recommend");
+    expect(dec.move).toBe("drop-10");
+    expect(dec.nextPercentB).toBe(70);
+    expect(dec.tableAction).toBe("Decrease %B by 10");
+    expect(dec.why).toContain("Decrease %B by 10%");
+  });
+
+  it("Row 2: Peaks < 7, tR < spec -> Min %B ... OR an intermediate %B", () => {
+    const s1 = sample({
+      percentB: 80,
+      peakCount: 4,
+      lastPeakTimeMin: 4.5,
+      firstPeakTimeMin: 1.1,
+      minResolutionExcludingFirst: 0.5,
+      maxBackPressurePsi: 2000,
+    });
+    const s2 = sample({
+      percentB: 60,
+      peakCount: 5,
+      lastPeakTimeMin: 10.0,
+      firstPeakTimeMin: 1.1,
+      minResolutionExcludingFirst: 0.6,
+      maxBackPressurePsi: 2200,
+    });
+    const dec = decideRetention([s1, s2], tableRules);
+    expect(dec.status).toBe("recommend");
+    expect(dec.move).toBe("calculated");
+    expect(dec.tableAction).toContain("Min %B");
+    expect(dec.tableAction).toContain("intermediate %B");
+    expect(dec.why).toContain("Linear Solvent Strength (LSS) Model");
+  });
+
+  it("Row 3: Peaks < 7, tR > spec -> Change selectivity ... OR an intermediate %B", () => {
+    const s1 = sample({
+      percentB: 80,
+      peakCount: 4,
+      lastPeakTimeMin: 4.5,
+      firstPeakTimeMin: 1.1,
+      minResolutionExcludingFirst: 0.5,
+      maxBackPressurePsi: 2000,
+    });
+    const s2 = sample({
+      percentB: 60,
+      peakCount: 5,
+      lastPeakTimeMin: 10.0,
+      firstPeakTimeMin: 1.1,
+      minResolutionExcludingFirst: 0.6,
+      maxBackPressurePsi: 2200,
+    });
+    const decCalc = decideRetention([s1, s2], tableRules);
+    const s3 = sample({
+      percentB: decCalc.nextPercentB!,
+      peakCount: 6,
+      lastPeakTimeMin: 18.0,
+      firstPeakTimeMin: 1.1,
+      minResolutionExcludingFirst: 0.7,
+      maxBackPressurePsi: 2500,
+    });
+    const dec = decideRetention([s1, s2, s3], tableRules);
+    expect(dec.status).toBe("recommend");
+    expect(dec.tableAction).toContain("Change selectivity");
+    expect(dec.tableAction).toContain("intermediate %B");
+    expect(dec.nextTemperature).toBe("40");
+    expect(dec.why).toContain("Row 3");
+  });
+
+  it("Row 4: Peaks = 7, tR << spec, Rs < floor -> Increase L (watch BP)", () => {
+    const s = sample({
+      percentB: 50,
+      peakCount: 7,
+      lastPeakTimeMin: 5.0,
+      firstPeakTimeMin: 1.1,
+      minResolutionExcludingFirst: 0.4,
+      maxBackPressurePsi: 2000,
+    });
+    const dec = decideRetention([s], tableRules);
+    expect(dec.status).toBe("efficiency");
+    expect(dec.tableAction).toBe("Increase L (watch BP)");
+    expect(dec.why).toContain("Row 4");
+    expect(dec.awesomeFloor).not.toBeNull();
+    expect(dec.awesomeFloor?.verdict).toBe("impossible-selectivity-needed");
+  });
+
+  it("Row 5: Peaks = 7, tR << spec, floor <= Rs < spec -> Increase L (BP) OR decrease F OR decrease PS (BP) OR SPP", () => {
+    const s = sample({
+      percentB: 50,
+      peakCount: 7,
+      lastPeakTimeMin: 5.0,
+      firstPeakTimeMin: 1.1,
+      minResolutionExcludingFirst: 1.1,
+      maxBackPressurePsi: 2000,
+    });
+    const dec = decideRetention([s], tableRules);
+    expect(dec.status).toBe("efficiency");
+    expect(dec.tableAction).toBe("Increase L (BP) OR decrease F OR decrease PS (BP) OR SPP");
+    expect(dec.why).toContain("Row 5");
+  });
+
+  it("Row 6: Peaks = 7, tR << spec, Rs >= spec -> MET. Optionally increase F to shorten the run", () => {
+    const s = sample({
+      percentB: 50,
+      peakCount: 7,
+      lastPeakTimeMin: 5.0,
+      firstPeakTimeMin: 1.1,
+      minResolutionExcludingFirst: 1.6,
+      maxBackPressurePsi: 2000,
+    });
+    const dec = decideRetention([s], tableRules);
+    expect(dec.status).toBe("specs-met");
+    expect(dec.tableAction).toBe("MET. Optionally increase F to shorten the run");
+    expect(dec.why).toContain("Row 6");
+  });
+
+  it("Row 7: Peaks = 7, tR < spec, Rs < floor -> SELECTIVITY", () => {
+    const s = sample({
+      percentB: 50,
+      peakCount: 7,
+      lastPeakTimeMin: 10.0,
+      firstPeakTimeMin: 1.1,
+      minResolutionExcludingFirst: 0.4,
+      maxBackPressurePsi: 2000,
+    });
+    const dec = decideRetention([s], tableRules);
+    expect(dec.status).toBe("recommend");
+    expect(dec.tableAction).toBe("SELECTIVITY");
+    expect(dec.nextTemperature).toBe("40");
+    expect(dec.why).toContain("Row 7");
+  });
+
+  it("Row 8: Peaks = 7, tR < spec, floor <= Rs < spec -> Decrease F OR decrease PS (BP) OR SPP", () => {
+    const s = sample({
+      percentB: 50,
+      peakCount: 7,
+      lastPeakTimeMin: 10.0,
+      firstPeakTimeMin: 1.1,
+      minResolutionExcludingFirst: 1.1,
+      maxBackPressurePsi: 2000,
+    });
+    const dec = decideRetention([s], tableRules);
+    expect(dec.status).toBe("efficiency");
+    expect(dec.tableAction).toBe("Decrease F OR decrease PS (BP) OR SPP");
+    expect(dec.why).toContain("Row 8");
+  });
+
+  it("Row 9: Peaks = 7, tR < spec, Rs >= spec -> MET. Optionally increase F to shorten the run", () => {
+    const s = sample({
+      percentB: 50,
+      peakCount: 7,
+      lastPeakTimeMin: 10.0,
+      firstPeakTimeMin: 1.1,
+      minResolutionExcludingFirst: 1.6,
+      maxBackPressurePsi: 2000,
+    });
+    const dec = decideRetention([s], tableRules);
+    expect(dec.status).toBe("specs-met");
+    expect(dec.tableAction).toBe("MET. Optionally increase F to shorten the run");
+    expect(dec.why).toContain("Row 9");
+  });
+
+  it("Row 10: Peaks = 7, tR > spec, Rs < floor -> SELECTIVITY", () => {
+    const s = sample({
+      percentB: 50,
+      peakCount: 7,
+      lastPeakTimeMin: 18.0,
+      firstPeakTimeMin: 1.1,
+      minResolutionExcludingFirst: 0.4,
+      maxBackPressurePsi: 2000,
+    });
+    const dec = decideRetention([s], tableRules);
+    expect(dec.status).toBe("recommend");
+    expect(dec.tableAction).toBe("SELECTIVITY");
+    expect(dec.nextTemperature).toBe("40");
+    expect(dec.why).toContain("Row 10");
+  });
+
+  it("Row 11: Peaks = 7, tR > spec, floor <= Rs < spec -> Decrease PS (BP), then increase F to shorten the run", () => {
+    const s = sample({
+      percentB: 50,
+      peakCount: 7,
+      lastPeakTimeMin: 18.0,
+      firstPeakTimeMin: 1.1,
+      minResolutionExcludingFirst: 1.2,
+      maxBackPressurePsi: 2000,
+    });
+    const dec = decideRetention([s], tableRules);
+    expect(dec.status).toBe("efficiency");
+    expect(dec.tableAction).toBe("Decrease PS (BP), then increase F to shorten the run");
+    expect(dec.why).toContain("Row 11");
+  });
+
+  it("Row 12: Peaks = 7, tR > spec, Rs >= spec -> Increase F to shorten the run", () => {
+    const s = sample({
+      percentB: 50,
+      peakCount: 7,
+      lastPeakTimeMin: 18.0,
+      firstPeakTimeMin: 1.1,
+      minResolutionExcludingFirst: 1.6,
+      maxBackPressurePsi: 2000,
+    });
+    const dec = decideRetention([s], tableRules);
+    expect(dec.status).toBe("efficiency");
+    expect(dec.tableAction).toBe("Increase F to shorten the run");
+    expect(dec.why).toContain("Row 12");
   });
 });
 

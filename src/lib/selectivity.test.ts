@@ -268,15 +268,14 @@ describe("selectivity checks", () => {
     expect(decisionUnder.why).toContain("significantly under the specification");
     expect(decisionUnder.why).toContain("optimise retention and selectivity first");
 
-    // 2. When Rs >= 0.5 * spec (0.324 >= 0.30 with minResolution = 0.6), moves to efficiency
-    const decisionOver = decideRetention([sample], { ...rules, minResolution: 0.6 });
+    // 2. When Rs >= floor (0.324 >= 0.272 with minResolution = 0.5), moves to efficiency
+    const decisionOver = decideRetention([sample], { ...rules, minResolution: 0.5 });
     expect(decisionOver.status).toBe("efficiency");
     expect(decisionOver.reason).toBe("efficiency");
     expect(decisionOver.nextChange).toContain("Move on to efficiency");
     expect(retentionChangeLabel(decisionOver)).toBe("Move on to efficiency");
     expect(decisionOver.why).toContain("Peaks: 7. The specification is 7. Met.");
     expect(decisionOver.why).toContain("Efficiency is next for the resolution.");
-    expect(decisionOver.why).toContain("above 0.5 × spec");
     expect(decisionOver.why).toContain("above the Rs floor");
   });
 

@@ -537,7 +537,7 @@ describe("Decision engine multi-rule & user-input verification on GR09/GR11 data
         "Blank run (preparation for the next run).",
       );
 
-      // Default choice on blank run repeats GR41-09's decision (36% B calculated minimum)
+      // Default choice on blank run repeats GR41-09's decision (Row 7: 40% B at 40°C)
       const expBlankDefault = explainRun(
         runsWithBlanks.slice(0, blkIdx + 1),
         blkIdx,
@@ -548,7 +548,8 @@ describe("Decision engine multi-rule & user-input verification on GR09/GR11 data
       expect(expBlankDefault?.kind).toBe("retention");
       if (expBlankDefault?.kind === "retention") {
         expect(expBlankDefault.decision.status).toBe("recommend");
-        expect(expBlankDefault.decision.nextPercentB).toBe(36);
+        expect(expBlankDefault.decision.nextPercentB).toBe(40);
+        expect(expBlankDefault.decision.nextTemperature).toBe("40");
         expect(expBlankDefault.decision.why).toContain("Repeating the last decision point from Run 6");
       }
 
