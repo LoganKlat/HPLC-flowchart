@@ -2168,14 +2168,48 @@ function RunSummary({
           >
             <span className="flex min-w-0 flex-1 flex-col items-start">
               <span className="text-[10px] font-semibold tracking-wider uppercase opacity-90">Next run</span>
-              <span className="text-xs sm:text-sm font-bold leading-snug">{nextLabel}</span>
+              <span className="text-sm sm:text-base font-extrabold leading-snug">
+                {nextLabel === "Move on to efficiency" ? (
+                  <span className="inline-flex items-center gap-2">
+                    <span className="inline-flex items-center rounded bg-white/25 px-2 py-0.5 font-mono text-xs font-black tracking-wider text-white shadow-2xs">
+                      → N
+                    </span>
+                    <span>(Move on to efficiency)</span>
+                  </span>
+                ) : nextLabel.includes("Efficiency is next") ? (
+                  <span className="inline-flex items-center gap-2">
+                    <span className="inline-flex items-center rounded bg-white/25 px-2 py-0.5 font-mono text-xs font-black tracking-wider text-white shadow-2xs">
+                      → N
+                    </span>
+                    <span>{nextLabel}</span>
+                  </span>
+                ) : (
+                  nextLabel
+                )}
+              </span>
             </span>
             <ArrowRight className="size-4 shrink-0 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
           </button>
         ) : (
           <div id="next-run-change" className="px-3 py-1.5 sm:px-3.5 sm:py-2">
             <h2 className="text-[10px] font-semibold tracking-wider text-muted-foreground uppercase">Next run&apos;s change</h2>
-            <p className="mt-0.5 text-xs sm:text-sm font-medium text-foreground">{nextLabel}</p>
+            {nextLabel === "Move on to efficiency" ? (
+              <p className="mt-0.5 flex items-center gap-2 text-sm sm:text-base font-extrabold text-foreground">
+                <span className="inline-flex items-center rounded bg-[var(--hp-brand)]/15 text-[var(--hp-brand)] px-2 py-0.5 font-mono text-xs font-black">
+                  → N
+                </span>
+                <span>(Move on to efficiency)</span>
+              </p>
+            ) : nextLabel.includes("Efficiency is next") ? (
+              <p className="mt-0.5 flex items-center gap-2 text-sm sm:text-base font-extrabold text-foreground">
+                <span className="inline-flex items-center rounded bg-[var(--hp-brand)]/15 text-[var(--hp-brand)] px-2 py-0.5 font-mono text-xs font-black">
+                  → N
+                </span>
+                <span>{nextLabel}</span>
+              </p>
+            ) : (
+              <p className="mt-0.5 text-sm sm:text-base font-bold text-foreground">{nextLabel}</p>
+            )}
           </div>
         )}
         {secondMin || ownPercent || choices ? (
