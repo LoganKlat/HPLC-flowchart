@@ -4,7 +4,6 @@ import { useMemo, useState } from "react";
 import { FlaskConical, X, Eye } from "lucide-react";
 import { ChoiceSelect } from "@/components/choice-select";
 import { FunctionNoteView, type FunctionNote } from "@/components/function-note";
-import { KindMark } from "@/components/setting-legend";
 import { beadSurface } from "@/lib/bead-surface";
 import { porousSpots, shellSpots } from "@/lib/bead-spots";
 import { LIGANDS } from "@/lib/selectivity";
@@ -583,7 +582,7 @@ export function BeadDiagram({ ligands = LIGANDS }: { ligands?: readonly string[]
                   className="text-xs font-bold text-foreground flex items-center gap-1 text-left cursor-pointer hover:text-[var(--hp-brand)]"
                   title="Click to inspect Carbon Load"
                 >
-                  Carbon Load <KindMark kind="chemical" />
+                  Carbon Load
                 </button>
                 <span className="font-mono text-xs font-bold text-[var(--hp-brand)] bg-card px-2 py-0.5 rounded border border-border/60">
                   {carbonLoad}%
@@ -622,7 +621,7 @@ export function BeadDiagram({ ligands = LIGANDS }: { ligands?: readonly string[]
                   className="text-xs font-bold text-foreground flex items-center gap-1 text-left cursor-pointer hover:text-[var(--hp-brand)]"
                   title="Click to inspect Particle Size"
                 >
-                  Particle Size (dp) <KindMark kind="mechanical" />
+                  Particle Size (dp)
                 </button>
                 <span className="font-mono text-xs font-bold text-foreground bg-card px-2 py-0.5 rounded border border-border/60">
                   {formatMicrons(particleUm)} µm
@@ -661,7 +660,7 @@ export function BeadDiagram({ ligands = LIGANDS }: { ligands?: readonly string[]
                   className="text-xs font-bold text-foreground flex items-center gap-1 text-left cursor-pointer hover:text-[var(--hp-brand)]"
                   title="Click to inspect Pore Size"
                 >
-                  Pore Size (Å) <KindMark kind="chemical" />
+                  Pore Size (Å)
                 </button>
                 <span className="font-mono text-xs font-bold text-foreground bg-card px-2 py-0.5 rounded border border-border/60">
                   {poreAngstroms} Å
@@ -708,7 +707,6 @@ export function BeadDiagram({ ligands = LIGANDS }: { ligands?: readonly string[]
               >
                 {openId === "ligand" ? "Hide note" : "Inspect"}
               </button>
-              <KindMark kind="chemical" />
             </div>
           </div>
 

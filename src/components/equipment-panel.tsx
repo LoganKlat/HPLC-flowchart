@@ -9,7 +9,6 @@ import { ColumnDiagram, type ColumnRunTrace } from "@/components/column-diagram"
 import { ColumnRetentionAnimation } from "@/components/column-retention-animation";
 import { FunctionNoteView, type FunctionNote } from "@/components/function-note";
 import { HplcSketch } from "@/components/hplc-drawing";
-import { KindMark } from "@/components/setting-legend";
 import type { SettingKind } from "@/lib/setting-kind";
 import { cn } from "@/lib/utils";
 
