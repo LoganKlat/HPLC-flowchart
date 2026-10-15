@@ -89,6 +89,10 @@ export type RunState = {
   solventEdited: boolean;
   ligand: string;
   ligandEdited: boolean;
+  userEditedPercentB?: boolean;
+  userEditedTemperature?: boolean;
+  userEditedSolvent?: boolean;
+  userEditedLigand?: boolean;
   /** Fields this run changed itself. Unedited fields stay with the earlier run. */
   rest: Partial<RestDetails>;
   afterRetention: boolean;
@@ -108,6 +112,10 @@ export function emptyRun(): RunState {
     solventEdited: false,
     ligand: "",
     ligandEdited: false,
+    userEditedPercentB: false,
+    userEditedTemperature: false,
+    userEditedSolvent: false,
+    userEditedLigand: false,
     rest: {},
     afterRetention: false,
     status: "empty",
@@ -482,6 +490,7 @@ export function HplcApp() {
             ...emptyRun(), percentB: info.percentB, temperature: info.temperature,
             solvent: info.solvent, ligand: info.ligand, rest: pickRest(info),
             percentEdited: true, temperatureEdited: true, solventEdited: true, ligandEdited: true,
+            userEditedPercentB: false, userEditedTemperature: false, userEditedSolvent: false, userEditedLigand: false,
             status: "ready" as const, fileName, read,
           } };
         });
@@ -708,6 +717,7 @@ export function HplcApp() {
     intermediateMode,
     holdNext: backwards != null && backwardsChoice !== "continue",
     ligands: columnCoatings,
+    fillFromFileName,
   });
   if (syncedRuns !== runs) {
     setRuns(syncedRuns);
@@ -748,9 +758,24 @@ export function HplcApp() {
     next = withoutUltraColumn(next, columns);
     setDetails(next);
     setRuns((current) => {
-      if (current[0].percentB === next.percentB) return current;
+      const run0 = current[0];
+      if (!run0) return current;
       const copy = current.slice();
-      copy[0] = { ...copy[0], percentB: next.percentB, percentEdited: true };
+      copy[0] = {
+        ...run0,
+        percentB: next.percentB,
+        percentEdited: next.percentB !== run0.percentB ? true : run0.percentEdited,
+        userEditedPercentB: next.percentB !== run0.percentB ? true : run0.userEditedPercentB,
+        temperature: next.temperature,
+        temperatureEdited: next.temperature !== run0.temperature ? true : run0.temperatureEdited,
+        userEditedTemperature: next.temperature !== run0.temperature ? true : run0.userEditedTemperature,
+        solvent: next.solvent,
+        solventEdited: next.solvent !== run0.solvent ? true : run0.solventEdited,
+        userEditedSolvent: next.solvent !== run0.solvent ? true : run0.userEditedSolvent,
+        ligand: next.ligand,
+        ligandEdited: next.ligand !== run0.ligand ? true : run0.ligandEdited,
+        userEditedLigand: next.ligand !== run0.ligand ? true : run0.userEditedLigand,
+      };
       return copy;
     });
   }
@@ -775,12 +800,16 @@ export function HplcApp() {
         ...run,
         percentB: next.percentB,
         percentEdited: next.percentB !== run.percentB ? true : run.percentEdited,
+        userEditedPercentB: next.percentB !== run.percentB ? true : run.userEditedPercentB,
         temperature: next.temperature,
         temperatureEdited: next.temperature !== run.temperature ? true : run.temperatureEdited,
+        userEditedTemperature: next.temperature !== run.temperature ? true : run.userEditedTemperature,
         solvent: next.solvent,
         solventEdited: next.solvent !== run.solvent ? true : run.solventEdited,
+        userEditedSolvent: next.solvent !== run.solvent ? true : run.userEditedSolvent,
         ligand: next.ligand,
         ligandEdited: next.ligand !== run.ligand ? true : run.ligandEdited,
+        userEditedLigand: next.ligand !== run.ligand ? true : run.userEditedLigand,
         rest,
       };
       return copy;
@@ -792,7 +821,7 @@ export function HplcApp() {
       const slot = current[index]?.status === "empty" ? index : readyPrefix(current);
       if (!current[slot]) return current;
       const copy = current.slice();
-      copy[slot] = { ...copy[slot], ligand: value, ligandEdited: true };
+      copy[slot] = { ...copy[slot], ligand: value, ligandEdited: true, userEditedLigand: true };
       return copy;
     });
   }
@@ -832,9 +861,13 @@ export function HplcApp() {
         solvent: prefill.solvent,
         ligand: prefill.ligand,
         percentEdited: path !== "solvent",
+        userEditedPercentB: path !== "solvent",
         temperatureEdited: true,
+        userEditedTemperature: true,
         solventEdited: path !== "solvent",
+        userEditedSolvent: path !== "solvent",
         ligandEdited: true,
+        userEditedLigand: true,
       };
       return copy;
     });
@@ -869,8 +902,10 @@ export function HplcApp() {
         ...run,
         solvent: chart?.label ?? solventLabel,
         solventEdited: true,
+        userEditedSolvent: true,
         percentB: matched ? matched.percentText : "",
         percentEdited: true,
+        userEditedPercentB: true,
       };
       return copy;
     });
@@ -939,20 +974,26 @@ export function HplcApp() {
     }
     setFileNameNotes((current) => ({ ...current, [index]: null }));
     if (index <= 0) {
-      onDetails(next.details);
+      setDetails((prev) => ({
+        ...next.details,
+        percentB: runsRef.current[0]?.userEditedPercentB ? prev.percentB : next.details.percentB,
+        temperature: runsRef.current[0]?.userEditedTemperature ? prev.temperature : next.details.temperature,
+        solvent: runsRef.current[0]?.userEditedSolvent ? prev.solvent : next.details.solvent,
+        ligand: runsRef.current[0]?.userEditedLigand ? prev.ligand : next.details.ligand,
+      }));
       setRuns((current) => {
         const run = current[0];
         if (!run) return current;
         const copy = current.slice();
         copy[0] = {
           ...run,
-          percentB: next.details.percentB,
+          percentB: run.userEditedPercentB ? run.percentB : next.details.percentB,
           percentEdited: true,
-          temperature: next.details.temperature,
+          temperature: run.userEditedTemperature ? run.temperature : next.details.temperature,
           temperatureEdited: next.details.temperature.trim() !== "",
-          solvent: next.details.solvent,
+          solvent: run.userEditedSolvent ? run.solvent : next.details.solvent,
           solventEdited: next.details.solvent.trim() !== "",
-          ligand: next.details.ligand,
+          ligand: run.userEditedLigand ? run.ligand : next.details.ligand,
           ligandEdited: next.details.ligand.trim() !== "",
         };
         return copy;
@@ -980,13 +1021,13 @@ export function HplcApp() {
       const copy = current.slice();
       copy[index] = {
         ...run,
-        percentB: next.details.percentB,
+        percentB: run.userEditedPercentB ? run.percentB : next.details.percentB,
         percentEdited: true,
-        temperature: next.details.temperature,
+        temperature: run.userEditedTemperature ? run.temperature : next.details.temperature,
         temperatureEdited: true,
-        solvent: next.details.solvent,
+        solvent: run.userEditedSolvent ? run.solvent : next.details.solvent,
         solventEdited: true,
-        ligand: next.details.ligand,
+        ligand: run.userEditedLigand ? run.ligand : next.details.ligand,
         ligandEdited: true,
         rest,
       };
@@ -1075,12 +1116,16 @@ export function HplcApp() {
               fileName: file.fileName,
               percentB: next.details.percentB,
               percentEdited: true,
+              userEditedPercentB: false,
               temperature: next.details.temperature,
               temperatureEdited: next.details.temperature.trim() !== "",
+              userEditedTemperature: false,
               solvent: next.details.solvent,
               solventEdited: next.details.solvent.trim() !== "",
+              userEditedSolvent: false,
               ligand: next.details.ligand,
               ligandEdited: next.details.ligand.trim() !== "",
+              userEditedLigand: false,
               rest: pickRest(next.details),
             };
           } else {
@@ -1092,10 +1137,16 @@ export function HplcApp() {
             };
           }
         } else {
+          const prevRun = runsRef.current[0] ?? emptyRun();
           nextRuns[0] = {
-            ...emptyRun(),
+            ...prevRun,
             status: "reading",
             fileName: file.fileName,
+            percentB: prevRun.userEditedPercentB ? prevRun.percentB : (currentDetails.percentB || prevRun.percentB),
+            temperature: prevRun.userEditedTemperature ? prevRun.temperature : (currentDetails.temperature || prevRun.temperature),
+            solvent: prevRun.userEditedSolvent ? prevRun.solvent : (currentDetails.solvent || prevRun.solvent),
+            ligand: prevRun.userEditedLigand ? prevRun.ligand : (currentDetails.ligand || prevRun.ligand),
+            rest: prevRun.rest && Object.keys(prevRun.rest).length > 0 ? prevRun.rest : pickRest(currentDetails),
           };
         }
       } else {
@@ -1130,12 +1181,16 @@ export function HplcApp() {
               fileName: file.fileName,
               percentB: next.details.percentB,
               percentEdited: true,
+              userEditedPercentB: false,
               temperature: next.details.temperature,
               temperatureEdited: true,
+              userEditedTemperature: false,
               solvent: next.details.solvent,
               solventEdited: true,
+              userEditedSolvent: false,
               ligand: next.details.ligand,
               ligandEdited: true,
+              userEditedLigand: false,
               rest,
             };
           } else {
@@ -1147,10 +1202,13 @@ export function HplcApp() {
             };
           }
         } else {
+          const prevRun = runsRef.current[runIdx] ?? emptyRun();
+          const inherited = inheritedRest(runIdx, nextRuns, currentDetails);
           nextRuns[runIdx] = {
-            ...emptyRun(),
+            ...prevRun,
             status: "reading",
             fileName: file.fileName,
+            rest: prevRun.rest && Object.keys(prevRun.rest).length > 0 ? prevRun.rest : inherited,
           };
         }
       }
@@ -1241,12 +1299,16 @@ export function HplcApp() {
         ...emptyRun(),
         percentB: run.percentB,
         percentEdited: run.percentEdited,
+        userEditedPercentB: run.userEditedPercentB,
         temperature: run.temperature,
         temperatureEdited: run.temperatureEdited,
+        userEditedTemperature: run.userEditedTemperature,
         solvent: run.solvent,
         solventEdited: run.solventEdited,
+        userEditedSolvent: run.userEditedSolvent,
         ligand: run.ligand,
         ligandEdited: run.ligandEdited,
+        userEditedLigand: run.userEditedLigand,
         rest: run.rest,
       };
       return next;
@@ -1421,14 +1483,10 @@ export function HplcApp() {
                   setHeatChoice(null);
                 }
               }}
-              fileNameFill={
-                shown === 0
-                  ? {
-                      checked: fillFromFileName,
-                      onToggle: onToggleFillFromFileName,
-                    }
-                  : null
-              }
+              fileNameFill={{
+                checked: fillFromFileName,
+                onToggle: onToggleFillFromFileName,
+              }}
               fileNote={fileNameNotes[shown] ?? null}
             />
             <div className="py-2.5 text-center text-[11px] text-muted-foreground/60 select-none">
@@ -2738,6 +2796,64 @@ export function explainRun(
   });
 }
 
+function decisionPrefillAfter(
+  priorIndex: number,
+  runs: RunState[],
+  details: RunDetails,
+  checks: RuleNumbers,
+  options: {
+    heat: HeatStart | null;
+    choice: RetentionChoice;
+    continuePastEfficiency?: boolean;
+    linePercent: number | null;
+    pickedPercent: number | null;
+    intermediateMode?: "yes" | "no" | null;
+    ligands?: readonly string[];
+  },
+): SelectivityPrefill | null {
+  if (priorIndex < 0) return null;
+  const activeIndices = activeIndicesUpTo(runs, priorIndex, details);
+  if (activeIndices.length === 0) {
+    const lastBlankIdx = priorIndex;
+    const cond = runConditions(lastBlankIdx, runs, details);
+    return {
+      percentB: cond.percentB || "90",
+      temperature: cond.temperature,
+      solvent: cond.solvent,
+      ligand: cond.ligand,
+    };
+  }
+  const activeReady = activeIndices.map((idx) => runs[idx]);
+  const history = planHistory(
+    activeIndices.map((idx) => toSelectivityRun(runs[idx], idx, details)),
+    setupFrom(details, checks, runs),
+    { heat: options.heat, continuePastEfficiency: options.continuePastEfficiency, ligands: options.ligands },
+  );
+  let prefill = prefillFor(
+    activeReady,
+    activeIndices,
+    runs,
+    history,
+    details,
+    checks,
+    options.choice,
+    options.linePercent,
+    options.pickedPercent,
+    options.intermediateMode ?? null,
+    options.continuePastEfficiency,
+  );
+  if (prefill && isBlankRun(priorIndex, runs, details)) {
+    const blankCond = runConditions(priorIndex, runs, details);
+    prefill = {
+      percentB: prefill.percentB || blankCond.percentB,
+      temperature: prefill.temperature || blankCond.temperature,
+      solvent: prefill.solvent || blankCond.solvent,
+      ligand: prefill.ligand || blankCond.ligand,
+    };
+  }
+  return prefill;
+}
+
 export function syncNextRun(
   runs: RunState[],
   details: RunDetails,
@@ -2752,79 +2868,77 @@ export function syncNextRun(
     intermediateMode?: "yes" | "no" | null;
     holdNext?: boolean;
     ligands?: readonly string[];
+    fillFromFileName?: boolean;
   },
 ): RunState[] {
-  const count = readyPrefix(runs);
-  if (options.leftSelectivity) {
-    const next = runs[count];
-    if (next && next.status === "empty" && !runWasEdited(next) && runs.length === count + 1) {
-      return runs.slice(0, count);
-    }
-    return runs;
-  }
-  if (count === 0) return runs;
-  if (options.holdNext) {
-    return seriesWhileHeld(runs, count, (run) => run.status === "empty" && !runWasEdited(run)) as RunState[];
-  }
-  const activeIndices = activeIndicesUpTo(runs, count - 1, details);
-  const next = runs[count];
-  let prefill: SelectivityPrefill | null = null;
+  let currentRuns = runs;
+  let changed = false;
 
-  if (activeIndices.length === 0) {
-    const lastBlankIdx = count - 1;
-    const cond = runConditions(lastBlankIdx, runs, details);
-    prefill = {
-      percentB: cond.percentB || "90",
-      temperature: cond.temperature,
-      solvent: cond.solvent,
-      ligand: cond.ligand,
-    };
-  } else {
-    const activeReady = activeIndices.map((idx) => runs[idx]);
-    const history = planHistory(
-      activeIndices.map((idx) => toSelectivityRun(runs[idx], idx, details)),
-      setupFrom(details, checks, runs),
-      { heat: options.heat, continuePastEfficiency: options.continuePastEfficiency, ligands: options.ligands },
-    );
-    prefill = prefillFor(
-      activeReady,
-      activeIndices,
-      runs,
-      history,
-      details,
-      checks,
-      options.choice,
-      options.linePercent,
-      options.pickedPercent,
-      options.intermediateMode ?? null,
-      options.continuePastEfficiency,
-    );
-    if (prefill && isBlankRun(count - 1, runs, details)) {
-      const blankCond = runConditions(count - 1, runs, details);
-      prefill = {
-        percentB: prefill.percentB || blankCond.percentB,
-        temperature: prefill.temperature || blankCond.temperature,
-        solvent: prefill.solvent || blankCond.solvent,
-        ligand: prefill.ligand || blankCond.ligand,
-      };
+  // When fillFromFileName is unticked (false), automatically apply the rules provided
+  // by the decision point to each run (for runIdx >= 1), unless changed by the user.
+  if (options.fillFromFileName === false && currentRuns.length > 1) {
+    for (let i = 1; i < currentRuns.length; i++) {
+      if (currentRuns[i - 1]?.status !== "ready" && currentRuns[i - 1]?.status !== "reading") break;
+      const prefill = decisionPrefillAfter(i - 1, currentRuns, details, checks, options);
+      if (!prefill) continue;
+
+      const run = currentRuns[i];
+      const targetPercentB = run.userEditedPercentB ? run.percentB : prefill.percentB;
+      const targetTemperature = run.userEditedTemperature ? run.temperature : prefill.temperature;
+      const targetSolvent = run.userEditedSolvent ? run.solvent : prefill.solvent;
+      const targetLigand = run.userEditedLigand ? run.ligand : prefill.ligand;
+
+      if (
+        run.percentB !== targetPercentB ||
+        run.temperature !== targetTemperature ||
+        run.solvent !== targetSolvent ||
+        run.ligand !== targetLigand
+      ) {
+        if (!changed) {
+          currentRuns = currentRuns.slice();
+          changed = true;
+        }
+        currentRuns[i] = {
+          ...run,
+          percentB: targetPercentB,
+          temperature: targetTemperature,
+          solvent: targetSolvent,
+          ligand: targetLigand,
+        };
+      }
     }
   }
+
+  const count = readyPrefix(currentRuns);
+  if (options.leftSelectivity) {
+    const next = currentRuns[count];
+    if (next && next.status === "empty" && !runWasEdited(next) && currentRuns.length === count + 1) {
+      return currentRuns.slice(0, count);
+    }
+    return currentRuns;
+  }
+  if (count === 0) return currentRuns;
+  if (options.holdNext) {
+    return seriesWhileHeld(currentRuns, count, (run) => run.status === "empty" && !runWasEdited(run)) as RunState[];
+  }
+  const next = currentRuns[count];
+  const prefill = decisionPrefillAfter(count - 1, currentRuns, details, checks, options);
 
   if (!prefill) {
-    if (!next || next.status !== "empty" || runWasEdited(next)) return runs;
-    if (runs.length !== count + 1) return runs;
-    return runs.slice(0, count);
+    if (!next || next.status !== "empty" || runWasEdited(next)) return currentRuns;
+    if (currentRuns.length !== count + 1) return currentRuns;
+    return currentRuns.slice(0, count);
   }
 
   if (!next) {
-    if (runs.length !== count) return runs;
-    const restFromLast = inheritedRest(count, runs, details);
-    return [...runs, { ...emptyRun(), rest: restFromLast, ...prefill }];
+    if (currentRuns.length !== count) return currentRuns;
+    const restFromLast = inheritedRest(count, currentRuns, details);
+    return [...currentRuns, { ...emptyRun(), rest: restFromLast, ...prefill }];
   }
-  if (next.status !== "empty") return runs;
+  if (next.status !== "empty") return currentRuns;
   const merged = mergePrefill(next, prefill);
-  if (merged === next) return runs;
-  const copy = runs.slice();
+  if (merged === next) return currentRuns;
+  const copy = currentRuns.slice();
   copy[count] = merged;
   return copy;
 }
@@ -2932,10 +3046,10 @@ function inheritedConditions(run: RunState, index: number, details: RunDetails) 
 }
 
 function mergePrefill(run: RunState, prefill: SelectivityPrefill): RunState {
-  const percentB = run.percentEdited ? run.percentB : prefill.percentB;
-  const temperature = run.temperatureEdited ? run.temperature : prefill.temperature;
-  const solvent = run.solventEdited ? run.solvent : prefill.solvent;
-  const ligand = run.ligandEdited ? run.ligand : prefill.ligand;
+  const percentB = (run.userEditedPercentB || run.percentEdited) ? run.percentB : prefill.percentB;
+  const temperature = (run.userEditedTemperature || run.temperatureEdited) ? run.temperature : prefill.temperature;
+  const solvent = (run.userEditedSolvent || run.solventEdited) ? run.solvent : prefill.solvent;
+  const ligand = (run.userEditedLigand || run.ligandEdited) ? run.ligand : prefill.ligand;
   if (
     run.percentB === percentB &&
     run.temperature === temperature &&
@@ -2949,7 +3063,16 @@ function mergePrefill(run: RunState, prefill: SelectivityPrefill): RunState {
 }
 
 function runWasEdited(run: RunState): boolean {
-  return run.percentEdited || run.temperatureEdited || run.solventEdited || run.ligandEdited;
+  return Boolean(
+    run.userEditedPercentB ||
+    run.userEditedTemperature ||
+    run.userEditedSolvent ||
+    run.userEditedLigand ||
+    run.percentEdited ||
+    run.temperatureEdited ||
+    run.solventEdited ||
+    run.ligandEdited
+  );
 }
 
 function setupFrom(details: RunDetails, checks: RuleNumbers, runs?: RunState[]) {
