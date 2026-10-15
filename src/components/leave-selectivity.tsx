@@ -65,17 +65,30 @@ export function EfficiencyChoiceButtons({
 
 export function EfficiencyChoiceView({ why }: { why: string }) {
   const paragraphs = why.split("\n\n").map((p) => p.trim()).filter(Boolean);
-  const leadIdx = paragraphs.findIndex(
-    (p) => p.startsWith("Efficiency is next") || p.startsWith("Why efficiency"),
-  );
-  const summary = leadIdx >= 0 ? paragraphs[leadIdx] : paragraphs[0] ?? why;
-  const more = paragraphs.filter((_, i) => (leadIdx >= 0 ? i !== leadIdx : i !== 0));
+  const hasConditionTag = paragraphs[0]?.startsWith("Condition: (");
+  let lead: string[];
+  let more: string[];
+  if (hasConditionTag && paragraphs.length >= 2) {
+    lead = [paragraphs[0], paragraphs[1]];
+    more = paragraphs.slice(2);
+  } else {
+    const leadIdx = paragraphs.findIndex(
+      (p) => p.startsWith("Efficiency is next") || p.startsWith("Why efficiency"),
+    );
+    const summary = leadIdx >= 0 ? paragraphs[leadIdx] : paragraphs[0] ?? why;
+    lead = [summary];
+    more = paragraphs.filter((_, i) => (leadIdx >= 0 ? i !== leadIdx : i !== 0));
+  }
   return (
     <div className="contents" id="efficiency-choice">
       <section className="rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10">
         <h2 className="font-heading text-base">Why</h2>
         <div className="mt-3 flex flex-col gap-2 text-sm leading-relaxed text-foreground">
-          <p className="font-medium">{summary}</p>
+          {lead.map((p, idx) => (
+            <p key={idx} className={idx === 0 && !hasConditionTag ? "font-medium" : ""}>
+              {p}
+            </p>
+          ))}
           {more.length > 0 ? (
             <KnowMoreToggle>
               {more.map((paragraph, index) => (

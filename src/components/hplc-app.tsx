@@ -2622,6 +2622,7 @@ function decorateBlankExplanation(
       decision: {
         ...explanation.decision,
         why: `${prefix}\n\n${explanation.decision.why}`,
+        leadWhy: explanation.decision.leadWhy ? [prefix, ...explanation.decision.leadWhy] : undefined,
       },
     };
   }
@@ -2630,6 +2631,7 @@ function decorateBlankExplanation(
     plan: {
       ...explanation.plan,
       why: `${prefix}\n\n${explanation.plan.why}`,
+      leadWhy: explanation.plan.leadWhy ? [prefix, ...explanation.plan.leadWhy] : undefined,
     },
   };
 }

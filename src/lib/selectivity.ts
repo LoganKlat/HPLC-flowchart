@@ -1,6 +1,14 @@
-import { resolutionForDecision } from "@/lib/evaluate";
+import { formatDecimal, resolutionForDecision } from "@/lib/evaluate";
 import { COATING_SENTENCE, PERCENT_B_SENTENCE, SELECTIVITY_ORDER } from "@/lib/setting-kind";
-import { carryForwardIndex, decideRetention, formatPercentB, roundTargetPercent, type RetentionRules, type RetentionSample } from "@/lib/retention";
+import {
+  buildConditionTag,
+  carryForwardIndex,
+  decideRetention,
+  formatPercentB,
+  roundTargetPercent,
+  type RetentionRules,
+  type RetentionSample,
+} from "@/lib/retention";
 
 /**
  * Selectivity starts after retention has picked a run to carry forward.
@@ -105,6 +113,8 @@ export type SelectivityPlan = {
   /** The step after this one, and why the order is 40°C, then 60°C, then solvent, then coating. */
   following?: string;
   why: string;
+  leadWhy?: string[];
+  moreWhy?: string[];
   prefill: SelectivityPrefill | null;
   nomograph: NomographEntry[] | null;
   showSolventChoices: boolean;
@@ -352,7 +362,20 @@ function efficiencyWhy(input: {
     (!lastPeakChecked || lastPeakMet) &&
     (!pressureChecked || pressureMet);
 
+  const tag = buildConditionTag({
+    stagePrefix: "Efficiency Choice",
+    peaks: input.peakCount,
+    requiredPeaks: input.requiredPeaks ?? 7,
+    tR: input.lastPeakTimeMin,
+    specTime: input.specifiedRunTimeMin ?? 20,
+    rs: input.measured,
+    specRs: input.spec,
+    bp: input.maxBackPressurePsi,
+    specBP: input.maxBackPressureSpec ?? 2900,
+  });
+
   const parts = [
+    `Condition: ${tag}.`,
     "Moving on to efficiency is a choice.",
     peakLine(input.peakCount, input.requiredPeaks),
     `Minimum resolution: ${formatResolution(input.measured)}. ${resolutionMet ? "Above" : "Under"} the specification of ${formatResolution(input.spec)}.`,
@@ -381,7 +404,7 @@ function efficiencyWhy(input: {
     );
   }
   parts.push(
-    "Role of Efficiency in Method Optimization: Resolution is governed by the Purnell equation: Rs = (√N / 4) × ((α − 1) / α) × (k / (1 + k)). Once chemical selectivity (α) has resolved all analytes into discrete peaks, efficiency (theoretical plate count N = 16 × (tR / W)^2 = L / HETP) optimizes peak width (W) through physical parameters (such as mobile phase flow velocity along the van Deemter curve, particle size, column dimensions, or gradient steepness). This sharpens separation or shortens run time without altering mobile phase chemistry.",
+    "Role of Efficiency in Method Optimization: Once chemical selectivity (α) has resolved all analytes into discrete peaks, efficiency tuning optimizes theoretical plate count (N) through physical parameters (such as mobile phase flow velocity along the van Deemter curve, smaller particle size, column dimensions, or superficially porous core-shell particles). This sharpens separation and shortens run time without altering mobile phase chemistry.",
   );
   return parts.join("\n\n");
 }
@@ -909,6 +932,45 @@ function plan60Despite(
   const percent = formatPercentB(percentB);
   const startedAt40 = args.baseNumber != null && args.baselineNumber === args.baseNumber;
   const hot = heated[0] ?? args.baseline;
+  const res = resolutionForDecision(
+    hot.peakCount,
+    hot.minResolutionExcludingFirst,
+    args.setup.requiredPeaks,
+  );
+  const tag = buildConditionTag({
+    stagePrefix: "Selectivity: 60°C",
+    peaks: hot.peakCount,
+    requiredPeaks: args.setup.requiredPeaks ?? 7,
+    tR: hot.lastPeakTimeMin,
+    specTime: args.setup.lastPeakTimeMin ?? 20,
+    rs: res,
+    specRs: args.setup.minResolution,
+    bp: hot.maxBackPressurePsi,
+    specBP: args.setup.maxBackPressurePsi ?? 2900,
+  });
+
+  const leadWhy = startedAt40
+    ? [
+        `Condition: ${tag}.\n\nWhat this means: Run ${args.baselineNumber} is a 40°C selectivity run at ${percent}% B (${measurementPhrase(hot, args.setup.requiredPeaks)}). Complete baseline separation or resolution target is not yet satisfied.`,
+        `Influence & Decision: Temperature evaluation (60°C). Action: Run at 60°C, maintaining ${percent}% B on the same solvent. Testing 60°C evaluates whether a broader thermal range is needed to induce significant peak shifts before concluding the temperature screening phase.`,
+      ]
+    : [
+        `Condition: ${tag}.\n\nWhat this means: 40°C did not improve the separation compared with Run ${args.baselineNumber}. Separation requirements are not yet satisfied.`,
+        `Influence & Decision: Temperature evaluation (60°C). Action: Run at 60°C, maintaining ${percent}% B on the same solvent. Evaluating 60°C tests whether a broader thermal range is needed to induce significant peak shifts before concluding the temperature screening phase.`,
+      ];
+
+  const moreWhy = startedAt40
+    ? [
+        `Run ${args.baselineNumber} is a 40°C selectivity run at ${percent}% B (${measurementPhrase(hot, args.setup.requiredPeaks)}). The next chromatogram is 60°C, at ${percent}% B, on the same solvent. The %B stays the same.`,
+        onceReason(hot, args.setup),
+        "Testing 60°C evaluates whether a broader thermal range is needed to induce significant peak shifts before concluding the temperature screening phase.",
+      ].filter(Boolean)
+    : [
+        `40°C did not improve the separation compared with Run ${args.baselineNumber}. The next chromatogram is still 60°C, at ${percent}% B, on the same solvent. The %B stays the same.`,
+        compareSentence(args.baseline, args.baselineNumber, heated, args.setup.requiredPeaks),
+        "Evaluating 60°C tests whether a broader thermal range is needed to induce significant peak shifts before concluding the temperature screening phase.",
+      ];
+
   return {
     status: "recommend",
     step: "temp-60",
@@ -918,19 +980,9 @@ function plan60Despite(
     following: args.offerChoice
       ? `After 60°C, the next step is the second solvent at the chart %B, tried at 40°C and 60°C, then the coating last. ${SELECTIVITY_ORDER}`
       : `After 60°C on this solvent, the next step is a new coating. ${SELECTIVITY_ORDER}`,
-    why: startedAt40
-      ? [
-          `Run ${args.baselineNumber} is a 40°C selectivity run at ${percent}% B (${measurementPhrase(hot, args.setup.requiredPeaks)}). The next chromatogram is 60°C, at ${percent}% B, on the same solvent. The %B stays the same.`,
-          onceReason(hot, args.setup),
-          "Testing 60°C evaluates whether a broader thermal range is needed to induce significant peak shifts before concluding the temperature screening phase.",
-        ]
-          .filter(Boolean)
-          .join("\n\n")
-      : [
-          `40°C did not improve the separation compared with Run ${args.baselineNumber}. The next chromatogram is still 60°C, at ${percent}% B, on the same solvent. The %B stays the same.`,
-          compareSentence(args.baseline, args.baselineNumber, heated, args.setup.requiredPeaks),
-          "Evaluating 60°C tests whether a broader thermal range is needed to induce significant peak shifts before concluding the temperature screening phase.",
-        ].join("\n\n"),
+    leadWhy,
+    moreWhy,
+    why: [...leadWhy, ...moreWhy].join("\n\n"),
     prefill: { percentB: percent, temperature: "60", solvent, ligand },
     nomograph: null,
     showSolventChoices: false,
@@ -955,20 +1007,51 @@ function plan40(
   ligand: string,
 ): SelectivityPlan {
   const percent = formatPercentB(percentB);
+  const res = resolutionForDecision(
+    args.baseline.peakCount,
+    args.baseline.minResolutionExcludingFirst,
+    args.setup.requiredPeaks,
+  );
+  const tag = buildConditionTag({
+    stagePrefix: "Selectivity: 40°C",
+    peaks: args.baseline.peakCount,
+    requiredPeaks: args.setup.requiredPeaks ?? 7,
+    tR: args.baseline.lastPeakTimeMin,
+    specTime: args.setup.lastPeakTimeMin ?? 20,
+    rs: res,
+    specRs: args.setup.minResolution,
+    bp: args.baseline.maxBackPressurePsi,
+    specBP: args.setup.maxBackPressurePsi ?? 2900,
+  });
+
+  const resPhrase =
+    args.setup.minResolution != null && args.setup.minResolution > 0
+      ? res != null && Number.isFinite(res)
+        ? `Critical pair resolution is ${formatResolution(res)} (${res + 1e-9 >= args.setup.minResolution ? "Rs ≥ spec" : "Rs < spec"}).`
+        : "Critical pair resolution is not assessable."
+      : "";
+
+  const leadWhy = [
+    `Condition: ${tag}.\n\nWhat this means: Baseline run at ${percent}% B has ${formatCount(args.baseline.peakCount ?? 0)} detected peaks (${args.setup.requiredPeaks ? `${formatCount(args.baseline.peakCount ?? 0)} of ${formatCount(args.setup.requiredPeaks)} spec` : "no peak spec"}). The last peak elutes at ${args.baseline.lastPeakTimeMin != null ? `${formatMinutes(args.baseline.lastPeakTimeMin)} min` : "unknown time"}, and back-pressure is ${args.baseline.maxBackPressurePsi != null ? `${formatDecimal(args.baseline.maxBackPressurePsi, 1)} psi` : "unrecorded"}. ${resPhrase}`.trim(),
+    `Influence & Decision: Temperature screening (40°C). Because retention alone at ${percent}% B did not fully separate all target peaks, selectivity must be altered to shift relative peak positions (α). Action: Run at 40°C while maintaining ${percent}% B on the same solvent. Elevating column temperature alters thermodynamic partition enthalpies to pull overlapping peaks apart while maintaining established retention strength.`,
+  ];
+
+  const moreWhy = [
+    `The next chromatogram is 40°C, still at ${percent}% B.`,
+    onceChecks(args.baseline, args.setup),
+    onceReason(args.baseline, args.setup),
+    args.ambient.assumed ? args.ambient.sentence : "",
+    "Why temperature (40°C) is the first selectivity step: Column thermostatting is rapid, non-destructive, and requires no solvent changeover or line flushing. Under the van 't Hoff relationship (ln k = −ΔH°/(RT) + ΔS°/R + ln Φ), different analytes possess distinct standard molar enthalpies of transfer (ΔH°) between mobile and stationary phases. Elevating temperature alters retention factors at different rates, changing relative selectivity between critical pairs while lowering mobile phase viscosity and column back-pressure.",
+  ].filter((line) => line.trim().length > 0);
+
   return {
     status: "recommend",
     step: "temp-40",
     nextChange: `Run the next chromatogram at 40°C, still at ${percent}% B. The %B stays the same.`,
     following: `After 40°C comes an OBSERVE step: if temperature moves the peaks the right way → 60°C; if not → change solvent, with %B converted through the nomogram. ${SELECTIVITY_ORDER}`,
-    why: [
-      `The next chromatogram is 40°C, still at ${percent}% B.`,
-      onceChecks(args.baseline, args.setup),
-      onceReason(args.baseline, args.setup),
-      args.ambient.assumed ? args.ambient.sentence : "",
-      "Why temperature (40°C) is the first selectivity step: Column thermostatting is rapid, non-destructive, and requires no solvent changeover or line flushing. Under the van 't Hoff relationship (ln k = −ΔH°/(RT) + ΔS°/R + ln Φ), different analytes possess distinct standard molar enthalpies of transfer (ΔH°) between mobile and stationary phases. Elevating temperature alters retention factors at different rates, changing relative selectivity between critical pairs while lowering mobile phase viscosity and column back-pressure.",
-    ]
-      .filter((line) => line.trim().length > 0)
-      .join("\n\n"),
+    leadWhy,
+    moreWhy,
+    why: [...leadWhy, ...moreWhy].join("\n\n"),
     prefill: {
       percentB: percent,
       temperature: "40",
@@ -1004,17 +1087,45 @@ function plan60(
     : better.peaks
       ? "The peak count went up"
       : "The minimum resolution went up";
+
+  const hot = heated[0] ?? args.baseline;
+  const res = resolutionForDecision(
+    hot.peakCount,
+    hot.minResolutionExcludingFirst,
+    args.setup.requiredPeaks,
+  );
+  const tag = buildConditionTag({
+    stagePrefix: "Selectivity: 60°C",
+    peaks: hot.peakCount,
+    requiredPeaks: args.setup.requiredPeaks ?? 7,
+    tR: hot.lastPeakTimeMin,
+    specTime: args.setup.lastPeakTimeMin ?? 20,
+    rs: res,
+    specRs: args.setup.minResolution,
+    bp: hot.maxBackPressurePsi,
+    specBP: args.setup.maxBackPressurePsi ?? 2900,
+  });
+
+  const leadWhy = [
+    `Condition: ${tag}.\n\nWhat this means: At 40°C, ${what.toLowerCase()} compared with Run ${args.baselineNumber} (${compareSentence(args.baseline, args.baselineNumber, heated, args.setup.requiredPeaks)}). Temperature shifted peak spacing in a favorable direction, but complete separation or resolution specification is not yet satisfied.`,
+    `Influence & Decision: Temperature escalation (60°C). After 40°C comes an OBSERVE step: if temperature moves the peaks the right way → 60°C. Here, heat helped move the peaks the right way. Action: Run at 60°C, maintaining ${percent}% B on the same solvent. A further temperature increase tests whether full baseline separation can be achieved before moving to a solvent change.`,
+  ];
+
+  const moreWhy = [
+    `After 40°C comes an OBSERVE step: if temperature moves the peaks the right way → 60°C. Here, ${what.toLowerCase()} at 40°C compared with Run ${args.baselineNumber}. Heat helped move the peaks the right way, so 60°C at the same ${percent}% B is next. A higher temperature shortens retention. The %B stays the same. The point of the heat is a selectivity change so overlapping peaks can separate.`,
+    compareSentence(args.baseline, args.baselineNumber, heated, args.setup.requiredPeaks),
+    "A higher temperature is likely to increase separation further.",
+    "Thermodynamic Trend Exploitation: Because the 40°C run demonstrated improved peak count or critical pair resolution, the mixture exhibits a favorable differential enthalpy response. Escalating the temperature to 60°C continues along this thermodynamic trajectory, testing whether complete baseline separation can be achieved while keeping %B constant to isolate thermal selectivity from solvent strength variations.",
+  ];
+
   return {
     status: "recommend",
     step: "temp-60",
     nextChange: `Run the next chromatogram at 60°C, at ${percent}% B. Stay at this %B because heat already helped. A higher temperature shortens retention. The %B stays the same.`,
     following: `After 60°C, the next step is the second solvent at the chart %B, tried at 40°C and 60°C, then the coating last. ${SELECTIVITY_ORDER}`,
-    why: [
-      `After 40°C comes an OBSERVE step: if temperature moves the peaks the right way → 60°C. Here, ${what.toLowerCase()} at 40°C compared with Run ${args.baselineNumber}. Heat helped move the peaks the right way, so 60°C at the same ${percent}% B is next. A higher temperature shortens retention. The %B stays the same. The point of the heat is a selectivity change so overlapping peaks can separate.`,
-      compareSentence(args.baseline, args.baselineNumber, heated, args.setup.requiredPeaks),
-      "A higher temperature is likely to increase separation further.",
-      "Thermodynamic Trend Exploitation: Because the 40°C run demonstrated improved peak count or critical pair resolution, the mixture exhibits a favorable differential enthalpy response. Escalating the temperature to 60°C continues along this thermodynamic trajectory, testing whether complete baseline separation can be achieved while keeping %B constant to isolate thermal selectivity from solvent strength variations.",
-    ].join("\n\n"),
+    leadWhy,
+    moreWhy,
+    why: [...leadWhy, ...moreWhy].join("\n\n"),
     prefill: { percentB: percent, temperature: "60", solvent, ligand },
     nomograph: null,
     showSolventChoices: false,
@@ -1046,25 +1157,56 @@ function solventPlan(args: {
   const back = temperaturePhrase(args.ambient.celsius);
   const minimum = formatPercentB(anchorPercent);
 
+  const activeRun = args.failedTempRun ?? args.anchor;
+  const res = resolutionForDecision(
+    activeRun.peakCount,
+    activeRun.minResolutionExcludingFirst,
+    args.setup.requiredPeaks,
+  );
+  const tag = buildConditionTag({
+    stagePrefix: "Selectivity: Solvent change",
+    peaks: activeRun.peakCount,
+    requiredPeaks: args.setup.requiredPeaks ?? 7,
+    tR: activeRun.lastPeakTimeMin,
+    specTime: args.setup.lastPeakTimeMin ?? 20,
+    rs: res,
+    specRs: args.setup.minResolution,
+    bp: activeRun.maxBackPressurePsi,
+    specBP: args.setup.maxBackPressurePsi ?? 2900,
+  });
+
   const observeNote =
     args.did60 === false && args.failedTempRunNumber != null && args.baselineNumber != null
       ? `After 40°C comes an OBSERVE step: if temperature moves the peaks the right way → 60°C. If it does not → change solvent, with %B converted through the nomogram.\n\nHere, 40°C (Run ${args.failedTempRunNumber}) did not improve the separation compared with Run ${args.baselineNumber} (${measurementPhrase(args.failedTempRun!, args.setup.requiredPeaks)} vs ${measurementPhrase(args.baselineRun!, args.setup.requiredPeaks)}). Because temperature did not move the peaks the right way, do not run at 60°C. Instead, change solvent, back at ${back}, with %B converted through the nomogram.`
       : null;
+
+  const leadWhy =
+    args.did60 === false
+      ? [
+          `Condition: ${tag}.\n\nWhat this means: Temperature variations (40°C) did not improve peak count or critical pair resolution compared with Run ${args.baselineNumber ?? args.anchorNumber}. The current mobile phase modifier (${typed}) lacks the chemical selectivity required to resolve overlapping peaks.`,
+          `Influence & Decision: Mobile phase modifier change (Solvent selectivity). After 40°C comes an OBSERVE step: if temperature moves the peaks the right way → 60°C; if not → change solvent, with %B converted through the nomogram. Action: Change solvent, back at ${back}, with %B converted through the nomogram. Switching solvent class alters hydrogen-bonding and dipole interactions to shift elution order, while the nomogram matches solvent strength to the ${minimum}% B retention baseline.`,
+        ]
+      : [
+          `Condition: ${tag}.\n\nWhat this means: Temperature variations did not improve peak count or critical pair resolution compared with Run ${args.baselineNumber ?? args.anchorNumber}. The current mobile phase modifier (${typed}) lacks the chemical selectivity required to resolve overlapping peaks.`,
+          `Influence & Decision: Mobile phase modifier change (Solvent selectivity). Temperature scout runs failed to resolve all critical pairs, indicating mobile phase chemical selectivity must be changed. Action: Change solvent, back at ${back}, with %B converted through the nomogram. Switching solvent class alters hydrogen-bonding and dipole interactions to shift elution order, while the nomogram matches solvent strength to the ${minimum}% B retention baseline.`,
+        ];
+
+  const moreWhy = [
+    observeNote,
+    `Change the solvent and go back to ${back}. ${args.ambient.sentence}`,
+    `Pick ACN, MeOH, THF, Ethanol, IPA, Acetone, Propanol, or Butanol. The %B comes from the nomogram equation for the solvent you pick, through acetonitrile, matched to the retention minimum of ${minimum}% B. The equation does not choose the solvent.`,
+    "Solvent Selectivity & Snyder Triangle Principles: When temperature variations fail to resolve critical pairs, changing the organic modifier provides the most powerful mobile phase selectivity lever. Different organic solvents occupy distinct corners of the Snyder solvent selectivity triangle: Acetonitrile (Group VI) interacts predominantly through dipole-dipole attractions; Methanol (Group II) acts as a strong hydrogen-bond donor; and Tetrahydrofuran (THF, Group III) acts as a strong hydrogen-bond acceptor. Switching solvent class fundamentally alters analyte-solvent interactions in the mobile phase, frequently reversing elution order and separating critical overlapping pairs.",
+    `Role of the Nomogram: The Snyder solvent nomograph determines the iso-eluotropic mobile phase percentage (%B) for the chosen solvent, ensuring that overall retention remains matched to the retention minimum of ${minimum}% B without causing peaks to elute in the void volume or extend past the run time limit. Reverting to the starting temperature first isolates the chemical selectivity of the new organic modifier before testing thermal effects.`,
+  ].filter(Boolean) as string[];
 
   return {
     status: "recommend",
     step: "solvent",
     nextChange: `Change solvent, back at ${back}.`,
     following: `After the solvent, try 40°C and then 60°C at the chart %B. ${SELECTIVITY_ORDER}`,
-    why: [
-      observeNote,
-      `Change the solvent and go back to ${back}. ${args.ambient.sentence}`,
-      `Pick ACN, MeOH, THF, Ethanol, IPA, Acetone, Propanol, or Butanol. The %B comes from the nomogram equation for the solvent you pick, through acetonitrile, matched to the retention minimum of ${minimum}% B. The equation does not choose the solvent.`,
-      "Solvent Selectivity & Snyder Triangle Principles: When temperature variations fail to resolve critical pairs, changing the organic modifier provides the most powerful mobile phase selectivity lever. Different organic solvents occupy distinct corners of the Snyder solvent selectivity triangle: Acetonitrile (Group VI) interacts predominantly through dipole-dipole attractions; Methanol (Group II) acts as a strong hydrogen-bond donor; and Tetrahydrofuran (THF, Group III) acts as a strong hydrogen-bond acceptor. Switching solvent class fundamentally alters analyte-solvent interactions in the mobile phase, frequently reversing elution order and separating critical overlapping pairs.",
-      `Role of the Nomogram: The Snyder solvent nomograph determines the iso-eluotropic mobile phase percentage (%B) for the chosen solvent, ensuring that overall retention remains matched to the retention minimum of ${minimum}% B without causing peaks to elute in the void volume or extend past the run time limit. Reverting to the starting temperature first isolates the chemical selectivity of the new organic modifier before testing thermal effects.`,
-    ]
-      .filter(Boolean)
-      .join("\n\n"),
+    leadWhy,
+    moreWhy,
+    why: [...leadWhy, ...moreWhy].join("\n\n"),
     prefill: {
       percentB: "",
       temperature: temperatureField(args.ambient.celsius),
@@ -1108,20 +1250,38 @@ function ligandPlan(args: {
       ? `After 40°C on ${args.solventName} (Run ${args.failedTempRunNumber}), temperature did not move the peaks the right way. Because temperature variations on this solvent did not improve separation, 60°C is bypassed and the method moves directly to the final selectivity lever: a new column coating.`
       : null;
 
+  const activeRun = args.failedTempRun ?? args.baselineRun;
+  const tag = buildConditionTag({
+    stagePrefix: "Selectivity: Column coating change",
+    peaks: activeRun?.peakCount ?? 0,
+    requiredPeaks: args.setup.requiredPeaks ?? 7,
+    tR: activeRun?.lastPeakTimeMin ?? null,
+    specTime: args.setup.lastPeakTimeMin ?? 20,
+    bp: activeRun?.maxBackPressurePsi ?? null,
+    specBP: args.setup.maxBackPressurePsi ?? 2900,
+  });
+
+  const leadWhy = [
+    `Condition: ${tag}.\n\nWhat this means: Temperature adjustments and alternative organic modifiers have been evaluated on the current column coating without meeting the required peak separation and resolution specifications.`,
+    `Influence & Decision: Stationary phase chemistry change (Column coating). Mobile phase levers have been exhausted. Action: ${pick} Go back to 100% B, ${temperaturePhrase(args.ambient.celsius)}, and ACN, then start the %B steps over. A different bonded phase introduces new retention mechanisms (such as π–π aromatic interactions or shape selectivity) to separate co-eluting compounds.`,
+  ];
+
+  const moreWhy = [
+    tempNote,
+    "The coating is last. Temperature is tried first, then a new solvent, because a new coating means starting over. The temperature steps and the solvent change still do not meet the peak count and the resolution check. A new ligand is a selectivity change: peaks can pull apart or change order. It is the last one. You pick the coating.",
+    `${pick} Already used: ${triedText}.`,
+    `The ladder starts again at 100% B with ACN, at ${temperaturePhrase(args.ambient.celsius)}. The previous solvent is not carried forward. A strong solvent brings the compounds off the new coating quickly, and the %B steps bring the last peak back toward the specified time. ${args.ambient.sentence}`,
+    "Stationary Phase Chemistry & Ligand Selectivity: Changing the bonded stationary phase ligand is the final and most powerful lever in the selectivity flowchart. When mobile phase temperature and organic modifier adjustments have been exhausted, changing the bonded phase alters the primary retention mechanism (such as moving from pure alkyl van der Waals hydrophobic interactions to aromatic π–π stacking, dipole-dipole, or shape selectivity). Because a new column introduces a completely different chromatographic matrix, the method development protocol restarts the retention screening ladder at 100% B with standard acetonitrile to establish baseline void volume, verify rapid elution of all components, and avoid irreversible adsorption before systematically stepping down %B.",
+  ].filter(Boolean) as string[];
+
   return {
     status: "recommend",
     step: "ligand",
     nextChange: `${pick} Go back to 100% B, ${temperaturePhrase(args.ambient.celsius)}, and ACN, then start the %B steps over.`,
     following: `${COATING_SENTENCE} ${SELECTIVITY_ORDER}`,
-    why: [
-      tempNote,
-      "The coating is last. Temperature is tried first, then a new solvent, because a new coating means starting over. The temperature steps and the solvent change still do not meet the peak count and the resolution check. A new ligand is a selectivity change: peaks can pull apart or change order. It is the last one. You pick the coating.",
-      `${pick} Already used: ${triedText}.`,
-      `The ladder starts again at 100% B with ACN, at ${temperaturePhrase(args.ambient.celsius)}. The previous solvent is not carried forward. A strong solvent brings the compounds off the new coating quickly, and the %B steps bring the last peak back toward the specified time. ${args.ambient.sentence}`,
-      "Stationary Phase Chemistry & Ligand Selectivity: Changing the bonded stationary phase ligand is the final and most powerful lever in the selectivity flowchart. When mobile phase temperature and organic modifier adjustments have been exhausted, changing the bonded phase alters the primary retention mechanism (such as moving from pure alkyl van der Waals hydrophobic interactions to aromatic π–π stacking, dipole-dipole, or shape selectivity). Because a new column introduces a completely different chromatographic matrix, the method development protocol restarts the retention screening ladder at 100% B with standard acetonitrile to establish baseline void volume, verify rapid elution of all components, and avoid irreversible adsorption before systematically stepping down %B.",
-    ]
-      .filter(Boolean)
-      .join("\n\n"),
+    leadWhy,
+    moreWhy,
+    why: [...leadWhy, ...moreWhy].join("\n\n"),
     prefill: {
       percentB: "100",
       temperature: temperatureField(args.ambient.celsius),

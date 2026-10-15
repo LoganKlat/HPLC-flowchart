@@ -15,7 +15,9 @@ export function SelectivityDecisionView({
   tempPath: TempPath | null;
 }) {
   const paragraphs = stepParagraphs(plan.why);
-  const { lead, details } = splitSelectivitySummary(paragraphs, plan.nextChange);
+  const { lead: fallbackLead, details: fallbackDetails } = splitSelectivitySummary(paragraphs, plan.nextChange);
+  const lead = plan.leadWhy ?? fallbackLead;
+  const details = plan.moreWhy ?? fallbackDetails;
 
   return (
     <div className="contents" id="selectivity-decision">

@@ -51,10 +51,12 @@ export function RetentionDecisionView({
   }, [onLinePercent, reported]);
 
   const paragraphs = fit ? [] : whyParagraphs(decision.why);
-  const { lead: leadParagraphs, details: detailParagraphs } = splitRetentionWhy(
+  const { lead: fallbackLead, details: fallbackDetails } = splitRetentionWhy(
     paragraphs,
     decision.status,
   );
+  const leadParagraphs = decision.leadWhy ?? fallbackLead;
+  const detailParagraphs = decision.moreWhy ?? fallbackDetails;
 
   return (
     <div className="contents" id="retention-decision">
@@ -66,6 +68,7 @@ export function RetentionDecisionView({
           <MinimumPercentFit
             fit={fit}
             brief={decision.brief ?? []}
+            leadWhy={decision.leadWhy}
             selected={selected}
             solved={solved}
             onToggle={(runNumber) =>
@@ -179,7 +182,9 @@ export function LaterChangeNote({ decision }: { decision: RetentionDecision | nu
   const explanation =
     decision?.nextChange ?? "Retention is finished. The next kind of change is not built yet.";
   const paragraphs = decision?.why?.trim() ? whyParagraphs(decision.why) : [explanation];
-  const { lead, details } = splitRetentionWhy(paragraphs, decision?.status ?? "");
+  const { lead: fallbackLead, details: fallbackDetails } = splitRetentionWhy(paragraphs, decision?.status ?? "");
+  const lead = decision?.leadWhy ?? fallbackLead;
+  const details = decision?.moreWhy ?? fallbackDetails;
   return (
     <div className="flex flex-col gap-4">
       <section className="rounded-xl bg-card px-4 py-4 ring-1 ring-foreground/10">
@@ -527,12 +532,14 @@ export function SecondPercentChoice({
 function MinimumPercentFit({
   fit,
   brief,
+  leadWhy,
   selected,
   solved,
   onToggle,
 }: {
   fit: RetentionFit;
   brief: string[];
+  leadWhy?: string[];
   selected: number[];
   solved: MinimumFit | null;
   onToggle: (runNumber: number) => void;
@@ -559,8 +566,14 @@ function MinimumPercentFit({
           ) : null}
         </div>
         <div className="mt-1 flex flex-col gap-2 text-sm leading-relaxed text-foreground">
-          {fit.rsFarBelowNote ? <p>{fit.rsFarBelowNote}</p> : null}
-          <p>{MINIMUM_PERCENT_SENTENCE}</p>
+          {leadWhy && leadWhy.length > 0 ? (
+            leadWhy.map((p, idx) => <p key={idx}>{p}</p>)
+          ) : (
+            <>
+              {fit.rsFarBelowNote ? <p>{fit.rsFarBelowNote}</p> : null}
+              <p>{MINIMUM_PERCENT_SENTENCE}</p>
+            </>
+          )}
           {!solved ? (
             <p className="text-orange-800 dark:text-orange-200">
               {selected.length < 2
