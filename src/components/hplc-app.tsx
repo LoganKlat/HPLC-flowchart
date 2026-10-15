@@ -1350,17 +1350,22 @@ export function HplcApp() {
           </p>
         </div>
       ) : null}
-      {/* Topmost Title Bar */}
-      <div
+      {/* Unified Top Header Bar */}
+      <header
         id="top-title-bar"
-        className="flex h-8 sm:h-9 shrink-0 items-center justify-between border-b border-border bg-card/90 px-3 sm:px-4 select-none"
+        className="sticky top-0 z-40 flex h-11 sm:h-12 w-full shrink-0 select-none items-center justify-between border-b border-border bg-card/95 px-2.5 sm:px-4 backdrop-blur-xs gap-2 sm:gap-4"
       >
-        <div className="flex min-w-0 items-center gap-2">
-          <h1 className="font-heading text-xs sm:text-sm font-bold tracking-tight text-foreground truncate">
-            HPLC run check <span className="font-semibold text-muted-foreground">(composite sample)</span>
-          </h1>
+        <div className="flex min-w-0 shrink-0 items-center gap-2">
+          <div className="flex min-w-0 items-baseline gap-1.5">
+            <h1 className="font-heading text-xs sm:text-sm font-bold tracking-tight text-foreground whitespace-nowrap">
+              HPLC run check
+            </h1>
+            <span className="hidden xl:inline text-[11px] font-medium text-muted-foreground whitespace-nowrap">
+              (composite sample)
+            </span>
+          </div>
           {section === "decision-engine" && (
-            <span className="hidden md:inline text-[11px] text-muted-foreground">
+            <span className="hidden 2xl:inline text-[11px] text-muted-foreground whitespace-nowrap">
               {exampleStatus === "loaded"
                 ? `· ${readyCount} runs loaded`
                 : exampleStatus === "error"
@@ -1369,13 +1374,13 @@ export function HplcApp() {
             </span>
           )}
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <SectionNav section={section} onSelect={setSection} />
+        <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
           <ThemeToggle variant="compact" />
-          <div className="h-3.5 w-px bg-border/60" aria-hidden="true" />
+          <div className="h-4 w-px bg-border/60" aria-hidden="true" />
           <Watermark variant="compact" />
         </div>
-      </div>
-      <SectionNav section={section} onSelect={setSection} />
+      </header>
       {section === "decision-engine" && exampleStatus === "loading" ? (
         <div className="flex shrink-0 items-center justify-center border-b border-border bg-[var(--hp-soft)] px-4 py-2">
           <p className="text-xs sm:text-sm text-muted-foreground" role="status">Loading 18 example runs…</p>
@@ -1728,9 +1733,9 @@ function sectionTabStyle(selected: boolean, hovered: boolean): CSSProperties {
     return { backgroundColor: "var(--hp-gold-soft)", borderColor: "var(--hp-gold)", color: "var(--hp-gold-ink)", fontWeight: 600 };
   }
   return {
-    backgroundColor: "var(--background)",
-    borderColor: "var(--border)",
-    color: "var(--foreground)",
+    backgroundColor: "transparent",
+    borderColor: "transparent",
+    color: "var(--muted-foreground)",
     fontWeight: 500,
   };
 }
@@ -1744,8 +1749,8 @@ function SectionNav({
 }) {
   const [hovered, setHovered] = useState<string | null>(null);
   return (
-    <nav aria-label="Sections" className="sticky top-0 z-40 flex w-full shrink-0 items-stretch border-b border-border bg-background">
-      <div className="grid min-w-0 flex-1 grid-cols-5">
+    <nav aria-label="Sections" className="flex min-w-0 items-center justify-center">
+      <div className="flex items-center gap-0.5 sm:gap-1 rounded-lg border border-border/80 bg-background/80 p-0.5 shadow-2xs backdrop-blur-xs">
         {sections.map((item) => {
           const selected = item.id === section;
           return (
@@ -1753,14 +1758,18 @@ function SectionNav({
               key={item.id}
               type="button"
               aria-current={selected ? "page" : undefined}
-              className="flex min-h-10 cursor-pointer select-none items-center justify-center gap-1 border-r border-border border-solid px-1 py-2 text-center text-xs leading-tight outline-none transition-all duration-150 focus-visible:ring-3 focus-visible:ring-ring/50 active:translate-y-px sm:gap-2 sm:px-2 sm:text-sm"
+              title={item.label}
+              className="flex h-7 sm:h-8 cursor-pointer select-none items-center gap-1 sm:gap-1.5 rounded-md border border-solid px-2 sm:px-2.5 text-xs outline-none transition-all duration-150 focus-visible:ring-2 focus-visible:ring-ring/50 active:translate-y-px"
               style={sectionTabStyle(selected, hovered === item.id)}
               onMouseEnter={() => setHovered(item.id)}
               onMouseLeave={() => setHovered((current) => (current === item.id ? null : current))}
               onClick={() => onSelect(item.id)}
             >
-              <item.icon className="hidden size-4 shrink-0 sm:block" aria-hidden="true" />
-              <span>{item.label}</span>
+              <item.icon className="size-3.5 sm:size-4 shrink-0" aria-hidden="true" />
+              <span className="hidden lg:inline whitespace-nowrap">{item.label}</span>
+              <span className="hidden sm:inline lg:hidden whitespace-nowrap text-[11px] sm:text-xs">
+                {item.id === "decision-engine" ? "Decisions" : item.id === "run-data" ? "Runs" : item.label}
+              </span>
             </button>
           );
         })}
