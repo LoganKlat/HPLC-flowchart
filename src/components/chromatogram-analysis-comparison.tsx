@@ -149,7 +149,7 @@ export function ChromatogramAnalysisComparison({
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="inline-flex items-center gap-2 rounded-full border border-[var(--hp-brand)]/30 bg-[var(--hp-brand)]/10 px-3 py-1 text-xs font-semibold text-[var(--hp-brand)]">
             <Activity className="size-3.5" />
-            <span>FC1 Marking Criteria Guide</span>
+            <span>Chromatographic Analysis Guide</span>
           </div>
 
           {/* Filter Pills */}

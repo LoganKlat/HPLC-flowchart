@@ -751,7 +751,7 @@ export function EquipmentPanel({
 
                   <div className="flex flex-col gap-2 text-xs text-muted-foreground">
                     <p className="leading-relaxed">
-                      All 8 components mandated for the FC1 flowchart are integrated into the flow path. Select any module to inspect its function, control type, and parameters:
+                      All 8 components of the HPLC instrument system are integrated into the flow path. Select any module to inspect its function, control type, and parameters:
                     </p>
 
                     <div className="flex flex-col gap-1.5 mt-1">
@@ -782,15 +782,12 @@ export function EquipmentPanel({
                   </div>
 
                   <div className="rounded-xl border border-[var(--hp-brand)]/30 bg-[var(--hp-soft)]/20 p-3 text-[11px] leading-relaxed text-muted-foreground dark:bg-[var(--hp-soft)]/10">
-                    <strong className="text-foreground">Exam Tip:</strong> Ensure your FC1 flowchart includes all 8 components with explicit Chemical/Mechanical control types.
+                    <strong className="text-foreground">Note:</strong> Includes all 8 instrument components with explicit Chemical and Mechanical control types.
                   </div>
                 </div>
               )}
             </aside>
           </div>
-
-          {/* Direct vs Calculated Chromatogram Responses Section */}
-          <ChromatogramAnalysisComparison />
         </div>
       ) : null}
     </div>
