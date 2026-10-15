@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Activity, Calculator, CheckCircle2, AlertTriangle, Info, HelpCircle } from "lucide-react";
+import { Activity, Calculator, CheckCircle2, Info, HelpCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export type AnalysisCategory = "all" | "direct" | "calculated";
@@ -205,20 +205,6 @@ export function ChromatogramAnalysisComparison({
           Direct vs. Calculated Chromatographic Analysis
         </h3>
 
-        {/* Warning callout for Orlando penalty */}
-        <div className="rounded-xl border border-amber-300 dark:border-amber-700/60 bg-amber-50/70 dark:bg-amber-950/30 p-3 sm:p-3.5 text-xs text-amber-900 dark:text-amber-200">
-          <div className="flex items-start gap-2.5">
-            <AlertTriangle className="size-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
-            <div className="space-y-1">
-              <p className="font-bold">
-                Unit Coordinator Requirement (Laurence Orlando):
-              </p>
-              <p className="leading-relaxed">
-                Omitting the distinction between <strong>directly read chromatographic responses</strong> (sensor measurements along time/signal axes) and <strong>calculated chromatographic parameters</strong> (mathematically derived metrics like <em>k, Rs, N, α</em>) triggers the <em>&quot;No chromatogram analysis&quot;</em> penalty.
-              </p>
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* Grid of Cards */}
