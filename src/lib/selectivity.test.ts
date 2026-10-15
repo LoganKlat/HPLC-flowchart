@@ -432,7 +432,7 @@ describe("selectivity plan", () => {
     expect(history.plan.why.toLowerCase()).not.toContain("guess");
   });
 
-  it("goes to 60°C when 40°C does not improve the run, not to a new solvent", () => {
+  it("changes solvent when 40°C does not improve the run (OBSERVE step: temperature did not move peaks the right way)", () => {
     const history = withHeat(
       [
         run({ peakCount: 4, minResolutionExcludingFirst: 0.4 }),
@@ -442,16 +442,11 @@ describe("selectivity plan", () => {
     );
     expect(history.phase).toBe("selectivity");
     if (history.phase !== "selectivity") return;
-    expect(history.plan.step).toBe("temp-60");
-    expect(history.plan.step).not.toBe("solvent");
-    expect(history.plan.tempChoice).toBeNull();
-    expect(history.plan.nextChange).toContain("60°C");
-    expect(history.plan.nextChange).not.toContain("Change the solvent");
-    expect(history.plan.prefill).toMatchObject({ percentB: "80", temperature: "60", solvent: "ACN" });
-    expect(history.plan.nextChange.toLowerCase()).not.toContain("lowered");
-    expect(history.plan.why).toContain("same solvent");
-    expect(history.plan.why).not.toContain("60°C is skipped");
-    expect(history.plan.showSolventChoices).toBe(false);
+    expect(history.plan.step).toBe("solvent");
+    expect(history.plan.nextChange.toLowerCase()).toContain("solvent");
+    expect(history.plan.showSolventChoices).toBe(true);
+    expect(history.plan.nomograph).not.toBeNull();
+    expect(history.plan.why).toContain("OBSERVE");
   });
 
   it("recommends 60°C only when the peak count went up", () => {
@@ -693,23 +688,13 @@ describe("selectivity plan", () => {
     const history = withHeat([fromFile(ambient, 40, 25), fromFile(hot, 40, 40)], rules);
     expect(history.phase).toBe("selectivity");
     if (history.phase !== "selectivity") return;
-    expect(history.plan.step).toBe("temp-60");
-    expect(history.plan.step).not.toBe("solvent");
-    expect(history.plan.tempChoice).toBeNull();
-    expect(history.plan.nextChange).toContain("60°C");
-    expect(history.plan.nextChange).not.toContain("Change the solvent");
-    expect(history.plan.prefill).toMatchObject({ percentB: "40", temperature: "60" });
-    expect(history.plan.why).toContain("7 peaks");
-    expect(history.plan.why).toContain("6 peaks");
-    expect(history.plan.why).toContain("minimum resolution 0.000");
-    expect(history.plan.why).not.toContain("2.312");
-    expect(history.plan.why).not.toContain("60°C is skipped");
-    expect(history.plan.nextChange.toLowerCase()).not.toContain("lowered");
-    expect(history.plan.why.toLowerCase()).not.toContain("decrease");
-    expect(history.plan.showSolventChoices).toBe(false);
+    expect(history.plan.step).toBe("solvent");
+    expect(history.plan.nextChange).toContain("Change solvent");
+    expect(history.plan.showSolventChoices).toBe(true);
+    expect(history.plan.why).toContain("OBSERVE");
   });
 
-  it("goes to 60°C when 40°C on the new solvent does not improve", () => {
+  it("goes to ligand when 40°C on the new solvent does not improve (OBSERVE step)", () => {
     const history = withHeat([
       run({ peakCount: 4, minResolutionExcludingFirst: 0.4 }),
       run({ percentB: 80, temperatureC: 40, peakCount: 4, minResolutionExcludingFirst: 0.4, lastPeakTimeMin: 6 }),
@@ -719,15 +704,10 @@ describe("selectivity plan", () => {
     ]);
     expect(history.phase).toBe("selectivity");
     if (history.phase !== "selectivity") return;
-    expect(history.plan.step).toBe("temp-60");
+    expect(history.plan.step).toBe("ligand");
     expect(history.plan.tempChoice).toBeNull();
-    expect(history.plan.nextChange).toContain("60°C");
-    expect(history.plan.nextChange).not.toContain("Change the ligand");
-    expect(history.plan.prefill).toMatchObject({ percentB: "91", temperature: "60", solvent: "MeOH" });
-    expect(history.plan.nextChange.toLowerCase()).not.toContain("lowered");
-    expect(history.plan.why.toLowerCase()).not.toContain("decrease");
-    expect(history.plan.recommendedLigand).toBeNull();
-    expect(history.plan.showLigandChoices).toBe(false);
+    expect(history.plan.nextChange).toContain("Pick a new column coating");
+    expect(history.plan.showLigandChoices).toBe(true);
   });
 
   it("goes to the ligand step after 60°C on the new solvent without lowering %B", () => {
@@ -906,7 +886,7 @@ describe("selectivity plan", () => {
           temperatureC: 40,
           solvent: "MeOH",
           peakCount: 6,
-          minResolutionExcludingFirst: 0.4,
+          minResolutionExcludingFirst: 0.8,
           lastPeakTimeMin: 8,
         }),
       ],
@@ -1016,7 +996,7 @@ describe("selectivity plan", () => {
       percentB: 22,
       temperatureC: 40,
       peakCount: 8,
-      minResolutionExcludingFirst: 1.2,
+      minResolutionExcludingFirst: 1.5,
       lastPeakTimeMin: 12,
     });
     const history = planHistory([late, at40], rules);
@@ -1066,7 +1046,10 @@ describe("selectivity plan", () => {
     expect(second.fit).toBeNull();
     expect(second.nextPercentB).toBeNull();
     expect(second.pickOwnPercent).toBe(true);
-    const at40 = asRun(38, 3, 40);
+    const at40 = {
+      ...asRun(38, 3, 40),
+      minResolutionExcludingFirst: (reads[3].minResolutionExcludingFirst ?? 0.5) + 0.5,
+    };
     const history = planHistory([...ladder, atMinimum, at40], setup);
     expect(history.phase).toBe("selectivity");
     if (history.phase !== "selectivity") return;

@@ -761,6 +761,11 @@ function walkSelectivity(args: {
             setup: args.setup,
             ambient: temperatureBeforeOven(args.carry, args.setup),
             ligandName: baseline.ligand || args.setup.originalLigand,
+            failedTempRun: pending[0],
+            failedTempRunNumber: baseNumber,
+            baselineRun: baseline,
+            baselineNumber,
+            did60: temperature.did60,
           }),
         };
       }
@@ -781,6 +786,12 @@ function walkSelectivity(args: {
           ambient,
           triedLigands: args.triedLigands,
           ligands: args.ligands,
+          failedTempRun: pending[0],
+          failedTempRunNumber: baseNumber,
+          baselineRun: baseline,
+          baselineNumber,
+          did60: temperature.did60,
+          solventName,
         }),
       };
     }
@@ -823,6 +834,14 @@ function walkTemperature(args: {
   const better = separationImproved(args.baseline, hot, args.setup.requiredPeaks);
   const percent = hot.percentB ?? startPercent;
   const at60 = args.pending[1] != null && isSixty(args.pending[1]);
+  const startedAt40 = args.baseNumber != null && args.baselineNumber === args.baseNumber;
+
+  if (startedAt40) {
+    if (!at60) {
+      return { type: "plan", plan: plan60Despite(args, percent, solvent, ligand, heated) };
+    }
+    return { type: "advance", consumed: 2, did60: true };
+  }
 
   if (better.ok) {
     if (!at60) {
@@ -831,10 +850,9 @@ function walkTemperature(args: {
     return { type: "advance", consumed: 2, did60: true };
   }
 
+  // After 40°C comes an OBSERVE step: if temperature moves the peaks the right way → 60°C.
+  // If it does not → change solvent, with %B converted through the nomogram.
   if (!at60) {
-    if (args.pending.length === 1) {
-      return { type: "plan", plan: plan60Despite(args, percent, solvent, ligand, heated) };
-    }
     return { type: "advance", consumed: 1, did60: false };
   }
 
@@ -929,7 +947,7 @@ function plan40(
     status: "recommend",
     step: "temp-40",
     nextChange: `Run the next chromatogram at 40°C, still at ${percent}% B. The %B stays the same.`,
-    following: `After 40°C, the next step is 60°C at the same %B. ${SELECTIVITY_ORDER}`,
+    following: `After 40°C comes an OBSERVE step: if temperature moves the peaks the right way → 60°C; if not → change solvent, with %B converted through the nomogram. ${SELECTIVITY_ORDER}`,
     why: [
       `The next chromatogram is 40°C, still at ${percent}% B.`,
       onceChecks(args.baseline, args.setup),
@@ -980,7 +998,7 @@ function plan60(
     nextChange: `Run the next chromatogram at 60°C, at ${percent}% B. Stay at this %B because heat already helped. A higher temperature shortens retention. The %B stays the same.`,
     following: `After 60°C, the next step is the second solvent at the chart %B, tried at 40°C and 60°C, then the coating last. ${SELECTIVITY_ORDER}`,
     why: [
-      `${what} at 40°C compared with Run ${args.baselineNumber}, the run from before the temperature change. Heat helped, so 60°C at the same ${percent}% B is next. A higher temperature shortens retention. The %B stays the same. The point of the heat is a selectivity change so overlapping peaks can separate.`,
+      `After 40°C comes an OBSERVE step: if temperature moves the peaks the right way → 60°C. Here, ${what.toLowerCase()} at 40°C compared with Run ${args.baselineNumber}. Heat helped move the peaks the right way, so 60°C at the same ${percent}% B is next. A higher temperature shortens retention. The %B stays the same. The point of the heat is a selectivity change so overlapping peaks can separate.`,
       compareSentence(args.baseline, args.baselineNumber, heated, args.setup.requiredPeaks),
       "A higher temperature is likely to increase separation further.",
       "Thermodynamic Trend Exploitation: Because the 40°C run demonstrated improved peak count or critical pair resolution, the mixture exhibits a favorable differential enthalpy response. Escalating the temperature to 60°C continues along this thermodynamic trajectory, testing whether complete baseline separation can be achieved while keeping %B constant to isolate thermal selectivity from solvent strength variations.",
@@ -1003,6 +1021,11 @@ function solventPlan(args: {
   setup: SelectivitySetup;
   ambient: Ambient;
   ligandName: string;
+  failedTempRun?: SelectivityRun;
+  failedTempRunNumber?: number;
+  baselineRun?: SelectivityRun;
+  baselineNumber?: number;
+  did60?: boolean;
 }): SelectivityPlan {
   const anchorPercent = args.anchor.percentB!;
   const typed = args.anchor.solvent.trim() || args.setup.originalSolvent.trim();
@@ -1010,17 +1033,26 @@ function solventPlan(args: {
   const nomograph = recognized ? solventNomograph(anchorPercent, recognized.name) : null;
   const back = temperaturePhrase(args.ambient.celsius);
   const minimum = formatPercentB(anchorPercent);
+
+  const observeNote =
+    args.did60 === false && args.failedTempRunNumber != null && args.baselineNumber != null
+      ? `After 40°C comes an OBSERVE step: if temperature moves the peaks the right way → 60°C. If it does not → change solvent, with %B converted through the nomogram.\n\nHere, 40°C (Run ${args.failedTempRunNumber}) did not improve the separation compared with Run ${args.baselineNumber} (${measurementPhrase(args.failedTempRun!, args.setup.requiredPeaks)} vs ${measurementPhrase(args.baselineRun!, args.setup.requiredPeaks)}). Because temperature did not move the peaks the right way, do not run at 60°C. Instead, change solvent, back at ${back}, with %B converted through the nomogram.`
+      : null;
+
   return {
     status: "recommend",
     step: "solvent",
     nextChange: `Change solvent, back at ${back}.`,
     following: `After the solvent, try 40°C and then 60°C at the chart %B. ${SELECTIVITY_ORDER}`,
     why: [
+      observeNote,
       `Change the solvent and go back to ${back}. ${args.ambient.sentence}`,
       `Pick ACN, MeOH, THF, Ethanol, IPA, Acetone, Propanol, or Butanol. The %B comes from the nomogram equation for the solvent you pick, through acetonitrile, matched to the retention minimum of ${minimum}% B. The equation does not choose the solvent.`,
       "Solvent Selectivity & Snyder Triangle Principles: When temperature variations fail to resolve critical pairs, changing the organic modifier provides the most powerful mobile phase selectivity lever. Different organic solvents occupy distinct corners of the Snyder solvent selectivity triangle: Acetonitrile (Group VI) interacts predominantly through dipole-dipole attractions; Methanol (Group II) acts as a strong hydrogen-bond donor; and Tetrahydrofuran (THF, Group III) acts as a strong hydrogen-bond acceptor. Switching solvent class fundamentally alters analyte-solvent interactions in the mobile phase, frequently reversing elution order and separating critical overlapping pairs.",
       `Role of the Nomogram: The Snyder solvent nomograph determines the iso-eluotropic mobile phase percentage (%B) for the chosen solvent, ensuring that overall retention remains matched to the retention minimum of ${minimum}% B without causing peaks to elute in the void volume or extend past the run time limit. Reverting to the starting temperature first isolates the chemical selectivity of the new organic modifier before testing thermal effects.`,
-    ].join("\n\n"),
+    ]
+      .filter(Boolean)
+      .join("\n\n"),
     prefill: {
       percentB: "",
       temperature: temperatureField(args.ambient.celsius),
@@ -1043,6 +1075,12 @@ function ligandPlan(args: {
   ambient: Ambient;
   triedLigands: string[];
   ligands: readonly string[];
+  failedTempRun?: SelectivityRun;
+  failedTempRunNumber?: number;
+  baselineRun?: SelectivityRun;
+  baselineNumber?: number;
+  did60?: boolean;
+  solventName?: string;
 }): SelectivityPlan {
   const unused = recommendLigand(args.triedLigands, args.ligands);
   const triedText = uniqueLabels(args.triedLigands);
@@ -1053,17 +1091,25 @@ function ligandPlan(args: {
     );
   }
   const pick = "Pick a new column coating from the dropdown.";
+  const tempNote =
+    args.did60 === false && args.failedTempRunNumber != null && args.solventName
+      ? `After 40°C on ${args.solventName} (Run ${args.failedTempRunNumber}), temperature did not move the peaks the right way. Because temperature variations on this solvent did not improve separation, 60°C is bypassed and the method moves directly to the final selectivity lever: a new column coating.`
+      : null;
+
   return {
     status: "recommend",
     step: "ligand",
     nextChange: `${pick} Go back to 100% B, ${temperaturePhrase(args.ambient.celsius)}, and ACN, then start the %B steps over.`,
     following: `${COATING_SENTENCE} ${SELECTIVITY_ORDER}`,
     why: [
+      tempNote,
       "The coating is last. Temperature is tried first, then a new solvent, because a new coating means starting over. The temperature steps and the solvent change still do not meet the peak count and the resolution check. A new ligand is a selectivity change: peaks can pull apart or change order. It is the last one. You pick the coating.",
       `${pick} Already used: ${triedText}.`,
       `The ladder starts again at 100% B with ACN, at ${temperaturePhrase(args.ambient.celsius)}. The previous solvent is not carried forward. A strong solvent brings the compounds off the new coating quickly, and the %B steps bring the last peak back toward the specified time. ${args.ambient.sentence}`,
       "Stationary Phase Chemistry & Ligand Selectivity: Changing the bonded stationary phase ligand is the final and most powerful lever in the selectivity flowchart. When mobile phase temperature and organic modifier adjustments have been exhausted, changing the bonded phase alters the primary retention mechanism (such as moving from pure alkyl van der Waals hydrophobic interactions to aromatic π–π stacking, dipole-dipole, or shape selectivity). Because a new column introduces a completely different chromatographic matrix, the method development protocol restarts the retention screening ladder at 100% B with standard acetonitrile to establish baseline void volume, verify rapid elution of all components, and avoid irreversible adsorption before systematically stepping down %B.",
-    ].join("\n\n"),
+    ]
+      .filter(Boolean)
+      .join("\n\n"),
     prefill: {
       percentB: "100",
       temperature: temperatureField(args.ambient.celsius),
@@ -1224,7 +1270,17 @@ function separationImproved(
   );
   const hotRes = resolutionForDecision(hot.peakCount, hot.minResolutionExcludingFirst, requiredPeaks);
   const resolutionUp = !peaksDown && atSpec && baseRes != null && hotRes != null && hotRes > baseRes;
-  return { ok: peaksUp || resolutionUp, peaks: peaksUp, resolution: resolutionUp };
+
+  const baseRaw = baseline.minResolutionExcludingFirst;
+  const hotRaw = hot.minResolutionExcludingFirst;
+  const rawResolutionUp =
+    !peaksDown &&
+    baseRaw != null &&
+    hotRaw != null &&
+    hotRaw > baseRaw + 1e-4;
+
+  const resUp = resolutionUp || rawResolutionUp;
+  return { ok: peaksUp || resUp, peaks: peaksUp, resolution: resUp };
 }
 
 type Ambient = { celsius: number | null; assumed: boolean; sentence: string };

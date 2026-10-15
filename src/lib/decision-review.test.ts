@@ -312,8 +312,8 @@ describe("Decision engine multi-rule & user-input verification on GR09/GR11 data
     const h8Continued = planHistory(selectRuns.slice(0, 8), setup, { continuePastEfficiency: true });
     expect(h8Continued.phase).toBe("selectivity");
     if (h8Continued.phase === "selectivity") {
-      expect(h8Continued.plan.step).toBe("temp-60");
-      expect(h8Continued.plan.prefill).toMatchObject({ percentB: "35", temperature: "60", solvent: "ACN" });
+      expect(h8Continued.plan.step).toBe("solvent");
+      expect(selectivityChangeLabel(h8Continued.plan)).toBe("Change solvent, back at ambient");
     }
 
     // Run 9 (35% B 60°C, 6 peaks < 7): recommends changing solvent back at ambient
