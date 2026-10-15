@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Atom, FlaskConical, Info, Sparkles, X, Eye } from "lucide-react";
+import { FlaskConical, X, Eye } from "lucide-react";
 import { ChoiceSelect } from "@/components/choice-select";
 import { FunctionNoteView, type FunctionNote } from "@/components/function-note";
 import { KindMark } from "@/components/setting-legend";
@@ -472,48 +472,33 @@ export function BeadDiagram({ ligands = LIGANDS }: { ligands?: readonly string[]
       {/* Main Bead Area (8 Cols) */}
       <div className="flex flex-col gap-5 lg:col-span-8">
         <header>
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--hp-brand)]/30 bg-[var(--hp-brand)]/10 px-2.5 py-0.5 text-xs font-semibold tracking-wider text-[var(--hp-brand)] uppercase">
-              <Atom className="size-3.5" />
-              Silica Particle Architecture
-            </span>
-          </div>
-          <h2 className="mt-1.5 font-heading text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
-            Bead Microstructure & Surface Chemistry
+          <h2 className="font-heading text-xl font-bold tracking-tight text-foreground sm:text-2xl">
+            Silica Particle Chemistry
           </h2>
-          <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-            Explore how particle morphology (fully porous vs core-shell), pore size, particle diameter, and carbon load
-            determine retention capacity, mass transfer rates, and chromatographic peak shape.
+          <p className="mt-1 text-sm text-muted-foreground">
+            Particle morphology (fully porous vs. core-shell), pore size, and carbon load govern efficiency and retention.
           </p>
         </header>
 
         {/* Morphology Selector: Fully Porous vs Core-Shell */}
-        <div id="bead-kinds" className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div id="bead-kinds" className="flex flex-wrap items-center gap-2">
           <button
             id="bead-fully-porous"
             type="button"
             aria-pressed={kind === "porous"}
             className={cn(
-              "flex flex-col gap-1.5 rounded-xl border p-4 text-left transition-all cursor-pointer shadow-2xs select-none",
+              "inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-medium transition-all cursor-pointer select-none",
               kind === "porous"
-                ? "border-[var(--hp-brand)] bg-[var(--hp-soft)] ring-2 ring-[var(--hp-brand)]/20 shadow-xs"
-                : "border-border/80 bg-card hover:bg-muted/50 hover:border-border"
+                ? "border-[var(--hp-brand)] bg-[var(--hp-soft)] text-foreground font-semibold shadow-2xs ring-1 ring-[var(--hp-brand)]/20"
+                : "border-border/80 bg-card text-muted-foreground hover:text-foreground hover:bg-muted/40"
             )}
             onClick={() => {
               setKind("porous");
               setOpenId("porous");
             }}
           >
-            <div className="flex items-center justify-between">
-              <span className="font-heading text-sm font-bold text-foreground">Fully Porous Silica</span>
-              <span className="rounded-full bg-sky-500/15 border border-sky-500/30 px-2 py-0.5 text-[10px] font-semibold text-sky-700 dark:text-sky-400">
-                Force / Ultra / DB
-              </span>
-            </div>
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              Porous throughout the entire bead volume. Provides high specific surface area, greater analyte retention,
-              and maximum preparative loading capacity.
-            </p>
+            <span>Fully Porous Silica (FPP)</span>
+            <span className="text-[11px] text-muted-foreground">· High surface area</span>
           </button>
 
           <button
@@ -521,26 +506,18 @@ export function BeadDiagram({ ligands = LIGANDS }: { ligands?: readonly string[]
             type="button"
             aria-pressed={kind === "shell"}
             className={cn(
-              "flex flex-col gap-1.5 rounded-xl border p-4 text-left transition-all cursor-pointer shadow-2xs select-none",
+              "inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-medium transition-all cursor-pointer select-none",
               kind === "shell"
-                ? "border-amber-500 bg-amber-500/10 ring-2 ring-amber-500/25 shadow-xs dark:bg-amber-500/15"
-                : "border-border/80 bg-card hover:bg-muted/50 hover:border-border"
+                ? "border-[var(--hp-brand)] bg-[var(--hp-soft)] text-foreground font-semibold shadow-2xs ring-1 ring-[var(--hp-brand)]/20"
+                : "border-border/80 bg-card text-muted-foreground hover:text-foreground hover:bg-muted/40"
             )}
             onClick={() => {
               setKind("shell");
               setOpenId("shell");
             }}
           >
-            <div className="flex items-center justify-between">
-              <span className="font-heading text-sm font-bold text-foreground">Core-Shell (SPP) Silica</span>
-              <span className="rounded-full bg-amber-500/15 border border-amber-500/30 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-400">
-                Restek Raptor 90 Å
-              </span>
-            </div>
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              Solid impermeable silica core with a thin porous outer crust. Dramatically shortens diffusion distances,
-              narrowing peak widths for UHPLC-like efficiency at standard back-pressures.
-            </p>
+            <span>Core-Shell Silica (SPP)</span>
+            <span className="text-[11px] text-muted-foreground">· High efficiency</span>
           </button>
         </div>
 
@@ -773,12 +750,12 @@ export function BeadDiagram({ ligands = LIGANDS }: { ligands?: readonly string[]
           </div>
         </div>
 
-        {/* Dynamic Parameter Inspector / Guide */}
+        {/* Parameter Details or Guide */}
         {open ? (
           <div className="flex flex-col gap-3 border-t border-border/60 pt-3">
             <div className="flex items-center justify-between">
-              <span className="inline-flex items-center gap-1 rounded-full border border-[var(--hp-brand)]/30 bg-[var(--hp-brand)]/10 px-2 py-0.5 text-[10px] font-semibold text-[var(--hp-brand)] uppercase">
-                Microstructure Inspector
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                Parameter Details
               </span>
               <button
                 type="button"
@@ -795,25 +772,13 @@ export function BeadDiagram({ ligands = LIGANDS }: { ligands?: readonly string[]
             </div>
           </div>
         ) : (
-          <div className="flex flex-col gap-3 border-t border-border/60 pt-3 text-xs leading-relaxed text-muted-foreground">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5 font-bold text-foreground">
-                <Info className="size-4 text-[var(--hp-brand)]" />
-                Stationary Phase Chemistry Guide
-              </div>
-            </div>
-
-            <p className="text-[11px] text-muted-foreground">
-              Click any slider title, morphology button, or "Inspect" button above to view in-depth chromatographic principles and retention mechanisms.
+          <div className="flex flex-col gap-2.5 border-t border-border/60 pt-3 text-xs leading-relaxed text-muted-foreground">
+            <p>
+              <strong className="text-foreground">Residual Silanols (SiOH):</strong> Unshielded surface silanols act as weak cation exchangers, causing peak tailing for basic analytes. Dense carbon bonding and endcapping shield these sites.
             </p>
-
-            <div className="rounded-lg border border-border/60 bg-muted/20 p-2.5">
-              <strong className="text-foreground">Residual Silanols:</strong> Unbonded silanols (SiOH) act as weak cation exchangers, causing severe tailing for protonated basic analytes unless shielded by high carbon load or endcapping.
-            </div>
-
-            <div className="rounded-lg border border-border/60 bg-muted/20 p-2.5">
-              <strong className="text-foreground">van Deemter Efficiency:</strong> Core-shell particles reduce the eddy diffusion (A-term) and resistance to mass transfer (C-term), yielding flat van Deemter curves at high mobile phase linear velocities.
-            </div>
+            <p>
+              <strong className="text-foreground">Core-Shell Particles:</strong> A solid core with a thin porous crust shortens intraparticle diffusion paths, yielding sharper peaks at higher flow rates.
+            </p>
           </div>
         )}
       </aside>

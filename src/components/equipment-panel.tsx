@@ -1,7 +1,7 @@
 "use client";
 
 import { useLayoutEffect, useRef, useState, type CSSProperties } from "react";
-import { Activity, Cylinder, LineChart, Atom, Sliders, Info, Cpu, Layers } from "lucide-react";
+import { Activity, Cylinder, LineChart, Atom } from "lucide-react";
 import { ChromatogramExplorer } from "@/components/chromatogram-explorer";
 import { ChromatogramAnalysisComparison } from "@/components/chromatogram-analysis-comparison";
 import { BeadDiagram } from "@/components/bead-diagram";
@@ -333,38 +333,10 @@ function partSide(part: Part): "left" | "right" {
 }
 
 const equipmentTabs = [
-  {
-    id: "column",
-    label: "Column",
-    title: "Column Anatomy",
-    description: "Physical dimensions, phase coatings, and retention animation",
-    badge: "Dimensions",
-    icon: Cylinder,
-  },
-  {
-    id: "hplc",
-    label: "HPLC",
-    title: "HPLC Instruments",
-    description: "Interactive instrument setups, pumps, valves, and UV/PDA detectors",
-    badge: "Setups",
-    icon: Activity,
-  },
-  {
-    id: "beads",
-    label: "Beads",
-    title: "Silica Particles",
-    description: "Pores, superficially porous (SPP) core-shell vs fully porous",
-    badge: "Microstructure",
-    icon: Atom,
-  },
-  {
-    id: "chromatogram",
-    label: "Chromatogram",
-    title: "Chromatograms",
-    description: "Signal resolution, peak integration, and retention time metrics",
-    badge: "Traces",
-    icon: LineChart,
-  },
+  { id: "hplc", label: "HPLC Instruments", icon: Activity },
+  { id: "column", label: "Column Dimensions", icon: Cylinder },
+  { id: "beads", label: "Silica Beads", icon: Atom },
+  { id: "chromatogram", label: "Chromatograms", icon: LineChart },
 ] as const;
 
 function NameColumn({
@@ -558,19 +530,18 @@ export function EquipmentPanel({
   const open = setup.parts.find((part) => part.id === openId) ?? null;
 
   return (
-    <div id="equipment" className="flex flex-col gap-6 pb-12">
+    <div id="equipment" className="flex flex-col gap-5 pb-12">
       <header>
-        <p className="text-xs tracking-[0.16em] text-[var(--hp-brand)] uppercase">Laboratory Instrumentation</p>
-        <h1 className="mt-1 font-heading text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-          Equipment & Anatomy
+        <h1 className="font-heading text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
+          Equipment & Hardware
         </h1>
-        <p className="mt-1 text-sm text-muted-foreground sm:text-base">
-          Explore interactive instruments, column geometries, silica bead microstructures, and chromatographic traces.
+        <p className="mt-1 text-sm text-muted-foreground">
+          Interactive HPLC instruments, column dimensions, and stationary phase chemistry.
         </p>
       </header>
 
-      {/* Hero Showcase Subheading Cards */}
-      <div id="equipment-tabs" className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {/* Clean Tab Bar */}
+      <div id="equipment-tabs" className="flex flex-wrap items-center gap-1.5 rounded-xl border border-border/70 bg-muted/40 p-1">
         {equipmentTabs.map((tab) => {
           const selected = tab.id === view;
           const Icon = tab.icon;
@@ -580,48 +551,15 @@ export function EquipmentPanel({
               type="button"
               aria-pressed={selected}
               className={cn(
-                "group relative flex flex-col justify-between gap-3.5 rounded-2xl border p-4 text-left transition-all duration-200 cursor-pointer select-none outline-none focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-[0.98]",
+                "inline-flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-medium transition-all cursor-pointer select-none",
                 selected
-                  ? "border-[var(--hp-brand)] bg-[var(--hp-soft)] shadow-md ring-2 ring-[var(--hp-brand)]/25 -translate-y-0.5"
-                  : "border-border/80 bg-card hover:border-[var(--hp-brand)]/70 hover:bg-[var(--hp-soft)]/40 hover:-translate-y-1 hover:shadow-md"
+                  ? "bg-background text-foreground shadow-2xs font-semibold ring-1 ring-border/60"
+                  : "text-muted-foreground hover:text-foreground hover:bg-background/40"
               )}
               onClick={() => setView(tab.id)}
             >
-              <div className="flex w-full items-start justify-between gap-2">
-                <div
-                  className={cn(
-                    "flex size-11 items-center justify-center rounded-xl transition-all duration-200",
-                    selected
-                      ? "bg-[var(--hp-brand)] text-[var(--hp-on-brand)] shadow-sm ring-2 ring-[var(--hp-brand)]/30"
-                      : "bg-muted text-muted-foreground group-hover:bg-[var(--hp-brand)]/15 group-hover:text-[var(--hp-brand)] group-hover:scale-105"
-                  )}
-                >
-                  <Icon className="size-5.5 shrink-0" aria-hidden="true" />
-                </div>
-                <span
-                  className={cn(
-                    "rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase transition-colors",
-                    selected
-                      ? "border border-[var(--hp-brand)]/30 bg-[var(--hp-brand)]/20 text-[var(--hp-brand)]"
-                      : "border border-border/50 bg-muted/70 text-muted-foreground group-hover:border-[var(--hp-brand)]/30 group-hover:text-[var(--hp-brand)]"
-                  )}
-                >
-                  {tab.badge}
-                </span>
-              </div>
-              <div>
-                <h2
-                  className={cn(
-                    "font-heading text-base font-bold transition-colors",
-                    selected ? "text-[var(--hp-ink)]" : "text-foreground group-hover:text-[var(--hp-brand)]"
-                  )}
-                >
-                  {tab.title}
-                </h2>
-                <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
-                  {tab.description}
-                </p>
-              </div>
+              <Icon className="size-4 shrink-0" aria-hidden="true" />
+              <span>{tab.label}</span>
             </button>
           );
         })}
@@ -648,28 +586,12 @@ export function EquipmentPanel({
 
       {/* HPLC Instruments Subtab */}
       {view === "hplc" ? (
-        <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-5">
           <div className="grid items-start gap-6 lg:grid-cols-12">
             {/* Main Instrument Stage (8 Cols) */}
-            <div className="flex flex-col gap-5 lg:col-span-8">
-              <header>
-                <div className="flex items-center gap-2">
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--hp-brand)]/30 bg-[var(--hp-brand)]/10 px-2.5 py-0.5 text-xs font-semibold tracking-wider text-[var(--hp-brand)] uppercase">
-                    <Activity className="size-3.5" />
-                    Instrument Architecture
-                  </span>
-                </div>
-                <h2 className="mt-1.5 font-heading text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
-                  HPLC System Configurations & Flow Path
-                </h2>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Select an HPLC instrument to examine its hardware modules. Hover or tap any component to inspect its
-                  function, adjustable settings, and impact on chromatographic separation.
-                </p>
-              </header>
-
-              {/* Instrument Setup Selector Cards */}
-              <div id="equipment-choices" className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="flex flex-col gap-4 lg:col-span-8">
+              {/* Instrument Setup Selector */}
+              <div id="equipment-choices" className="flex flex-wrap items-center gap-2">
                 {setups.map((item) => {
                   const selected = item.id === setup.id;
                   return (
@@ -678,10 +600,10 @@ export function EquipmentPanel({
                       type="button"
                       aria-pressed={selected}
                       className={cn(
-                        "flex flex-col justify-between gap-2 rounded-xl border p-3.5 text-left transition-all cursor-pointer shadow-2xs select-none",
+                        "inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-medium transition-all cursor-pointer select-none",
                         selected
-                          ? "border-[var(--hp-brand)] bg-[var(--hp-soft)] ring-2 ring-[var(--hp-brand)]/20 shadow-xs"
-                          : "border-border/80 bg-card hover:bg-muted/50 hover:border-border"
+                          ? "border-[var(--hp-brand)] bg-[var(--hp-soft)] text-foreground font-semibold shadow-2xs ring-1 ring-[var(--hp-brand)]/20"
+                          : "border-border/80 bg-card text-muted-foreground hover:text-foreground hover:bg-muted/40"
                       )}
                       onClick={() => {
                         setSetupId(item.id);
@@ -689,27 +611,20 @@ export function EquipmentPanel({
                         setPinnedId(null);
                       }}
                     >
-                      <div>
-                        <div className="flex items-center justify-between">
-                          <span className="font-heading text-sm font-bold text-foreground">{item.label}</span>
-                          <span className="rounded-full bg-muted border border-border/70 px-2 py-0.2 text-[10px] font-semibold text-muted-foreground">
-                            {item.badge}
-                          </span>
-                        </div>
-                        <p className="mt-1 text-xs text-muted-foreground">{item.tagline}</p>
-                      </div>
+                      <span>{item.label}</span>
+                      <span className="text-[11px] text-muted-foreground">({item.tagline})</span>
                     </button>
                   );
                 })}
               </div>
 
-              {/* Interactive Schematic Diagram */}
-              <div className="flex flex-col gap-2 rounded-2xl border border-border/80 bg-card p-4 sm:p-5 shadow-xs">
-                <div className="flex items-center justify-between border-b border-border/60 pb-3">
-                  <span className="font-heading text-sm font-bold text-foreground">
-                    {setup.label} Schematic Diagram
+              {/* Schematic Diagram */}
+              <div className="flex flex-col gap-2 rounded-xl border border-border/80 bg-card p-4 sm:p-5 shadow-xs">
+                <div className="flex items-center justify-between border-b border-border/60 pb-2.5">
+                  <span className="font-heading text-sm font-semibold text-foreground">
+                    {setup.label} Flow Path
                   </span>
-                  <span className="text-xs text-muted-foreground">Hover or click any module box</span>
+                  <span className="text-xs text-muted-foreground">Click any module to inspect</span>
                 </div>
                 <HplcDiagram
                   setup={setup}
@@ -730,59 +645,62 @@ export function EquipmentPanel({
             {/* Right Component Inspector Panel (4 Cols) */}
             <aside
               id="equipment-note"
-              className="flex flex-col gap-4 rounded-2xl border border-border/80 bg-card p-4 sm:p-5 shadow-xs lg:sticky lg:top-4 lg:col-span-4"
+              className="flex flex-col gap-3 rounded-xl border border-border/80 bg-card p-4 sm:p-5 shadow-xs lg:sticky lg:top-4 lg:col-span-4"
             >
               {open ? (
                 <div className="flex flex-col gap-3">
                   <div className="flex items-center justify-between">
-                    <span className="inline-flex items-center gap-1 rounded-full border border-[var(--hp-brand)]/30 bg-[var(--hp-brand)]/10 px-2 py-0.5 text-[10px] font-semibold text-[var(--hp-brand)] uppercase">
-                      Component Inspector
+                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                      Module Details
                     </span>
-                    {partKind(open.id) ? <KindMark kind={partKind(open.id) as SettingKind} /> : null}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOpenId(null);
+                        setPinnedId(null);
+                      }}
+                      className="text-xs text-muted-foreground hover:text-foreground cursor-pointer"
+                    >
+                      Clear
+                    </button>
                   </div>
                   <FunctionNoteView title={open.label} note={open.note} />
                 </div>
               ) : (
-                <div className="flex flex-col gap-4">
-                  <div className="flex items-center gap-2 border-b border-border/60 pb-3">
-                    <Cpu className="size-4 text-[var(--hp-brand)]" />
-                    <h3 className="font-heading text-sm font-bold text-foreground">8 Mandatory Hardware Modules</h3>
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center justify-between border-b border-border/60 pb-2">
+                    <h3 className="font-heading text-sm font-bold text-foreground">Flow Path Modules</h3>
+                    <span className="text-xs text-muted-foreground">{setup.parts.length} modules</span>
                   </div>
 
-                  <div className="flex flex-col gap-2 text-xs text-muted-foreground">
-                    <p className="leading-relaxed">
-                      All 8 components of the HPLC instrument system are integrated into the flow path. Select any module to inspect its function, control type, and parameters:
-                    </p>
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    Click any module on the diagram or from the list below to view its settings and chromatographic effect:
+                  </p>
 
-                    <div className="flex flex-col gap-1.5 mt-1">
-                      {setup.parts.map((p, idx) => (
-                        <button
-                          key={p.id}
-                          type="button"
-                          className="flex items-center justify-between rounded-lg border border-border/70 bg-muted/20 px-2.5 py-1.5 text-left text-xs font-medium text-foreground transition-all hover:border-[var(--hp-brand)] hover:bg-[var(--hp-soft)]/20 cursor-pointer"
-                          onClick={() => {
-                            setPinnedId(p.id);
-                            setOpenId(p.id);
-                          }}
-                        >
-                          <span className="flex items-center gap-2">
-                            <span className="size-4 rounded-full bg-[var(--hp-brand)]/15 text-[var(--hp-brand)] text-[10px] font-bold flex items-center justify-center">
-                              {idx + 1}
-                            </span>
-                            {p.label}
+                  <div className="flex flex-col gap-1.5">
+                    {setup.parts.map((p, idx) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        className="flex items-center justify-between rounded-lg border border-border/70 bg-muted/20 px-2.5 py-1.5 text-left text-xs font-medium text-foreground transition-all hover:border-[var(--hp-brand)] hover:bg-[var(--hp-soft)]/20 cursor-pointer"
+                        onClick={() => {
+                          setPinnedId(p.id);
+                          setOpenId(p.id);
+                        }}
+                      >
+                        <span className="flex items-center gap-2">
+                          <span className="size-4 rounded-full bg-muted text-muted-foreground text-[10px] font-bold flex items-center justify-center">
+                            {idx + 1}
                           </span>
-                          {partKind(p.id) ? (
-                            <span className="text-[10px] font-semibold text-muted-foreground capitalize">
-                              {partKind(p.id)}
-                            </span>
-                          ) : null}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="rounded-xl border border-[var(--hp-brand)]/30 bg-[var(--hp-soft)]/20 p-3 text-[11px] leading-relaxed text-muted-foreground dark:bg-[var(--hp-soft)]/10">
-                    <strong className="text-foreground">Note:</strong> Includes all 8 instrument components with explicit Chemical and Mechanical control types.
+                          {p.label}
+                        </span>
+                        {partKind(p.id) ? (
+                          <span className="text-[10px] text-muted-foreground capitalize">
+                            {partKind(p.id)}
+                          </span>
+                        ) : null}
+                      </button>
+                    ))}
                   </div>
                 </div>
               )}

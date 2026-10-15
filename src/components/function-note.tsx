@@ -1,3 +1,5 @@
+import { cn } from "@/lib/utils";
+
 export type ControlType = "Mechanical" | "Chemical" | "Both";
 
 export type FunctionNote = {
@@ -9,53 +11,57 @@ export type FunctionNote = {
   controlledParameters?: string;
 };
 
-const sections = [
-  ["does", "What it does"],
-  ["sets", "The part that sets it"],
-  ["range", "Range and units"],
-  ["changes", "What it changes"],
-] as const;
-
 export function FunctionNoteView({ title, note }: { title?: string; note: FunctionNote }) {
   return (
     <div className="flex flex-col gap-3">
       {title ? (
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-2">
-          <p className="font-heading text-base font-bold text-foreground">{title}</p>
+          <p className="font-heading text-sm font-bold text-foreground">{title}</p>
           {note.controlType ? (
             <span
-              className={
-                "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-bold tracking-wide uppercase " +
-                (note.controlType === "Chemical"
+              className={cn(
+                "inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-semibold tracking-wide",
+                note.controlType === "Chemical"
                   ? "border border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
                   : note.controlType === "Mechanical"
                   ? "border border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-400"
-                  : "border border-purple-500/30 bg-purple-500/10 text-purple-700 dark:text-purple-400")
-              }
+                  : "border border-purple-500/30 bg-purple-500/10 text-purple-700 dark:text-purple-400"
+              )}
             >
-              {note.controlType === "Both" ? "Both (Mech. & Chem.)" : `${note.controlType} Control`}
+              {note.controlType === "Both" ? "Mechanical & Chemical" : `${note.controlType} Control`}
             </span>
           ) : null}
         </div>
       ) : null}
 
-      {note.controlledParameters ? (
-        <div className="rounded-lg border border-[var(--hp-brand)]/20 bg-[var(--hp-soft)]/30 p-2.5">
-          <h4 className="text-[11px] font-bold tracking-wider text-[var(--hp-brand)] uppercase">
-            Controlled Parameters
-          </h4>
-          <p className="mt-1 text-xs font-medium text-foreground leading-relaxed">
-            {note.controlledParameters}
-          </p>
+      {/* Description */}
+      <p className="text-xs leading-relaxed text-foreground/90">{note.does}</p>
+
+      {/* Operating parameters and typical range */}
+      {note.controlledParameters || note.range ? (
+        <div className="flex flex-col gap-1.5 rounded-lg border border-border/60 bg-muted/20 p-2.5 text-xs">
+          {note.controlledParameters ? (
+            <div>
+              <span className="font-semibold text-foreground">Parameters: </span>
+              <span className="text-muted-foreground">{note.controlledParameters}</span>
+            </div>
+          ) : null}
+          {note.range ? (
+            <div>
+              <span className="font-semibold text-foreground">Typical range: </span>
+              <span className="text-muted-foreground">{note.range}</span>
+            </div>
+          ) : null}
         </div>
       ) : null}
 
-      {sections.map(([key, heading]) => (
-        <section key={key}>
-          <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--hp-brand)]">{heading}</h3>
-          <p className="mt-1 text-xs leading-relaxed text-foreground/90">{note[key]}</p>
-        </section>
-      ))}
+      {/* Chromatographic effect */}
+      {note.changes ? (
+        <div className="rounded-lg border border-border/70 bg-muted/30 p-2.5 text-xs leading-relaxed">
+          <span className="font-semibold text-foreground">Chromatographic effect: </span>
+          <span className="text-muted-foreground">{note.changes}</span>
+        </div>
+      ) : null}
     </div>
   );
 }

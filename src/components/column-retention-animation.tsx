@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { RotateCcw, Play, Gauge, Activity, Clock, Compass, Layers } from "lucide-react";
+import { RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   BEAD_R,
@@ -12,37 +12,9 @@ import {
   stepTravelers,
   type Traveler,
 } from "@/lib/column-travel";
-import { cn } from "@/lib/utils";
 
 const colors = ["var(--hp-amber-2)", "var(--hp-blue-2)", "var(--hp-teal)", "var(--hp-violet)", "var(--hp-red-2)"] as const;
 const laneOffset = [-16, -8, 0, 8, 16];
-
-const retentionPrinciples = [
-  {
-    title: "Mobile vs Stationary Phase",
-    icon: Layers,
-    description:
-      "A compound travels only while dissolved in the flowing mobile phase. It halts whenever it partitions into the bonded stationary phase on the silica bead surfaces. All molecules move at identical velocity while in the fluid stream.",
-  },
-  {
-    title: "Chemical Partitioning",
-    icon: Compass,
-    description:
-      "Retention arises from molecular polarity and hydrophobicity. Non-polar, lipophilic analytes partition strongly into non-polar C18 alkyl chains, spending more time adsorbed. Polar molecules remain preferentially in water-rich solvent.",
-  },
-  {
-    title: "Dead Time (t₀) Void Marker",
-    icon: Clock,
-    description:
-      "Uracil is small and highly polar with near-zero affinity for reversed-phase C18. It flows unobstructed at mobile phase velocity. The time required for uracil to reach the detector establishes the column dead time t₀.",
-  },
-  {
-    title: "Retention Factor (k)",
-    icon: Gauge,
-    description:
-      "Defined as k = (tR − t₀) / t₀. The retention factor measures the additional time an analyte spends retained on the stationary phase relative to the unretained void time. Optimal method development targets k between 1 and 10.",
-  },
-];
 
 export function ColumnRetentionAnimation() {
   const [replay, setReplay] = useState(0);
@@ -87,16 +59,11 @@ export function ColumnRetentionAnimation() {
       {/* Header */}
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--hp-brand)]/30 bg-[var(--hp-brand)]/10 px-2.5 py-0.5 text-xs font-semibold tracking-wider text-[var(--hp-brand)] uppercase">
-            <Activity className="size-3.5" />
-            Retention Mechanism Simulation
-          </span>
-          <h2 className="mt-1.5 font-heading text-xl font-bold tracking-tight text-foreground sm:text-2xl">
-            Why Compounds Separate Along the Column
+          <h2 className="font-heading text-lg font-bold tracking-tight text-foreground sm:text-xl">
+            Analyte Migration & Separation
           </h2>
-          <p className="mt-1 max-w-3xl text-xs text-muted-foreground sm:text-sm">
-            Watch individual compound bands migrate through the packed bead bed. Analytes partition between the flowing mobile phase
-            and stationary phase silica beads according to chemical affinity.
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Analytes partition between the mobile phase and stationary phase beads according to chemical affinity.
           </p>
         </div>
         <div className="mt-2 shrink-0 sm:mt-0">
@@ -199,25 +166,20 @@ export function ColumnRetentionAnimation() {
         </div>
       </div>
 
-      {/* 4 Informative Principles Cards */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {retentionPrinciples.map((item) => {
-          const Icon = item.icon;
-          return (
-            <div
-              key={item.title}
-              className="flex flex-col gap-2 rounded-xl border border-border/70 bg-card p-3.5 transition-colors hover:border-[var(--hp-brand)]/40 hover:bg-[var(--hp-soft)]/20"
-            >
-              <div className="flex items-center gap-2">
-                <span className="flex size-7 items-center justify-center rounded-lg bg-[var(--hp-brand)]/10 text-[var(--hp-brand)]">
-                  <Icon className="size-4" />
-                </span>
-                <h3 className="font-heading text-xs font-bold text-foreground sm:text-sm">{item.title}</h3>
-              </div>
-              <p className="text-xs leading-relaxed text-muted-foreground">{item.description}</p>
-            </div>
-          );
-        })}
+      {/* Summary Notes */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 rounded-xl border border-border/70 bg-card p-3.5 text-xs leading-relaxed text-muted-foreground">
+        <div>
+          <p className="font-semibold text-foreground mb-0.5">Partition Equilibria</p>
+          <p>
+            Molecules travel while dissolved in the flowing mobile phase. Lipophilic analytes partition more frequently into stationary phase ligands, eluting later than polar molecules.
+          </p>
+        </div>
+        <div>
+          <p className="font-semibold text-foreground mb-0.5">Dead Time (t₀) & Retention Factor (k)</p>
+          <p>
+            Unretained compounds (e.g. Uracil) travel at solvent velocity, establishing column dead time t₀. Retention factor k = (tR − t₀) / t₀ measures retention relative to t₀.
+          </p>
+        </div>
       </div>
     </section>
   );

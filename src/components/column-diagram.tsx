@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type CSSProperties } from "react";
-import { ArrowUpDown, ArrowLeftRight, Activity, Gauge, Split, Scale, Info, Sliders } from "lucide-react";
+import { ArrowUpDown, ArrowLeftRight, Activity, Gauge, Split } from "lucide-react";
 import { ChromatogramChart } from "@/components/chromatogram-chart";
 import { FunctionNoteView, type FunctionNote } from "@/components/function-note";
 import { columnExampleTrace } from "@/lib/column-example";
@@ -377,18 +377,11 @@ export function ColumnDiagram({ runs }: { runs: ColumnRunTrace[] }) {
       {/* Main Column Workspace (8 Cols) */}
       <div className="flex flex-col gap-5 lg:col-span-8">
         <header>
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--hp-brand)]/30 bg-[var(--hp-brand)]/10 px-2.5 py-0.5 text-xs font-semibold tracking-wider text-[var(--hp-brand)] uppercase">
-              <Scale className="size-3.5" />
-              Physical Column Scaling
-            </span>
-          </div>
-          <h2 className="mt-1.5 font-heading text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
-            Column Dimensions & Scaling Dynamics
+          <h2 className="font-heading text-xl font-bold tracking-tight text-foreground sm:text-2xl">
+            Column Dimensions & Scaling
           </h2>
-          <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-            Adjust column length and internal diameter to observe how column tube geometry physically transforms
-            peak resolution, retention time, back-pressure, and peak width relative to your baseline method.
+          <p className="mt-1 text-sm text-muted-foreground">
+            Adjust column length and internal diameter to observe how column geometry affects resolution, retention, and back-pressure.
           </p>
         </header>
 
@@ -436,8 +429,8 @@ export function ColumnDiagram({ runs }: { runs: ColumnRunTrace[] }) {
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/70 p-3 sm:px-4">
             <div className="flex items-center gap-2">
               <Activity className="size-4 text-[var(--hp-brand)]" />
-              <h3 className="font-heading text-sm font-bold text-foreground">
-                Scaled Chromatogram Response
+              <h3 className="font-heading text-sm font-semibold text-foreground">
+                Scaled Chromatogram
               </h3>
             </div>
             {/* Run Selection Tabs */}
@@ -492,49 +485,43 @@ export function ColumnDiagram({ runs }: { runs: ColumnRunTrace[] }) {
       {/* Inspector / Dimensional Physics Panel (4 Cols) */}
       <aside
         id="column-note"
-        className="flex flex-col gap-4 rounded-2xl border border-border/80 bg-card p-4 sm:p-5 shadow-xs lg:sticky lg:top-4 lg:col-span-4"
+        className="flex flex-col gap-3 rounded-xl border border-border/80 bg-card p-4 sm:p-5 shadow-xs lg:sticky lg:top-4 lg:col-span-4"
       >
         {open ? (
           <div className="flex flex-col gap-3">
-            <span className="inline-flex w-fit items-center gap-1 rounded-full border border-[var(--hp-brand)]/30 bg-[var(--hp-brand)]/10 px-2 py-0.5 text-[10px] font-semibold text-[var(--hp-brand)] uppercase">
-              Parameter Inspector
-            </span>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                Parameter Details
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setOpenId(null);
+                  setPinnedId(null);
+                }}
+                className="text-xs text-muted-foreground hover:text-foreground cursor-pointer"
+              >
+                Clear
+              </button>
+            </div>
             <FunctionNoteView title={open.label} note={open.note} />
           </div>
         ) : (
-          <div className="flex flex-col gap-4">
-            <div className="flex items-center gap-2 border-b border-border/60 pb-3">
-              <Sliders className="size-4 text-[var(--hp-brand)]" />
-              <h3 className="font-heading text-sm font-bold text-foreground">Dimensional Scaling Rules</h3>
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center justify-between border-b border-border/60 pb-2">
+              <h3 className="font-heading text-sm font-bold text-foreground">Scaling Effects</h3>
             </div>
 
-            <div className="flex flex-col gap-3 text-xs leading-relaxed text-muted-foreground">
-              <div className="rounded-xl border border-border/60 bg-muted/20 p-3 dark:bg-muted/10">
-                <h4 className="font-bold text-foreground flex items-center gap-1.5 mb-1">
-                  <span className="size-2 rounded-full bg-[var(--hp-brand)]" />
-                  Column Length (L)
-                </h4>
-                <p>
-                  Increasing column length raises theoretical plate count <strong>(N ∝ L)</strong>, improving resolution by <strong>√L</strong>. However, runtime and back-pressure also scale directly with <strong>L</strong>.
-                </p>
-              </div>
-
-              <div className="rounded-xl border border-border/60 bg-muted/20 p-3 dark:bg-muted/10">
-                <h4 className="font-bold text-foreground flex items-center gap-1.5 mb-1">
-                  <span className="size-2 rounded-full bg-amber-500" />
-                  Internal Diameter (dc)
-                </h4>
-                <p>
-                  At constant volumetric pump flow, linear velocity drops by <strong>(dc)²</strong>. A 2.1 mm column generates roughly <strong>4.8× higher velocity and pressure</strong> than a 4.6 mm column at identical flow rate.
-                </p>
-              </div>
-
-              <div className="rounded-xl border border-[var(--hp-brand)]/30 bg-[var(--hp-soft)]/20 p-3 dark:bg-[var(--hp-soft)]/10 text-foreground">
-                <h4 className="font-bold text-[var(--hp-brand)] mb-1">Interactive Hint</h4>
-                <p className="text-[11px] text-muted-foreground">
-                  Hover or tap either slider to inspect its specific mechanical and chromatographic effects.
-                </p>
-              </div>
+            <div className="flex flex-col gap-2.5 text-xs text-muted-foreground leading-relaxed">
+              <p>
+                <strong className="text-foreground">Column Length (L):</strong> Efficiency and resolution increase with length (N ∝ L, Rs ∝ √L), while retention time and back-pressure scale proportionally with L.
+              </p>
+              <p>
+                <strong className="text-foreground">Internal Diameter (dc):</strong> At constant flow rate, linear velocity drops with (dc)². A 2.1 mm column produces ~4.8× higher velocity and pressure than a 4.6 mm column.
+              </p>
+              <p className="text-[11px] text-muted-foreground italic pt-1 border-t border-border/50">
+                Click length or diameter to inspect detailed parameters.
+              </p>
             </div>
           </div>
         )}
