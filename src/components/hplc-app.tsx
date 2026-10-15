@@ -533,36 +533,100 @@ export function HplcApp() {
 
   const [isWindowDragging, setIsWindowDragging] = useState(false);
   const dragCounter = useRef(0);
+  const shownRef = useRef(0);
+  const acceptBatchRef = useRef<((startIndex: number, rawFiles: DroppedFile[]) => Promise<void>) | null>(null);
 
-  useEffect(() => {
-    function onGlobalDrop() {
-      setIsWindowDragging(false);
-      dragCounter.current = 0;
-    }
-    function onGlobalDragLeave(e: DragEvent) {
-      if (
-        e.clientX <= 0 ||
-        e.clientY <= 0 ||
-        e.clientX >= window.innerWidth ||
-        e.clientY >= window.innerHeight ||
-        !e.relatedTarget
-      ) {
-        setIsWindowDragging(false);
-        dragCounter.current = 0;
+  async function processDroppedFileList(fileList: FileList | null | undefined, targetIndex: number) {
+    if (!fileList || fileList.length === 0) return;
+    const validFiles: DroppedFile[] = [];
+    for (const file of Array.from(fileList)) {
+      const lower = file.name.toLowerCase();
+      if (!lower.endsWith(".csv") && !lower.endsWith(".txt") && !lower.endsWith(".xlsx")) continue;
+      if (file.size === 0) continue;
+      try {
+        const buffer = await file.arrayBuffer();
+        validFiles.push({ fileName: file.name, buffer });
+      } catch {
+        // ignore unreadable files
       }
     }
-    function onGlobalDragEnd() {
-      setIsWindowDragging(false);
-      dragCounter.current = 0;
+    if (validFiles.length > 0 && acceptBatchRef.current) {
+      void acceptBatchRef.current(targetIndex, validFiles);
+    }
+  }
+
+  useEffect(() => {
+    function hasFiles(e: DragEvent) {
+      if (!e.dataTransfer) return false;
+      const types = e.dataTransfer.types;
+      return types ? Array.from(types).includes("Files") : false;
     }
 
-    window.addEventListener("drop", onGlobalDrop, true);
-    window.addEventListener("dragleave", onGlobalDragLeave, true);
-    window.addEventListener("dragend", onGlobalDragEnd, true);
+    function onGlobalDragEnter(e: DragEvent) {
+      if (hasFiles(e)) {
+        e.preventDefault();
+        dragCounter.current += 1;
+        setIsWindowDragging(true);
+      }
+    }
+
+    function onGlobalDragOver(e: DragEvent) {
+      if (hasFiles(e)) {
+        e.preventDefault();
+        if (e.dataTransfer) {
+          e.dataTransfer.dropEffect = "copy";
+        }
+      }
+    }
+
+    function onGlobalDragLeave(e: DragEvent) {
+      if (hasFiles(e)) {
+        e.preventDefault();
+        dragCounter.current = Math.max(0, dragCounter.current - 1);
+        if (
+          dragCounter.current === 0 ||
+          e.clientX <= 0 ||
+          e.clientY <= 0 ||
+          e.clientX >= window.innerWidth ||
+          e.clientY >= window.innerHeight ||
+          !e.relatedTarget
+        ) {
+          dragCounter.current = 0;
+          setIsWindowDragging(false);
+        }
+      }
+    }
+
+    function onGlobalDragEnd(e: DragEvent) {
+      e.preventDefault();
+      dragCounter.current = 0;
+      setIsWindowDragging(false);
+    }
+
+    async function onGlobalDrop(e: DragEvent) {
+      // Prevent browser default action (e.g. Firefox navigating to or downloading file)
+      e.preventDefault();
+      e.stopPropagation();
+      dragCounter.current = 0;
+      setIsWindowDragging(false);
+
+      if (hasFiles(e)) {
+        await processDroppedFileList(e.dataTransfer?.files, shownRef.current);
+      }
+    }
+
+    window.addEventListener("dragenter", onGlobalDragEnter);
+    window.addEventListener("dragover", onGlobalDragOver);
+    window.addEventListener("dragleave", onGlobalDragLeave);
+    window.addEventListener("dragend", onGlobalDragEnd);
+    window.addEventListener("drop", onGlobalDrop);
+
     return () => {
-      window.removeEventListener("drop", onGlobalDrop, true);
-      window.removeEventListener("dragleave", onGlobalDragLeave, true);
-      window.removeEventListener("dragend", onGlobalDragEnd, true);
+      window.removeEventListener("dragenter", onGlobalDragEnter);
+      window.removeEventListener("dragover", onGlobalDragOver);
+      window.removeEventListener("dragleave", onGlobalDragLeave);
+      window.removeEventListener("dragend", onGlobalDragEnd);
+      window.removeEventListener("drop", onGlobalDrop);
     };
   }, []);
 
@@ -599,27 +663,10 @@ export function HplcApp() {
 
   async function handleWindowDrop(event: React.DragEvent) {
     event.preventDefault();
+    event.stopPropagation();
     dragCounter.current = 0;
     setIsWindowDragging(false);
-    const fileList = event.dataTransfer?.files;
-    if (!fileList || fileList.length === 0) return;
-
-    const validFiles: DroppedFile[] = [];
-    for (const file of Array.from(fileList)) {
-      const lower = file.name.toLowerCase();
-      if (!lower.endsWith(".csv") && !lower.endsWith(".txt") && !lower.endsWith(".xlsx")) continue;
-      if (file.size === 0) continue;
-      try {
-        const buffer = await file.arrayBuffer();
-        validFiles.push({ fileName: file.name, buffer });
-      } catch {
-        // ignore unreadable files
-      }
-    }
-
-    if (validFiles.length > 0) {
-      void acceptBatch(shown, validFiles);
-    }
+    await processDroppedFileList(event.dataTransfer?.files, shown);
   }
 
   const checks = useMemo(() => toRuleNumbers(rules), [rules]);
@@ -695,6 +742,7 @@ export function HplcApp() {
     });
   }, [syncedRuns, details, checks, choice, continueRetention, heatChoice, continuedSelectivity, columnCoatings, fillFromFileName]);
   const shown = Math.min(active, Math.max(0, syncedRuns.length - 1));
+  shownRef.current = shown;
 
   function onDetails(next: RunDetails) {
     next = withoutUltraColumn(next, columns);
@@ -1171,6 +1219,7 @@ export function HplcApp() {
       }
     }
   }
+  acceptBatchRef.current = acceptBatch;
 
   async function acceptBuffer(index: number, fileName: string, buffer: ArrayBuffer) {
     await acceptBatch(index, [{ fileName, buffer }]);
@@ -1223,7 +1272,7 @@ export function HplcApp() {
     >
       {isWindowDragging ? (
         <div
-          className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-background/90 backdrop-blur-xs border-4 border-dashed border-[var(--hp-brand)] p-8 text-center animate-in fade-in-0 duration-150"
+          className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-background/90 backdrop-blur-xs border-4 border-dashed border-[var(--hp-brand)] p-8 text-center animate-in fade-in-0 duration-150 pointer-events-auto"
           onDragOver={handleWindowDragOver}
           onDragLeave={handleWindowDragLeave}
           onDrop={handleWindowDrop}
