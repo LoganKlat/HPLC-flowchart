@@ -238,7 +238,7 @@ describe("selectivity checks", () => {
     expect(decision.why).toContain("Selectivity is the next stage");
   });
 
-  it("moves on to efficiency (→ N) when 7 peaks match and resolution is positive but under spec (e.g. ambient 40% B run)", () => {
+  it("continues normal pathway when Rs < 0.5*spec and moves to efficiency (→ N) when Rs >= 0.5*spec", () => {
     const ambient = readLabFile(readFileSync(path.join(process.cwd(), "fixtures/selectivity/GR41-09-40-ambient.csv")));
     expect(ambient.peakCount).toBe(7);
     expect(ambient.minResolutionExcludingFirst).toBeCloseTo(0.324, 3);
@@ -262,14 +262,18 @@ describe("selectivity checks", () => {
       originalSolvent: "ACN",
       originalLigand: "C18",
     };
-    const decision = decideRetention([sample], rules);
-    expect(decision.status).toBe("efficiency");
-    expect(decision.reason).toBe("efficiency");
-    expect(decision.nextChange).toContain("Move on to efficiency");
-    expect(retentionChangeLabel(decision)).toBe("Move on to efficiency");
-    expect(decision.why).toContain("Peaks: 7. The specification is 7. Met.");
-    expect(decision.why).toContain("Minimum resolution: 0.324. Under the specification of 1.000.");
-    expect(decision.why).toContain("Efficiency is next for the resolution.");
+    // 1. When Rs < 0.5 * spec (0.324 < 0.50), continues normal decision pathway
+    const decisionUnder = decideRetention([sample], rules);
+    expect(decisionUnder.status).toBe("recommend");
+
+    // 2. When Rs >= 0.5 * spec (0.324 >= 0.30 with minResolution = 0.6), moves to efficiency
+    const decisionOver = decideRetention([sample], { ...rules, minResolution: 0.6 });
+    expect(decisionOver.status).toBe("efficiency");
+    expect(decisionOver.reason).toBe("efficiency");
+    expect(decisionOver.nextChange).toContain("Move on to efficiency");
+    expect(retentionChangeLabel(decisionOver)).toBe("Move on to efficiency");
+    expect(decisionOver.why).toContain("Peaks: 7. The specification is 7. Met.");
+    expect(decisionOver.why).toContain("Efficiency is next for the resolution.");
   });
 
   it("moves on to efficiency (→ N) when 7 peaks match and resolution is close to spec (not far below)", () => {

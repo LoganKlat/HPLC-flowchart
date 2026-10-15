@@ -493,7 +493,7 @@ function afterInBetweenFile(
 
 export function isResolutionFarBelow(resolution: number | null, spec: number | null): boolean {
   if (spec == null || !(spec > 0)) return false;
-  return resolution == null || !Number.isFinite(resolution) || resolution <= 0;
+  return resolution == null || !Number.isFinite(resolution) || resolution < 0.5 * spec;
 }
 
 function sevenPeaksSelectivity(
@@ -507,17 +507,18 @@ function sevenPeaksSelectivity(
       ? formatResolution(judged.resolution)
       : "not assessable";
   const specRs = rules.minResolution != null ? formatResolution(rules.minResolution) : "spec";
+  const halfSpecRs = rules.minResolution != null ? formatResolution(0.5 * rules.minResolution) : "0.5 × spec";
   return {
     status: "recommend",
     reason: "drop-10",
     move: null,
     nextPercentB: sample.percentB ?? null,
     nextTemperature: "40",
-    nextChange: `Run at 40°C (Change selectivity). Resolution (${measuredRs}) is far below the specification (${specRs}), so selectivity must be changed before efficiency. Run the next chromatogram at 40°C, still at ${percent}% B.`,
+    nextChange: `Run at 40°C (Change selectivity). Resolution (${measuredRs}) is far below the specification (${specRs}, below 0.5 × spec = ${halfSpecRs}), so selectivity must be changed before efficiency. Run the next chromatogram at 40°C, still at ${percent}% B.`,
     following: SELECTIVITY_ORDER,
     why: [
       ...ruleLines(sample, rules, judged),
-      `Selectivity is the next stage because resolution is far below the specification (Rs = ${measuredRs} vs spec ${specRs}). Under the Purnell resolution equation (Rs = (√N / 4) × ((α − 1) / α) × (k2 / (1 + k2))), resolution scales with the square root of column efficiency (√N). When resolution is far below the specification, efficiency levers alone (particle size, column length, flow rate) cannot mathematically rescue the critical pair separation within practical pressure and run-time constraints (falling below the Rs floor).`,
+      `Selectivity is the next stage because resolution is far below the specification (Rs = ${measuredRs} vs spec ${specRs}, below 0.5 × spec = ${halfSpecRs}). Under the Purnell resolution equation (Rs = (√N / 4) × ((α − 1) / α) × (k2 / (1 + k2))), resolution scales with the square root of column efficiency (√N). When resolution is below 0.5 × spec, efficiency levers alone (particle size, column length, flow rate) cannot mathematically rescue the critical pair separation within practical pressure and run-time constraints (falling below the Rs floor).`,
       `Therefore, selectivity (α) must be adjusted first. The method development sequence begins selectivity by introducing thermal selectivity at 40°C while maintaining ${percent}% B. Differential temperature coefficients of retention (ΔH°) alter relative band spacing (α) to resolve the co-eluting or critical pair.`,
     ].join("\n\n"),
     fit: null,
@@ -561,11 +562,37 @@ function equalPeakCount(
     }
     return chooseOwnPercentDecision(current, rules);
   }
-  // 2. Rs far below spec -> SELECTIVITY, as in the table.
+  // 2. Rs far below spec (Rs < 0.5 * spec) -> continue normal decision pathway:
+  // going from retention -> selectivity
   if (isResolutionFarBelow(judged.resolution, rules.minResolution)) {
+    const rawPrior = samples.length >= 2 ? decideRetention(samples.slice(0, -1), rules) : null;
+    const prior =
+      rawPrior && rawPrior.status === "efficiency"
+        ? decideRetention(samples.slice(0, -1), rules, { continueRetention: true })
+        : rawPrior;
+    const alreadyRanMin =
+      prior != null &&
+      current.percentB != null &&
+      ranRecommendedMinimum(current.percentB, prior);
+    if (
+      !judged.timeLate &&
+      !alreadyRanMin &&
+      current.lastPeakTimeMin != null &&
+      current.maxBackPressurePsi != null &&
+      pressureIsUnder(current.maxBackPressurePsi, rules.maxBackPressurePsi)
+    ) {
+      const line = retentionLine(rules.lastPeakTimeMin);
+      if (!isPast(current.lastPeakTimeMin, line)) {
+        return dropPoints(samples, rules, 10, "drop-10");
+      }
+      if (samples.length >= 2) {
+        return calculatePercentB(samples, rules);
+      }
+      return sevenPeaksSelectivity(current, rules, judged);
+    }
     return sevenPeaksSelectivity(current, rules, judged);
   }
-  // 3. Every other 7-peak run -> N (efficiency).
+  // 3. Every other 7-peak run (Rs >= 0.5 * spec) -> N (efficiency).
   return efficiencyStop(current, rules, judged, samples.length > 1);
 }
 

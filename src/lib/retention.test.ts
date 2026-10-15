@@ -274,7 +274,7 @@ describe("retention %B along the four lab files", () => {
           peakCount: pathRules.requiredPeaks!,
           lastPeakTimeMin: 12,
           firstPeakTimeMin: 1.09,
-          minResolutionExcludingFirst: 0.4,
+          minResolutionExcludingFirst: 0.7,
           maxBackPressurePsi: 1400,
         }),
       ],
@@ -293,6 +293,24 @@ describe("retention %B along the four lab files", () => {
     expect(retentionChangeLabel(followed)).toBe("Move on to efficiency");
     expect(followed.why).not.toContain("does not calculate another minimum");
     expect(followed.nextChange).not.toContain("40°C");
+
+    // When resolution < 0.5 * spec (e.g. 0.4 vs spec 1.0), continues normal pathway (selectivity at 40°C)
+    const underHalf = decideRetention(
+      [
+        ...samples,
+        sample({
+          percentB: calculated.nextPercentB!,
+          peakCount: pathRules.requiredPeaks!,
+          lastPeakTimeMin: 12,
+          firstPeakTimeMin: 1.09,
+          minResolutionExcludingFirst: 0.4,
+          maxBackPressurePsi: 1400,
+        }),
+      ],
+      { ...pathRules, minResolution: 1 },
+    );
+    expect(underHalf.status).toBe("recommend");
+    expect(underHalf.nextTemperature).toBe("40");
   });
 
   it("recommends a second minimum %B after the recommended minimum file, not during the 10% ladder", () => {
@@ -412,7 +430,7 @@ describe("retention stops and keeps going", () => {
     expect(reads[2].minResolutionExcludingFirst!).toBeGreaterThan(reads[1].minResolutionExcludingFirst!);
     const decision = decideRetention(
       [sampleFromRead(60, reads[1]), sampleFromRead(50, reads[2])],
-      { requiredPeaks: 6, lastPeakTimeMin: 10, minResolution: 2, maxBackPressurePsi: 2000 },
+      { requiredPeaks: 6, lastPeakTimeMin: 10, minResolution: 1.5, maxBackPressurePsi: 2000 },
     );
     expect(decision.status).toBe("efficiency");
     expect(decision.reason).toBe("efficiency");
@@ -425,7 +443,7 @@ describe("retention stops and keeps going", () => {
     const rules = {
       requiredPeaks: 6,
       lastPeakTimeMin: 10,
-      minResolution: 2,
+      minResolution: 1.5,
       maxBackPressurePsi: 2000,
       ambientTemperatureC: 25,
       originalSolvent: "ACN",
@@ -1084,8 +1102,13 @@ describe("which run to carry forward after the calculated %B", () => {
     expect(past.find((row) => row.id === "last-peak")?.measured).toBe("18.258 min");
     expect(past.find((row) => row.id === "last-peak")?.status).toBe("not-met");
 
-    // With 7 peaks required, the 40% file already matches — efficiency, not another %B.
-    const matched = decideRetention(series, rules);
+    // With 7 peaks required and Rs < 0.5 * spec (0.324 < 0.70), continues normal decision pathway (calculates 36% B)
+    const normalPath = decideRetention(series, rules);
+    expect(normalPath.move).toBe("calculated");
+    expect(normalPath.nextPercentB).toBe(36);
+
+    // Once Rs >= 0.5 * spec (e.g. minResolution: 0.6 where 0.324 >= 0.30), moves on to efficiency
+    const matched = decideRetention(series, { ...rules, minResolution: 0.6 });
     expect(matched.status).toBe("efficiency");
     expect(matched.nextPercentB).toBeNull();
     expect(matched.nextChange).toContain("Move on to efficiency");
@@ -1468,7 +1491,7 @@ describe("extra peaks and the in-between choice", () => {
     const decision = decideRetention(
       [
         sample({ percentB: 70, peakCount: 4, lastPeakTimeMin: 2, firstPeakTimeMin: 1 }),
-        sample({ percentB: 55, peakCount: 8, lastPeakTimeMin: 12, minResolutionExcludingFirst: 0.4, firstPeakTimeMin: 1 }),
+        sample({ percentB: 55, peakCount: 8, lastPeakTimeMin: 12, minResolutionExcludingFirst: 0.7, firstPeakTimeMin: 1 }),
       ],
       { requiredPeaks: 8, lastPeakTimeMin: 10, minResolution: 1, maxBackPressurePsi: 500 },
       { afterInBetween: true },
@@ -1480,7 +1503,7 @@ describe("extra peaks and the in-between choice", () => {
     const looked = decideRetention(
       [
         sample({ percentB: 70, peakCount: 4, lastPeakTimeMin: 2, firstPeakTimeMin: 1 }),
-        sample({ percentB: 55, peakCount: 8, lastPeakTimeMin: 12, minResolutionExcludingFirst: 0.4, firstPeakTimeMin: 1 }),
+        sample({ percentB: 55, peakCount: 8, lastPeakTimeMin: 12, minResolutionExcludingFirst: 0.7, firstPeakTimeMin: 1 }),
       ],
       { requiredPeaks: 8, lastPeakTimeMin: 10, minResolution: 1, maxBackPressurePsi: 500 },
       { afterInBetween: true, continueToLook: true },
@@ -1488,6 +1511,18 @@ describe("extra peaks and the in-between choice", () => {
     expect(looked.status).toBe("look");
     expect(looked.look?.mode).toBe("between-then-heat");
     expect(looked.nextChange).toBe("Look at the runs.");
+
+    // When resolution < 0.5 * spec (0.4 < 0.5), transitions to selectivity at 40°C
+    const underHalf = decideRetention(
+      [
+        sample({ percentB: 70, peakCount: 4, lastPeakTimeMin: 2, firstPeakTimeMin: 1 }),
+        sample({ percentB: 55, peakCount: 8, lastPeakTimeMin: 12, minResolutionExcludingFirst: 0.4, firstPeakTimeMin: 1 }),
+      ],
+      { requiredPeaks: 8, lastPeakTimeMin: 10, minResolution: 1, maxBackPressurePsi: 500 },
+      { afterInBetween: true },
+    );
+    expect(underHalf.status).toBe("recommend");
+    expect(underHalf.nextTemperature).toBe("40");
   });
 
   it("continues the 10% drop or calculates Min %B when staying in retention after peaks match early", () => {

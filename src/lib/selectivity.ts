@@ -513,7 +513,7 @@ export function planHistory(
     heat.carryIndex < runs.length &&
     heat.seriesLength > heat.carryIndex &&
     heat.seriesLength <= runs.length &&
-    (continuePast || !peaksMatchSpec(runs[runs.length - 1], setup))
+    (continuePast || !latestNeedsRetentionStop(runs[runs.length - 1], setup, false, false))
   ) {
     forced = { finishedOffset: heat.seriesLength - 1, carryIndex: heat.carryIndex };
   }
@@ -698,6 +698,14 @@ function latestNeedsRetentionStop(
 ): boolean {
   if (!latest) return false;
   if (!peaksMatchSpec(latest, setup)) return false;
+  const resolution = resolutionForDecision(latest.peakCount, latest.minResolutionExcludingFirst, setup.requiredPeaks);
+  if (
+    setup.minResolution != null &&
+    setup.minResolution > 0 &&
+    (resolution == null || !Number.isFinite(resolution) || resolution < 0.5 * setup.minResolution)
+  ) {
+    return false;
+  }
   if (!continuePast && !ownPercentThenHeat) return true;
   return false;
 }
